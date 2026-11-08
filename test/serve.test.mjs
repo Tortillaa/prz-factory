@@ -72,6 +72,25 @@ test('serve on a free port still prints the URL and answers GET /api/board', asy
   }
 });
 
+test('serve --port with a leading zero prints the URL with the real port', async () => {
+  const probe = await occupy();
+  const { port } = probe.address();
+  await new Promise((r) => probe.close(r));
+  const { child, exited } = serve(`0${port}`, { until: (out) => out.includes('board: ') });
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('serve did not print the board URL')), 10_000);
+      child.once('ready', () => { clearTimeout(timer); resolve(); });
+      exited.then(({ stderr }) => reject(new Error(`serve exited early: ${stderr}`)));
+    });
+  } finally {
+    child.kill();
+  }
+  const { stdout } = await exited;
+  const line = stdout.split('\n').find((l) => l.startsWith('board: '));
+  assert.equal(line.trim(), `board: http://localhost:${port}`);
+});
+
 function serveRaw(args, env = {}) {
   const child = spawn(process.execPath, [CLI, 'serve', ...args], {
     env: { ...process.env, FACTORY_BOARD: tmpBoard(), ...env },
@@ -103,7 +122,7 @@ function assertInvalidPort({ code, signal, stdout, stderr, ms }, value) {
   assert.ok(!all.includes('board: '), all);
 }
 
-for (const value of ['abc', '0', '70000', '8080.5']) {
+for (const value of ['abc', '0', '70000', '65536', '8080.5']) {
   test(`serve --port ${value} is rejected and exits 1 on its own`, async () => {
     assertInvalidPort(await serveRaw(['--port', value]), value);
   });

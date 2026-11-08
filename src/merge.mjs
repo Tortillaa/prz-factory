@@ -6,11 +6,14 @@ import * as store from './store.mjs';
 import { riskLevel } from './ticket.mjs';
 import { runVerify, verifySummary } from './verify.mjs';
 import { git, revParse, isAncestor, isClean, worktrees, commonDir, diffLines } from './git.mjs';
+import { pushBase } from './github.mjs';
 
 // Exit codes, also used by the CLI.
 export const CODES = { merged: 0, error: 1, 'head-moved': 6, 'needs-human': 7, behind: 8, 'verify-failed': 9, 'base-dirty': 10 };
 
 const short = (sha) => sha.slice(0, 8);
+// Set only when the gate holds a merge for a person; the only label that allows approving one.
+export const APPROVAL = 'merge-approval';
 
 function result(status, message, extra = {}) {
   return { status, code: CODES[status], message, ...extra };
@@ -48,12 +51,13 @@ function verifyAt(sha, cwd, config) {
 }
 
 // Card side effects of a refusal that needs a lane to act: comment, move, release.
-function sendBack(file, id, who, to, text, label) {
+function sendBack(file, id, who, to, text, labels) {
   store.update(file, (b) => {
     if (to === 'building') return store.sendBack(b, id, { who, role: 'merge', text });
     const card = store.getCard(b, id);
     store.commentCard(b, id, { role: 'merge', text });
-    if (label && !card.labels.includes(label)) store.editCard(b, id, { labels: [...card.labels, label] });
+    const add = [labels].flat().filter((l) => l && !card.labels.includes(l));
+    if (add.length) store.editCard(b, id, { labels: [...card.labels, ...add] });
     store.moveCard(b, id, to, who);
     store.releaseCard(b, id);
   });
@@ -81,7 +85,9 @@ export function mergeCard({ file, id, who = 'merge-gate', sha, human = false, cw
   function gate() {
     const card = store.getCard(store.load(file), id);
     // A card the gate sent to a person waits in blocked with needs-you; that person merges it from there.
-    const awaitingHuman = human && card.column === 'blocked' && card.labels.includes('needs-you');
+    // Only a merge the gate itself held for a person (label merge-approval) can be approved from
+    // blocked. needs-you alone also marks cards that bounced or whose workers failed: never merge those.
+    const awaitingHuman = human && card.column === 'blocked' && card.labels.includes(APPROVAL);
     if (card.column !== 'review' && !awaitingHuman) {
       return result('error', `card #${id} is in ${card.column}; only cards in review can be merged`);
     }
@@ -118,7 +124,9 @@ export function mergeCard({ file, id, who = 'merge-gate', sha, human = false, cw
     const reasons = human ? [] : humanReasons(card, lines, config.merge);
     if (reasons.length) {
       const msg = `Merge para una persona: ${reasons.join('; ')}.\nPara aprobarlo: revisa ${branch} (${short(head)}) y ejecuta \`factory merge ${id} --sha ${short(head)} --human\`.`;
-      sendBack(file, id, who, 'blocked', `[merge] 🙋 necesita a una persona\n${msg}`, 'needs-you');
+      // Pin the commit the person is asked to approve: approving later must not land newer commits.
+      store.update(file, (b) => store.editCard(b, id, { run: { reviewedSha: head } }));
+      sendBack(file, id, who, 'blocked', `[merge] 🙋 necesita a una persona\n${msg}`, ['needs-you', APPROVAL]);
       return result('needs-human', msg, { head, lines, reasons });
     }
 
@@ -144,14 +152,16 @@ export function mergeCard({ file, id, who = 'merge-gate', sha, human = false, cw
       git(['update-ref', `refs/heads/${base}`, head, baseSha], cwd);
     }
     if (!isAncestor(head, `refs/heads/${base}`, cwd)) return result('error', `merge did not land: ${short(head)} is not on ${base}`);
+    const pushed = config.github.pushBase ? pushBase({ cwd, config }) : null;
 
     store.update(file, (b) => {
       const c = store.getCard(b, id);
-      store.editCard(b, id, { labels: c.labels.filter((l) => l !== 'needs-you'), run: { reviewedSha: head, mergedSha: head } });
-      store.commentCard(b, id, { role: 'merge', text: `[merge] ✅ ${branch} → ${base} en ${short(head)}${human ? ' (aprobado por una persona)' : ''}\n${verifySummary(verify)}` });
+      store.editCard(b, id, { labels: c.labels.filter((l) => l !== 'needs-you' && l !== APPROVAL), run: { reviewedSha: head, mergedSha: head } });
+      const push = !pushed ? '' : pushed.pushed ? `\n↑ ${base} subida a ${config.github.remote}` : `\n⚠️ no se pudo subir ${base}: ${pushed.error}`;
+      store.commentCard(b, id, { role: 'merge', text: `[merge] ✅ ${branch} → ${base} en ${short(head)}${human ? ' (aprobado por una persona)' : ''}\n${verifySummary(verify)}${push}` });
       store.moveCard(b, id, 'done', who);
       store.releaseCard(b, id);
     });
-    return result('merged', `${branch} merged into ${base} at ${short(head)}`, { head, lines, verify });
+    return result('merged', `${branch} merged into ${base} at ${short(head)}`, { head, lines, verify, pushed });
   }
 }

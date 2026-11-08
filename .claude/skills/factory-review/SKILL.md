@@ -62,7 +62,7 @@ First write your review comment with `factory comment <id> --role review --text-
 |---|---|---|
 | 0 | merged | Card is Done. Report the merged SHA. |
 | 6 | head moved after your review | Card stays in review. Review the new commits (restart from §2), never merge a head you did not see. |
-| 7 | needs a person | The gate moved it to blocked with `needs-you` and the reasons. Nothing else to do. |
+| 7 | needs a person | The gate moved it to blocked with `needs-you` + `merge-approval` and the reasons; the person approves it on the web board or with `--human`. Nothing else to do. |
 | 8 | branch behind base | The gate sent it to building for a rebase. Nothing else to do. |
 | 9 | verify failed | The gate sent it to building with the output. Nothing else to do. |
 | 10 | base checkout has uncommitted changes | Card stays in review, released. Tell the user; do not touch their checkout. |

@@ -14,6 +14,8 @@ export const DEFAULTS = Object.freeze({
   maxWorkers: 2,
   // When the merge gate hands the merge to a person instead of doing it.
   merge: { humanRisk: ['high'], humanLabels: ['auth', 'money', 'schema', 'needs-human'], maxLines: 400 },
+  // Optional GitHub mirror: `factory pr` and, with pushBase, a push of the base after each merge.
+  github: { remote: 'origin', pushBase: false, draft: true },
 });
 
 export function repoRoot(cwd = process.cwd()) {
@@ -45,6 +47,10 @@ function validate(config, file) {
   }
   if (!strings(m.humanLabels)) fail('"merge.humanLabels" must be an array of strings');
   if (!Number.isInteger(m.maxLines) || m.maxLines < 1) fail('"merge.maxLines" must be a positive integer');
+  const g = config.github;
+  if (!g || typeof g.remote !== 'string' || !g.remote || typeof g.pushBase !== 'boolean' || typeof g.draft !== 'boolean') {
+    fail('"github" must be { remote: string, pushBase: boolean, draft: boolean }');
+  }
   return config;
 }
 
@@ -64,7 +70,7 @@ export function loadConfig(root = repoRoot()) {
   } catch (err) {
     throw new Error(`${file}: invalid JSON (${err.message})`);
   }
-  return { file, exists: true, config: validate({ ...DEFAULTS, ...parsed, merge: { ...DEFAULTS.merge, ...parsed.merge } }, file) };
+  return { file, exists: true, config: validate({ ...DEFAULTS, ...parsed, merge: { ...DEFAULTS.merge, ...parsed.merge }, github: { ...DEFAULTS.github, ...parsed.github } }, file) };
 }
 
 // Best guess at the commands that prove a project builds, for a fresh config.

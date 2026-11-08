@@ -76,9 +76,17 @@ Un único script autocontenido (`hooks/factory-guard.mjs`, sin imports de `src/`
 - [x] Skill `factory-lint`: los criterios de lint que requieren juicio, preguntando al usuario.
 - [x] Revisión: el lint ignora la sección `## Evidence` (los stack traces y los TODO citados bloqueaban Ready); la web muestra cuántas veces se ha visto un hallazgo.
 
-## Fase 6 · Calidad y extras
+## Fase 6 · Calidad y extras ✅
 
-- [ ] Evals por skill (caso, prompt, graders). *Origen: `evals/`.*
-- [ ] CI con los tests en Windows, macOS y Linux.
-- [ ] Panel del tablero como plugin de Orca (`orca plugin create --template panel`).
-- [ ] Integración opcional con GitHub: push de la rama y PR al pasar a Review.
+- [x] Evals por skill: `evals/cases/*.json` (setup del tablero y de git por lane, prompt = el mismo `factory spec` que recibe un worker, graders deterministas) sobre el fixture `evals/fixtures/shop`. `factory eval` las ejecuta con Claude Code headless; el harness se prueba en CI con un agente falso. *Origen: `evals/`.*
+- [x] CI (`.github/workflows/test.yml`): tests en Linux, macOS y Windows con Node 22 y 24, más comprobación de que las copias instaladas coinciden.
+- [x] Panel del tablero como plugin de Orca (`orca-plugin/`): un worker lee el tablero de cada repo abierto en Orca y el panel se actualiza en vivo. Solo lectura.
+- [x] Integración opcional con GitHub: `factory pr` sube la rama y abre o actualiza el PR; con `github.pushBase` el merge gate sube la base tras el fast-forward (GitHub marca el PR como mergeado).
+- [x] Aprobar desde la web los merges que esperan a una persona, fijados al commit revisado (pendiente de la Fase 2).
+- [x] Revisión: la aprobación exige la etiqueta `merge-approval`, que solo pone el gate. `needs-you` también marca tarjetas que rebotaron, y esas nunca deben poder mergearse.
+
+## Pendiente fuera del código
+
+- [ ] Ejecutar las evals con un agente real (`factory eval`): lanzan Claude Code headless con Bash en repos temporales y requieren tu permiso.
+- [ ] Instalar el plugin en Orca (`orca-plugin/README.md`): es `trusted-worker` y requiere tu aprobación.
+- [ ] Subir el repo a GitHub para que corra el CI.

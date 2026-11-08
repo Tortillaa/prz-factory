@@ -1,0 +1,19 @@
+{
+  "description": "The build lane fixes a card test-first on its branch and hands it to QA.",
+  "fixture": "shop",
+  "lane": "build",
+  "setup": [
+    { "card": { "title": "Average of an empty cart is 0", "bodyFile": "card-empty-cart.md", "labels": ["bug"], "column": "ready" } },
+    { "worktree": {} },
+    { "claim": { "id": 1, "as": "build-1" } }
+  ],
+  "prompt": "spec:1",
+  "graders": [
+    { "card": { "id": 1, "column": "qa" } },
+    { "released": { "id": 1 } },
+    { "comment": { "id": 1, "role": "build" } },
+    { "branchChanges": { "id": 1, "paths": ["src/cart.mjs", "test/"] } },
+    { "verifyAt": { "id": 1 } },
+    { "behaviour": { "id": 1, "run": "node -e \"import('./src/cart.mjs').then(m => process.exit(m.average([]) === 0 && m.average([2, 4]) === 3 ? 0 : 1))\"" } }
+  ]
+}

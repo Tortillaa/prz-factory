@@ -16,6 +16,8 @@ import * as run from '../src/run.mjs';
 import { worktrees } from '../src/git.mjs';
 import { findLeftovers, applyCleanup } from '../src/cleanup.mjs';
 import { writeBlock } from '../src/agentsmd.mjs';
+import { openPr } from '../src/github.mjs';
+import { listCases, runCase, DEFAULT_AGENT } from '../src/evals.mjs';
 
 const USAGE = `factory <command> [options]
 
@@ -64,6 +66,9 @@ Run (the coordinator; it dispatches, never builds)
 
 Setup
   install [target] [--no-hooks]          Copy skills and guard hooks into <target>/.claude, create factory.config.json
+  eval [case...] [--agent cmd] [--keep] [--list]
+                                         Run skill evals: a real agent on a throwaway repo, graded by checks
+  pr <id>                                Push the card's branch and open or update its GitHub PR (optional mirror)
   agents-md [--file f]                   Write the managed prz-factory block into CLAUDE.md (or AGENTS.md)
   cleanup [--apply]                      Worktrees and branches of merged cards, temp verify folders (dry run by default)
   doctor                                 Check node, git, Orca, config, board and skills (exit 1 if any fail)
@@ -105,6 +110,9 @@ const { values: opts, positionals } = parseArgs({
     file: { type: 'string' },
     hint: { type: 'boolean' },
     'no-hooks': { type: 'boolean' },
+    agent: { type: 'string' },
+    keep: { type: 'boolean' },
+    list: { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean' },
   },
@@ -135,7 +143,11 @@ function need(value, name) {
 
 // The person's checkout (first worktree): new worker worktrees are created from that repo.
 function mainCheckout() {
-  return worktrees(process.cwd())[0].path;
+  try {
+    return worktrees(process.cwd())[0].path;
+  } catch {
+    return process.cwd(); // not a git repo: the board still works, the git features do not
+  }
 }
 
 function bodyOpt() {
@@ -152,7 +164,7 @@ function depsOpt() {
 try {
   switch (cmd) {
     case 'serve': {
-      const server = createServer({ boardFile: file });
+      const server = createServer({ boardFile: file, repoRoot: mainCheckout() });
       server.listen(Number(opts.port), '127.0.0.1', () => {
         console.log(`board: http://localhost:${opts.port}\nfile:  ${file}`);
       });
@@ -356,6 +368,31 @@ try {
       const done = applyCleanup(found, { cwd: process.cwd() });
       print(done, [`removed ${done.worktrees.length} worktrees, ${done.branches.length} branches, ${done.temp.length} temp folders`, ...done.errors.map((e) => `✖ ${e}`)].join('\n'));
       if (done.errors.length) process.exitCode = 1;
+      break;
+    }
+    case 'pr': {
+      const root = mainCheckout();
+      const card = store.getCard(store.load(file), need(args[0], 'id'));
+      const r = openPr({ card, cwd: root, config: loadConfig(root).config });
+      store.update(file, (bd) => store.editCard(bd, card.id, { run: { pr: r.url } }));
+      print(r, `${r.created ? 'opened' : 'updated'} ${r.url}`);
+      break;
+    }
+    case 'eval': {
+      if (opts.list) {
+        print(listCases(), listCases().join('\n'));
+        break;
+      }
+      const names = args.length ? args : listCases();
+      const results = names.map((name) => {
+        if (!opts.json) console.error(`… ${name}`);
+        return runCase(name, { agent: opts.agent, keep: opts.keep });
+      });
+      const text = results
+        .map((r) => [`${r.ok ? '✔' : '✖'} ${r.case} (${r.seconds}s, agent exit ${r.agentExit})`, ...r.graders.map((g) => `    ${g.ok ? '✔' : '✖'} ${g.grader}: ${g.detail}`), r.kept ? `    kept: ${r.kept}` : null].filter(Boolean).join('\n'))
+        .join('\n');
+      print(results, text);
+      if (results.some((r) => !r.ok)) process.exitCode = 1;
       break;
     }
     case 'agents-md': {

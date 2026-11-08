@@ -70,7 +70,7 @@
     <div class="meta" id="v-meta"></div>
     <section class="lint" id="v-lint"></section>
     <div class="body" id="v-body"></div>
-    <div class="row"><button id="v-edit">Editar</button></div>
+    <div class="row"><button id="v-edit">Editar</button><button id="v-approve" class="ghost" hidden>Aprobar y mergear</button><span id="v-approve-status" class="hint"></span></div>
     <section><h4>Comentarios</h4><div id="v-comments"></div>
       <form class="row" id="v-comment"><input name="text" placeholder="Añadir comentario" required><button>Enviar</button></form>
     </section>
@@ -205,6 +205,8 @@ function fillView() {
   $('v-lint').replaceChildren(...(c.lint.length ? [el('h4', { textContent: 'Lint' }),
     el('ul', {}, ...c.lint.map((i) => el('li', { className: i.severity, textContent: i.message })))] : []));
   $('v-body').textContent = c.body || '(sin descripción)';
+  // The merge gate handed this one to a person: they can approve the pinned commit from here.
+  $('v-approve').hidden = !(c.labels.includes('merge-approval') && c.run.branch && c.run.reviewedSha);
   $('v-comments').replaceChildren(...c.comments.map((m) =>
     el('div', { className: 'comment' }, el('div', { className: 'who', textContent: `[${m.role}] ${new Date(m.at).toLocaleString()}` }), m.text)));
   $('v-history').replaceChildren(...c.history.map((h) =>
@@ -212,6 +214,24 @@ function fillView() {
 }
 
 $('v-edit').onclick = startEdit;
+$('v-approve').onclick = async () => {
+  const c = state.cards.find((x) => x.id === openId);
+  const sha = c.run.reviewedSha;
+  if (!confirm(`¿Has revisado ${c.run.branch} en ${sha.slice(0, 8)}?\n\nEl merge gate ejecutará verify y, si pasa, la mergeará en la rama base.`)) return;
+  const btn = $('v-approve');
+  btn.disabled = true;
+  $('v-approve-status').textContent = 'ejecutando verify y merge…';
+  try {
+    const r = await api(`/api/cards/${c.id}/approve`, { sha });
+    $('v-approve-status').textContent = '';
+    alert(`${r.status === 'merged' ? '✅' : '✖'} ${r.status}: ${r.message}`);
+  } catch (err) {
+    $('v-approve-status').textContent = '';
+    alert(err.message);
+  } finally {
+    btn.disabled = false;
+  }
+};
 $('e-cancel').onclick = () => (openId === 'new' ? $('detail').close() : (showMode(false), fillView()));
 $('detail').onclose = () => { openId = null; showMode(false); };
 $('edit').onsubmit = async (e) => {

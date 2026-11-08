@@ -4,10 +4,31 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
 import * as store from './store.mjs';
 import { TEMPLATE } from './ticket.mjs';
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
+const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'factory.mjs');
+
+// A person approving a merge from the web. Runs the CLI's gate in a child process: verify can take
+// minutes and must not freeze the server.
+function runMerge({ boardFile, repoRoot, id, sha }) {
+  return new Promise((resolve) => {
+    const args = [CLI, 'merge', String(id), '--human', '--as', 'user', '--json', ...(sha ? ['--sha', sha] : [])];
+    const child = spawn(process.execPath, args, { cwd: repoRoot, env: { ...process.env, FACTORY_BOARD: boardFile } });
+    let out = '';
+    child.stdout.on('data', (d) => (out += d));
+    child.stderr.on('data', (d) => (out += d));
+    child.on('close', () => {
+      try {
+        resolve(JSON.parse(out));
+      } catch {
+        resolve({ status: 'error', message: out.trim() || 'merge produced no output' });
+      }
+    });
+  });
+}
 const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 function send(res, status, body, type = 'application/json') {
@@ -33,7 +54,7 @@ function readJson(req) {
   });
 }
 
-export function createServer({ boardFile }) {
+export function createServer({ boardFile, repoRoot = process.cwd() }) {
   const clients = new Set();
   let timer = null;
 
@@ -87,6 +108,12 @@ export function createServer({ boardFile }) {
         if (m) {
           const { column, before = null, force = false } = body;
           return send(res, 200, store.update(boardFile, (b) => store.moveCard(b, m[1], column, 'user', { before, force: force === true })));
+        }
+        m = url.pathname.match(/^\/api\/cards\/(\d+)\/approve$/);
+        if (m) {
+          const card = store.getCard(store.load(boardFile), m[1]);
+          if (!card.labels.includes('merge-approval') || !card.run.branch) throw new Error(`card #${m[1]} is not waiting for a merge approval`);
+          return send(res, 200, await runMerge({ boardFile, repoRoot, id: m[1], sha: body.sha }));
         }
         m = url.pathname.match(/^\/api\/cards\/(\d+)\/comments$/);
         if (m) return send(res, 200, store.update(boardFile, (b) => store.commentCard(b, m[1], { role: 'user', text: body.text })));

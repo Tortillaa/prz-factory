@@ -14,6 +14,8 @@ factory --help                             # CLI (enlazado con npm link; si no, 
 node bin/factory.mjs install [destino]     # copia skills/ a <destino>/.claude/skills y crea factory.config.json
 node bin/factory.mjs doctor                # comprobaciones de entorno (sale con 1 si alguna falla)
 factory cleanup [--apply]                  # restos de tarjetas terminadas (por defecto solo lista)
+factory eval [caso] [--agent cmd]          # evals de skills con un agente real (ver Fase 6)
+cd orca-plugin && orca plugin test .       # tests del plugin de Orca
 ```
 
 El plan de trabajo está en `ROADMAP.md`, ordenado por fases. Marca allí cada punto al completarlo.
@@ -53,6 +55,13 @@ El plan de trabajo está en `ROADMAP.md`, ordenado por fases. Marca allí cada p
 
 - `store.collectCard` deduplica por `card.source.key` (la huella que da `factory-collect`). El lint (`src/ticket.mjs`) ignora la sección `## Evidence`, que cita salida real.
 - `src/agentsmd.mjs` escribe el bloque gestionado. Este mismo `CLAUDE.md` lo lleva al final: no edites dentro de los marcadores; cambia `block()` y ejecuta `factory agents-md`.
+
+## Calidad y extras (Fase 6)
+
+- **Evals** (`src/evals.mjs`, `evals/`): un caso es JSON con `setup` (tarjetas, worktree, `sh`, `write`, `run`, `comment`, `claim`), `prompt` (`spec:<id>` genera el spec real del lane) y `graders` (`card`, `released`, `comment`, `branchChanges`, `verifyAt`, `behaviour`, `onBase`, `noCommits`). `test/evals.test.mjs` comprueba que ningún caso pasa sin agente y que un agente falso bueno (`test/fake-agent.mjs`) pasa `build-empty-cart`. Un caso nuevo debe fallar sin agente.
+- **Aprobación humana**: solo la etiqueta `merge-approval` (que pone el gate al retener un merge) permite `--human` desde blocked o el botón de la web. `needs-you` por sí sola nunca autoriza un merge.
+- **GitHub** (`src/github.mjs`) es un espejo: los merges siguen siendo locales. `FACTORY_GH` sustituye a `gh` en los tests.
+- **`orca-plugin/`** es un plugin aparte (TypeScript sin build, `orca/testing`); `src/boards.ts` replica `resolveBoardPath`, así que si cambia la ubicación del tablero, cambia ambos.
 
 ## Skills
 

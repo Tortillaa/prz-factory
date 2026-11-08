@@ -136,11 +136,13 @@ test('high risk waits for a person, who merges from blocked', () => {
   assert.deepEqual(r.reasons, ['riesgo high']);
   assert.equal(card(env, id).column, 'blocked');
   assert.ok(card(env, id).labels.includes('needs-you'));
+  assert.ok(card(env, id).labels.includes('merge-approval'));
 
   const human = mergeCard({ file: env.file, id, sha: head, human: true, who: 'user', cwd: env.repo, config: env.config });
   assert.equal(human.status, 'merged', human.message);
   assert.equal(card(env, id).column, 'done');
   assert.ok(!card(env, id).labels.includes('needs-you'));
+  assert.ok(!card(env, id).labels.includes('merge-approval'));
 });
 
 test('big diffs and sensitive labels also wait for a person', () => {
@@ -246,4 +248,105 @@ test('a qa card closes through the gate without a merge', () => {
   assert.equal(r.status, 'merged');
   assert.equal(card(env, id).column, 'done');
   assert.equal(sh(env.repo, 'rev-parse', 'main'), main);
+});
+
+test('a person approves a held merge from the web API, pinned to the reviewed commit', async () => {
+  const { createServer } = await import('../src/server.mjs');
+  const env = setup();
+  const id = addReadyCard(env, { body: GOOD_BODY.replace('🟢 **Low**', '🔴 **High**') });
+  const head = toReview(env, id);
+  assert.equal(mergeCard({ file: env.file, id, sha: head, cwd: env.repo, config: env.config }).code, 7);
+  assert.equal(card(env, id).run.reviewedSha, head, 'the gate pins what the person approves');
+
+  const server = createServer({ boardFile: env.file, repoRoot: env.repo });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const post = (p, body) => fetch(`http://localhost:${server.address().port}${p}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(async (r) => ({ code: r.status, body: await r.json() }));
+  try {
+    const other = addReadyCard(env);
+    assert.equal((await post(`/api/cards/${other}/approve`, {})).code, 400, 'only held merges');
+    commitIn(env.wt.build, 'sneaky.txt'); // pushed after the person looked
+    const moved = await post(`/api/cards/${id}/approve`, { sha: head });
+    assert.equal(moved.body.status, 'head-moved');
+    sh(env.wt.build, 'reset', '-q', '--hard', head);
+    const ok = await post(`/api/cards/${id}/approve`, { sha: head });
+    assert.equal(ok.body.status, 'merged', ok.body.message);
+    assert.equal(sh(env.repo, 'rev-parse', 'main'), head);
+    assert.equal(card(env, id).column, 'done');
+  } finally {
+    server.close();
+  }
+});
+
+test('github mirror: factory pr pushes and opens or updates the PR; the gate pushes the base', async () => {
+  const { openPr } = await import('../src/github.mjs');
+  const env = setup();
+  const remote = path.join(path.dirname(env.repo), 'remote.git');
+  sh(path.dirname(env.repo), 'init', '-q', '--bare', remote);
+  sh(env.repo, 'remote', 'add', 'origin', remote);
+  sh(env.repo, 'push', '-q', 'origin', 'main');
+
+  // A fake gh: logs each call; `pr view` fails until `pr create` has run.
+  const fake = path.join(path.dirname(env.repo), 'fake-gh.mjs');
+  const log = path.join(path.dirname(env.repo), 'gh.log');
+  fs.writeFileSync(fake, `import fs from 'node:fs';
+const args = process.argv.slice(2), log = ${JSON.stringify(log)};
+fs.appendFileSync(log, JSON.stringify(args) + String.fromCharCode(10));
+const created = fs.readFileSync(log, 'utf8').includes('"create"');
+if (args[1] === 'view') { if (!created) process.exit(1); console.log(JSON.stringify({ url: 'https://github.com/o/r/pull/7' })); }
+if (args[1] === 'create') console.log('https://github.com/o/r/pull/7');
+`);
+  const prev = process.env.FACTORY_GH;
+  process.env.FACTORY_GH = `node "${fake}"`;
+  try {
+    const id = addReadyCard(env);
+    const head = toReview(env, id);
+    const config = { ...env.config, github: { ...env.config.github, pushBase: true } };
+    const first = openPr({ card: card(env, id), cwd: env.repo, config });
+    assert.deepEqual(first, { url: 'https://github.com/o/r/pull/7', created: true });
+    assert.equal(sh(remote, 'rev-parse', card(env, id).run.branch), head, 'branch pushed');
+    const calls = fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const create = calls.find((c) => c[1] === 'create');
+    assert.deepEqual(create.slice(0, 8), ['pr', 'create', '--base', 'main', '--head', card(env, id).run.branch, '--title', 'Añadir página de login']);
+    assert.ok(create.includes('--draft'));
+    assert.equal(openPr({ card: card(env, id), cwd: env.repo, config }).created, false, 'second call edits');
+
+    const r = mergeCard({ file: env.file, id, sha: head, cwd: env.repo, config });
+    assert.equal(r.status, 'merged');
+    assert.deepEqual(r.pushed, { pushed: true });
+    assert.equal(sh(remote, 'rev-parse', 'main'), head, 'remote base fast-forwarded');
+  } finally {
+    if (prev === undefined) delete process.env.FACTORY_GH;
+    else process.env.FACTORY_GH = prev;
+  }
+});
+
+test('only merges the gate held can be approved: a card blocked by bounces cannot', async () => {
+  const { createServer } = await import('../src/server.mjs');
+  const env = setup();
+  const { file, wt, config } = env;
+  const id = addReadyCard(env);
+  startLane({ file, id, who: 'b', lane: 'build', cwd: wt.build, config });
+  commitIn(wt.build, 'broken.txt');
+  for (let round = 1; round <= 4; round++) {
+    handoff({ file, id, who: 'b', lane: 'build', to: 'qa', text: 'built' });
+    startLane({ file, id, who: 't', lane: 'qa', cwd: wt.qa, config });
+    handoff({ file, id, who: 't', lane: 'qa', to: 'building', text: 'still broken' });
+    if (round < 4) startLane({ file, id, who: 'b', lane: 'build', cwd: wt.build, config });
+  }
+  const blocked = card(env, id);
+  assert.equal(blocked.column, 'blocked');
+  assert.ok(blocked.labels.includes('needs-you'));
+  assert.ok(!blocked.labels.includes('merge-approval'));
+
+  const head = sh(env.repo, 'rev-parse', blocked.run.branch);
+  assert.equal(mergeCard({ file, id, sha: head, human: true, cwd: env.repo, config }).status, 'error', 'CLI --human refuses');
+  const server = createServer({ boardFile: file, repoRoot: env.repo });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    const res = await fetch(`http://localhost:${server.address().port}/api/cards/${id}/approve`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sha: head }) });
+    assert.equal(res.status, 400, 'web refuses');
+  } finally {
+    server.close();
+  }
+  assert.notEqual(sh(env.repo, 'rev-parse', 'main'), head);
 });

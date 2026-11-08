@@ -67,7 +67,9 @@ test('delete outside: recursive deletes stay inside the project or temp', () => 
   assert.match(guardDeleteOutside(bash('rm -rf $HOME'), ctx), /home folder/);
   assert.match(guardDeleteOutside(bash('rm -rf .'), ctx), /whole project/);
   assert.match(guardDeleteOutside(bash('cd x && rm -fr /'), ctx), /outside/);
-  assert.match(guardDeleteOutside({ tool_name: 'PowerShell', tool_input: { command: 'Remove-Item -Recurse -Force C:\\Users' } }, ctx), /outside/);
+  // An absolute path on this platform (C:\Users on Windows, /Users elsewhere: "C:\Users" is a relative name on Unix).
+  const outside = path.join(path.parse(root).root, 'Users');
+  assert.match(guardDeleteOutside({ tool_name: 'PowerShell', tool_input: { command: `Remove-Item -Recurse -Force "${outside}"` } }, ctx), /outside/);
   assert.equal(guardDeleteOutside({ tool_name: 'PowerShell', tool_input: { command: 'Remove-Item -Recurse build' } }, ctx), null);
   assert.equal(guardDeleteOutside(bash('rm -rf $BUILD_DIR'), ctx), null, 'unknown variables are not guessed');
 });

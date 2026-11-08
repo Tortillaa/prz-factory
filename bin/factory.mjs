@@ -11,6 +11,8 @@ import { loadConfig, repoRoot } from '../src/config.mjs';
 import { startLane, handoff } from '../src/lanes.mjs';
 import { runVerify, verifySummary } from '../src/verify.mjs';
 import { mergeCard } from '../src/merge.mjs';
+import * as run from '../src/run.mjs';
+import { worktrees } from '../src/git.mjs';
 
 const USAGE = `factory <command> [options]
 
@@ -47,8 +49,15 @@ Lanes (run inside the worker's own worktree)
                                          Merge gate. Exit 0 merged · 6 head moved · 7 needs a person
                                          · 8 behind base · 9 verify failed · 10 base checkout dirty
 
+Run (the coordinator; it dispatches, never builds)
+  plan                                   Next dispatches for the free worker slots, with placement
+  spec <id> --lane <l> --as <worker>     The task text for that worker (pipe to --spec-file -)
+  status                                 Snapshot: columns, in flight (stale claims), needs-you, next
+  reclaim <id> [--worker w] [--reason t] Worker ended without a handoff: release it (2nd time: blocked)
+  stop [--reason t]                      Release every in-flight card; prints the dispatches to stop
+
 Setup
-  install [target]                      Copy the skills into <target>/.claude/skills, create factory.config.json
+  install [target]                     Copy the skills into <target>/.claude/skills, create factory.config.json
   doctor                                 Check node, git, Orca, config, board and skills (exit 1 if any fail)
 
   --json   machine-readable output (every command except serve)`;
@@ -79,6 +88,8 @@ const { values: opts, positionals } = parseArgs({
     sha: { type: 'string' },
     human: { type: 'boolean' },
     'allow-main': { type: 'boolean' },
+    dispatch: { type: 'string' },
+    reason: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -104,6 +115,11 @@ function lintText(issues) {
 function need(value, name) {
   if (!value) throw new Error(`missing ${name}\n\n${USAGE}`);
   return value;
+}
+
+// The person's checkout (first worktree): new worker worktrees are created from that repo.
+function mainCheckout() {
+  return worktrees(process.cwd())[0].path;
 }
 
 function bodyOpt() {
@@ -134,7 +150,7 @@ try {
       break;
     }
     case 'edit': {
-      const run = { branch: opts.branch, worktree: opts.worktree, worker: opts.worker, reviewedSha: opts['reviewed-sha'] };
+      const run = { branch: opts.branch, worktree: opts.worktree, worker: opts.worker, reviewedSha: opts['reviewed-sha'], dispatch: opts.dispatch };
       const patch = {
         title: opts.title,
         body: bodyOpt(),
@@ -252,6 +268,42 @@ try {
       });
       print(r, `${r.status === 'merged' ? '✅' : '✖'} ${r.status}: ${r.message}`);
       process.exitCode = r.code;
+      break;
+    }
+    case 'plan': {
+      const root = mainCheckout();
+      const actions = run.plan(store.load(file), loadConfig(root).config, root);
+      print(actions, actions.map((a) => `#${a.id} ${a.lane.padEnd(6)} as ${a.worker} · ${a.placement.worktree}`).join('\n') || 'nothing to dispatch');
+      break;
+    }
+    case 'spec': {
+      const card = store.getCard(store.load(file), need(args[0], 'id'));
+      const text = run.spec(card, need(opts.lane, '--lane'), need(opts.as, '--as'), mainCheckout());
+      print({ spec: text }, text);
+      break;
+    }
+    case 'status': {
+      const root = mainCheckout();
+      const s = run.status(store.load(file), loadConfig(root).config, root);
+      const lines = [
+        store.COLUMNS.map((c) => `${c} ${s.counts[c]}`).join(' · '),
+        `in flight ${s.inFlight.length}/${s.maxWorkers}`,
+        ...s.inFlight.map((f) => `  #${f.id} ${f.column} ${f.worker} ${f.ageMinutes ?? '?'}min${f.stale ? ' ⚠️ stale' : ''}${f.dispatch ? ` dispatch ${f.dispatch}` : ''}`),
+        ...(s.needsYou.length ? ['needs you', ...s.needsYou.map((n) => `  #${n.id} ${n.title} (${n.column})`)] : []),
+        ...(s.waitingOnDeps.length ? ['waiting on blockers', ...s.waitingOnDeps.map((w) => `  #${w.id} ← ${w.waitingOn.map((d) => `#${d}`).join(' ')}`)] : []),
+        `next: ${s.next.map((a) => `#${a.id} ${a.lane}`).join(', ') || 'nothing'}${s.idle ? ' · idle' : ''}`,
+      ];
+      print(s, lines.join('\n'));
+      break;
+    }
+    case 'reclaim': {
+      const r = store.update(file, (b) => run.reclaim(b, need(args[0], 'id'), { worker: opts.worker, reason: opts.reason }));
+      print(r, `${r.action}: ${line(r.card)}${r.note ? ` (${r.note})` : ''}`);
+      break;
+    }
+    case 'stop': {
+      const r = store.update(file, (b) => run.stop(b, opts.reason));
+      print(r, r.stopped.map((s) => `released #${s.id} from ${s.worker}${s.dispatch ? ` · stop dispatch ${s.dispatch}` : ''}`).join('\n') || 'nothing in flight');
       break;
     }
     case 'template':

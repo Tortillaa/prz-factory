@@ -9,7 +9,7 @@ export const COLUMNS = ['backlog', 'ready', 'building', 'qa', 'review', 'blocked
 // Columns a card reaches by being worked on. Leaving Ready for one of these needs its blockers done.
 const WORK_COLUMNS = ['building', 'qa', 'review', 'done'];
 // Execution fields a worker or the orchestrator records on a card.
-export const RUN_FIELDS = ['branch', 'worktree', 'worker', 'reviewedSha', 'mergedSha'];
+export const RUN_FIELDS = ['branch', 'worktree', 'worker', 'reviewedSha', 'mergedSha', 'dispatch'];
 
 const LOCK_STALE_MS = 10_000;
 const LOCK_TIMEOUT_MS = 5_000;
@@ -241,6 +241,7 @@ export function releaseCard(board, id) {
   const card = findCard(board, id);
   card.assignee = null;
   card.claimedAt = null;
+  delete card.run.dispatch; // the Orca dispatch that held the claim is over
   card.updatedAt = now();
   return card;
 }

@@ -73,6 +73,7 @@ export function handoff({ file, id, who, lane, to, text }) {
     if (card.column !== column) throw new Error(`card #${id} is in ${card.column}, not ${column}`);
     if (card.assignee !== who) throw new Error(`card #${id} is claimed by ${card.assignee ?? 'nobody'}, not ${who}`);
     if (!allowed.includes(to)) throw new Error(`the ${lane} lane hands cards to ${allowed.join(' or ')}, not ${to}`);
+    card.failedDispatches = 0; // a worker that hands off did its job
     if (to === 'building') return store.sendBack(b, id, { who, role: lane, text });
     store.commentCard(b, id, { role: lane, text });
     store.moveCard(b, id, to, who);

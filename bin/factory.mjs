@@ -164,6 +164,11 @@ function depsOpt() {
 try {
   switch (cmd) {
     case 'serve': {
+      const port = /^\d+$/.test(opts.port) ? Number(opts.port) : NaN;
+      if (!(port >= 1 && port <= 65535)) {
+        console.error(`error: invalid port "${opts.port}": use a whole number from 1 to 65535 (--port <n> or FACTORY_PORT)`);
+        process.exit(1);
+      }
       const server = createServer({ boardFile: file, repoRoot: mainCheckout() });
       server.on('error', (err) => {
         if (err.code === 'EADDRINUSE') {
@@ -173,7 +178,7 @@ try {
         }
         process.exit(1);
       });
-      server.listen(Number(opts.port), '127.0.0.1', () => {
+      server.listen(port,'127.0.0.1', () => {
         console.log(`board: http://localhost:${opts.port}\nfile:  ${file}`);
       });
       break;

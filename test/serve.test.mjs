@@ -71,3 +71,44 @@ test('serve on a free port still prints the URL and answers GET /api/board', asy
     await exited;
   }
 });
+
+function serveRaw(args, env = {}) {
+  const child = spawn(process.execPath, [CLI, 'serve', ...args], {
+    env: { ...process.env, FACTORY_BOARD: tmpBoard(), ...env },
+  });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (d) => { stdout += d; });
+  child.stderr.on('data', (d) => { stderr += d; });
+  const started = Date.now();
+  const timer = setTimeout(() => child.kill(), 5_000);
+  return new Promise((resolve) => child.on('close', (code, signal) => {
+    clearTimeout(timer);
+    resolve({ code, signal, stdout, stderr, ms: Date.now() - started });
+  }));
+}
+
+function assertInvalidPort({ code, signal, stdout, stderr, ms }, value) {
+  assert.equal(signal, null, `serve did not exit on its own (killed after ${ms} ms)\nstderr: ${stderr}`);
+  assert.equal(code, 1, `stdout: ${stdout}\nstderr: ${stderr}`);
+  assert.ok(ms < 5_000, `took ${ms} ms`);
+  const line = stderr.split('\n').find((l) => l.includes(`invalid port "${value}"`));
+  assert.ok(line, `no invalid port "${value}" line in stderr:\n${stderr}`);
+  for (const part of ['1', '65535', '--port', 'FACTORY_PORT']) {
+    assert.ok(line.includes(part), `missing ${part} in: ${line}`);
+  }
+  const all = stdout + stderr;
+  assert.ok(!all.includes('    at '), all);
+  assert.ok(!all.includes('options.port should be'), all);
+  assert.ok(!all.includes('board: '), all);
+}
+
+for (const value of ['abc', '0', '70000', '8080.5']) {
+  test(`serve --port ${value} is rejected and exits 1 on its own`, async () => {
+    assertInvalidPort(await serveRaw(['--port', value]), value);
+  });
+}
+
+test('serve with FACTORY_PORT=abc and no --port is rejected and exits 1 on its own', async () => {
+  assertInvalidPort(await serveRaw([], { FACTORY_PORT: 'abc' }), 'abc');
+});

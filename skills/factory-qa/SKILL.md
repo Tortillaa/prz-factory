@@ -59,8 +59,8 @@ factory handoff <id> blocked  --lane qa --as <name> --text-file <comment.md> --j
 For a `qa` card, a pass goes to `review` too; failures you found become new cards for the user
 (`factory add` with a full body, in backlog) and the card goes to `review` with the list.
 
-If the card's history shows it has already gone back to building 3 times, hand it to `blocked`
-instead with 🙋: the loop is not converging and a person must look.
+Sending a card back to building for the fourth time sends it to `blocked` with `needs-you`
+instead: the board does that by itself, so just hand off to `building` as usual.
 
 ## Never
 

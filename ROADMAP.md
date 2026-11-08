@@ -41,7 +41,8 @@ Un skill por lane, sobre tres comandos comunes: `factory start` (claim y checkou
 - [x] `factory-review`: primero su propia pasada (hipótesis antes de leer al builder), recuerda los hallazgos R1… de rondas anteriores y pasa por el merge gate. *Origen: `super-review`.*
 - [x] `factory merge <id> --sha <revisado>` (merge gate): mutex, tarjeta en Review, head = commit revisado, rama que contiene la base, política de merge humano (riesgo High, labels sensibles, diff > `merge.maxLines`), `verify` sobre ese commit exacto y fast-forward de la base (sigue el checkout donde esté la base). Mueve la tarjeta según el resultado; exit codes 0/6/7/8/9/10. *Origen: `super-board-merge-gate.sh`.*
 - [x] Formato de commits, comentarios de lane y tabla de hallazgos en `skills/factory-board/references/writing-standard.md`. *Origen: `writing-standard.md`.*
-- [ ] Pendiente: contador de rebotes determinista (hoy los skills cuentan las vueltas a building en el historial) y aprobar merges humanos desde la web.
+- [x] Revisión: contador de rebotes en el store (la cuarta vuelta a building pasa a blocked con `needs-you`), las tarjetas `qa` se cierran por el gate sin merge, y el exit 10 libera la tarjeta.
+- [ ] Pendiente: aprobar merges humanos desde la web (Fase 6).
 
 ## Fase 3 · Orquestador sobre Orca
 

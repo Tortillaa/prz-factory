@@ -50,10 +50,19 @@ function verifyAt(sha, cwd, config) {
 // Card side effects of a refusal that needs a lane to act: comment, move, release.
 function sendBack(file, id, who, to, text, label) {
   store.update(file, (b) => {
+    if (to === 'building') return store.sendBack(b, id, { who, role: 'merge', text });
     const card = store.getCard(b, id);
     store.commentCard(b, id, { role: 'merge', text });
     if (label && !card.labels.includes(label)) store.editCard(b, id, { labels: [...card.labels, label] });
     store.moveCard(b, id, to, who);
+    store.releaseCard(b, id);
+  });
+}
+
+// Leaves the card where it is but gives it back, with a comment, so the run can pick it up again.
+function release(file, id, text) {
+  store.update(file, (b) => {
+    store.commentCard(b, id, { role: 'merge', text });
     store.releaseCard(b, id);
   });
 }
@@ -77,6 +86,15 @@ export function mergeCard({ file, id, who = 'merge-gate', sha, human = false, cw
       return result('error', `card #${id} is in ${card.column}; only cards in review can be merged`);
     }
     const branch = card.run.branch;
+    if (!branch && card.labels.includes('qa')) {
+      // A qa card tests what is already on the base branch: nothing to merge, QA's pass closes it.
+      store.update(file, (b) => {
+        store.commentCard(b, id, { role: 'merge', text: '[merge] ✅ tarjeta de QA sin código propio: cerrada sin merge' });
+        store.moveCard(b, id, 'done', who);
+        store.releaseCard(b, id);
+      });
+      return result('merged', `qa card #${id} closed (no code to merge)`);
+    }
     if (!branch) return result('error', `card #${id} has no branch recorded (run.branch)`);
     const head = revParse(`refs/heads/${branch}`, cwd);
     if (!head) return result('error', `branch ${branch} does not exist`);
@@ -117,7 +135,9 @@ export function mergeCard({ file, id, who = 'merge-gate', sha, human = false, cw
     const baseTree = worktrees(cwd).find((w) => w.branch === base);
     if (baseTree) {
       if (!isClean(baseTree.path)) {
-        return result('base-dirty', `${base} is checked out in ${baseTree.path} with uncommitted changes; commit or stash them and run the merge again`, { head });
+        const msg = `${base} is checked out in ${baseTree.path} with uncommitted changes; commit or stash them and run the merge again`;
+        release(file, id, `[merge] ⏸ ${msg}`);
+        return result('base-dirty', msg, { head });
       }
       git(['merge', '--ff-only', head], baseTree.path);
     } else {

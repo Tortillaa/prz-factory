@@ -170,6 +170,7 @@ test('a dirty base checkout stops the merge without touching the card', () => {
   const r = mergeCard({ file: env.file, id, sha: head, cwd: env.wt.review, config: env.config });
   assert.equal(r.code, 10);
   assert.equal(card(env, id).column, 'review');
+  assert.equal(card(env, id).assignee, null, 'released so the run can retry it');
 });
 
 test('lanes refuse the wrong place, column, claimer or destination', () => {
@@ -210,4 +211,39 @@ test('a qa-labelled card is tested on the base branch without a build', () => {
   assert.equal(r.branch, null);
   assert.equal(r.head, sh(env.repo, 'rev-parse', 'main'));
   assert.equal(card(env, id).column, 'qa');
+});
+
+test('the fourth send-back goes to blocked with needs-you', () => {
+  const env = setup();
+  const id = addReadyCard(env);
+  const { file, wt, config } = env;
+  startLane({ file, id, who: 'b', lane: 'build', cwd: wt.build, config });
+  commitIn(wt.build, 'a.txt');
+  for (let round = 1; round <= 4; round++) {
+    handoff({ file, id, who: 'b', lane: 'build', to: 'qa', text: 'built' });
+    startLane({ file, id, who: 't', lane: 'qa', cwd: wt.qa, config });
+    const c = handoff({ file, id, who: 't', lane: 'qa', to: 'building', text: 'fails' });
+    if (round < 4) {
+      assert.equal(c.column, 'building', `round ${round}`);
+      startLane({ file, id, who: 'b', lane: 'build', cwd: wt.build, config });
+    } else {
+      assert.equal(c.column, 'blocked');
+      assert.ok(c.labels.includes('needs-you'));
+      assert.match(c.comments.at(-1).text, /sin converger/);
+    }
+  }
+  assert.equal(store.bounces(card(env, id)), 3);
+});
+
+test('a qa card closes through the gate without a merge', () => {
+  const env = setup();
+  const id = addReadyCard(env, { labels: ['qa'] });
+  const main = sh(env.repo, 'rev-parse', 'main');
+  startLane({ file: env.file, id, who: 't', lane: 'qa', cwd: env.wt.qa, config: env.config });
+  handoff({ file: env.file, id, who: 't', lane: 'qa', to: 'review', text: 'all good' });
+  startLane({ file: env.file, id, who: 'r', lane: 'review', cwd: env.wt.review, config: env.config });
+  const r = mergeCard({ file: env.file, id, cwd: env.repo, config: env.config });
+  assert.equal(r.status, 'merged');
+  assert.equal(card(env, id).column, 'done');
+  assert.equal(sh(env.repo, 'rev-parse', 'main'), main);
 });

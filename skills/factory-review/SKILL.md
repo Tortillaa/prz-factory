@@ -46,7 +46,8 @@ factory handoff <id> building --lane review --as <name> --text-file <comment.md>
 ```
 
 (Use `qa` instead of `building` when the problem is missing evidence, not code. Use `blocked` with
-🙋 when it needs a product or design decision, or when the card has been back to building 3 times.)
+🙋 when it needs a product or design decision. After 3 round trips the board itself turns a
+fourth send-back into `blocked` with `needs-you`.)
 
 **No Blockers** → merge through the gate, pinned to the head you reviewed:
 
@@ -64,7 +65,7 @@ First write your review comment with `factory comment <id> --role review --text-
 | 7 | needs a person | The gate moved it to blocked with `needs-you` and the reasons. Nothing else to do. |
 | 8 | branch behind base | The gate sent it to building for a rebase. Nothing else to do. |
 | 9 | verify failed | The gate sent it to building with the output. Nothing else to do. |
-| 10 | base checkout has uncommitted changes | Card stays in review. Tell the user; do not touch their checkout. |
+| 10 | base checkout has uncommitted changes | Card stays in review, released. Tell the user; do not touch their checkout. |
 | 1 | error | Report the message and release the card: `factory release <id>`. |
 
 ## Never

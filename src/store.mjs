@@ -231,6 +231,7 @@ export function commentCard(board, id, { role = 'user', text }) {
 export function claimCard(board, id, who) {
   const card = findCard(board, id);
   if (card.assignee && card.assignee !== who) throw new Error(`card #${id} is already claimed by ${card.assignee}`);
+  if (card.assignee !== who) card.claimedAt = now();
   card.assignee = who;
   card.updatedAt = now();
   return card;
@@ -239,8 +240,32 @@ export function claimCard(board, id, who) {
 export function releaseCard(board, id) {
   const card = findCard(board, id);
   card.assignee = null;
+  card.claimedAt = null;
   card.updatedAt = now();
   return card;
+}
+
+export const MAX_BOUNCES = 3;
+
+// Times a card was sent back to building from qa, review or the merge gate.
+export function bounces(card) {
+  return card.history.filter((h) => h.to === 'building' && ['qa', 'review'].includes(h.from)).length;
+}
+
+// Sends a card back to building, unless it has already bounced MAX_BOUNCES times: then the
+// loop is not converging, so it goes to blocked with needs-you for a person to look at.
+export function sendBack(board, id, { who, role, text }) {
+  const card = findCard(board, id);
+  let to = 'building';
+  let note = '';
+  if (bounces(card) >= MAX_BOUNCES) {
+    to = 'blocked';
+    note = `\n🙋 ${MAX_BOUNCES} vueltas a building sin converger: necesita a una persona.`;
+    if (!card.labels.includes('needs-you')) card.labels.push('needs-you');
+  }
+  commentCard(board, id, { role, text: text + note });
+  moveCard(board, id, to, who);
+  return releaseCard(board, id);
 }
 
 export function getCard(board, id) {

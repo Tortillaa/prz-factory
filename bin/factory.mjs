@@ -7,6 +7,10 @@ import { TEMPLATE } from '../src/ticket.mjs';
 import { createServer } from '../src/server.mjs';
 import { install } from '../src/install.mjs';
 import { doctor } from '../src/doctor.mjs';
+import { loadConfig, repoRoot } from '../src/config.mjs';
+import { startLane, handoff } from '../src/lanes.mjs';
+import { runVerify, verifySummary } from '../src/verify.mjs';
+import { mergeCard } from '../src/merge.mjs';
 
 const USAGE = `factory <command> [options]
 
@@ -25,14 +29,26 @@ Board
                                          for work needs its blockers done. --force skips both.
   lint [id...]                           Lint cards (default: every backlog and ready card)
   next                                   Ready cards a worker may start now, in order
-  comment <id> <text> [--role r]         Role defaults to "user"
+  comment <id> (<text> | --text-file f) [--role r]
+                                         Role defaults to "user"
   claim <id> --as <who>                  Fails if someone else holds the card
   release <id>
   template                               Print the card body template
   path                                   Print the board file location
 
+Lanes (run inside the worker's own worktree)
+  start <id> --lane <build|qa|review> --as <who> [--allow-main]
+                                         Claim, leave Ready if needed, check out the card's code
+                                         (build: branch factory/<id>-<slug>; qa/review: detached)
+  handoff <id> <column> --lane <l> --as <who> (--text t | --text-file f)
+                                         Comment + move + release in one write
+  verify                                 Run the config's verify commands here (exit 1 on failure)
+  merge <id> --sha <reviewed> [--as who] [--human]
+                                         Merge gate. Exit 0 merged · 6 head moved · 7 needs a person
+                                         · 8 behind base · 9 verify failed · 10 base checkout dirty
+
 Setup
-  install [target]                       Copy the skills into <target>/.claude/skills, create factory.config.json
+  install [target]                      Copy the skills into <target>/.claude/skills, create factory.config.json
   doctor                                 Check node, git, Orca, config, board and skills (exit 1 if any fail)
 
   --json   machine-readable output (every command except serve)`;
@@ -57,6 +73,12 @@ const { values: opts, positionals } = parseArgs({
     worktree: { type: 'string' },
     worker: { type: 'string' },
     'reviewed-sha': { type: 'string' },
+    lane: { type: 'string' },
+    text: { type: 'string' },
+    'text-file': { type: 'string' },
+    sha: { type: 'string' },
+    human: { type: 'boolean' },
+    'allow-main': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -183,7 +205,10 @@ try {
     }
     case 'comment': {
       const card = store.update(file, (b) =>
-        store.commentCard(b, need(args[0], 'id'), { role: opts.role, text: need(args.slice(1).join(' '), 'text') }),
+        store.commentCard(b, need(args[0], 'id'), {
+          role: opts.role,
+          text: need(opts['text-file'] !== undefined ? fs.readFileSync(opts['text-file'], 'utf8') : args.slice(1).join(' '), 'text'),
+        }),
       );
       print(card, `commented on ${line(card)}`);
       break;
@@ -196,6 +221,37 @@ try {
     case 'release': {
       const card = store.update(file, (b) => store.releaseCard(b, need(args[0], 'id')));
       print(card, `released ${line(card)}`);
+      break;
+    }
+    case 'start': {
+      const r = startLane({
+        file, id: need(args[0], 'id'), who: opts.as, lane: need(opts.lane, '--lane'),
+        cwd: process.cwd(), config: loadConfig(repoRoot()).config, allowMain: opts['allow-main'],
+      });
+      print(r, `${r.lane}: ${line(r.card)}\n  ${r.branch ? `branch ${r.branch}` : `base ${r.base}`} @ ${r.head.slice(0, 8)}${r.lane === 'build' ? '' : ' (detached)'}\n  worktree ${r.worktree}`);
+      break;
+    }
+    case 'handoff': {
+      const text = opts['text-file'] !== undefined ? fs.readFileSync(opts['text-file'], 'utf8') : opts.text;
+      const card = handoff({ file, id: need(args[0], 'id'), to: need(args[1], 'column'), lane: need(opts.lane, '--lane'), who: need(opts.as, '--as'), text });
+      print(card, `handed off ${line(card)} → ${card.column}`);
+      break;
+    }
+    case 'verify': {
+      const { config } = loadConfig(repoRoot());
+      const r = runVerify(config.verify, process.cwd(), config);
+      const failed = r.results.find((x) => !x.ok);
+      print(r, verifySummary(r) + (failed ? `\n${failed.output}` : ''));
+      if (!r.ok) process.exitCode = 1;
+      break;
+    }
+    case 'merge': {
+      const r = mergeCard({
+        file, id: Number(need(args[0], 'id')), who: opts.as ?? (opts.human ? 'user' : 'merge-gate'), sha: opts.sha,
+        human: opts.human, cwd: process.cwd(), config: loadConfig(repoRoot()).config,
+      });
+      print(r, `${r.status === 'merged' ? '✅' : '✖'} ${r.status}: ${r.message}`);
+      process.exitCode = r.code;
       break;
     }
     case 'template':

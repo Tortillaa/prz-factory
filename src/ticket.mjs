@@ -103,6 +103,13 @@ export function lintCard(card, board) {
 
 export const hasErrors = (issues) => issues.some((i) => i.severity === 'error');
 
+// 'low' | 'medium' | 'high' from the Risk section, or null when it does not say.
+export function riskLevel(body) {
+  const m = (parseSections(body).Risk || '').match(RISK_RE);
+  if (!m) return null;
+  return { low: 'low', bajo: 'low', medium: 'medium', medio: 'medium', high: 'high', alto: 'high' }[m[2].toLowerCase()];
+}
+
 // Problems with a card's blockedBy list: unknown ids, itself, or a cycle.
 export function dependencyProblems(board, id, deps) {
   const problems = [];

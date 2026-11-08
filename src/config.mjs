@@ -10,7 +10,10 @@ export const DEFAULTS = Object.freeze({
   protectedBranches: ['main'],
   // Commands that prove the build. The merge gate runs every one; all must exit 0.
   verify: [],
+  verifyTimeoutMinutes: 20,
   maxWorkers: 2,
+  // When the merge gate hands the merge to a person instead of doing it.
+  merge: { humanRisk: ['high'], humanLabels: ['auth', 'money', 'schema', 'needs-human'], maxLines: 400 },
 });
 
 export function repoRoot(cwd = process.cwd()) {
@@ -33,6 +36,15 @@ function validate(config, file) {
     fail('"verify" must be an array of non-empty command strings');
   }
   if (!Number.isInteger(config.maxWorkers) || config.maxWorkers < 1) fail('"maxWorkers" must be a positive integer');
+  if (!(config.verifyTimeoutMinutes > 0)) fail('"verifyTimeoutMinutes" must be a positive number');
+  const m = config.merge;
+  const strings = (v) => Array.isArray(v) && v.every((s) => typeof s === 'string');
+  if (!m || typeof m !== 'object') fail('"merge" must be an object');
+  if (!strings(m.humanRisk) || !m.humanRisk.every((r) => ['low', 'medium', 'high'].includes(r))) {
+    fail('"merge.humanRisk" must list low, medium or high');
+  }
+  if (!strings(m.humanLabels)) fail('"merge.humanLabels" must be an array of strings');
+  if (!Number.isInteger(m.maxLines) || m.maxLines < 1) fail('"merge.maxLines" must be a positive integer');
   return config;
 }
 
@@ -52,7 +64,7 @@ export function loadConfig(root = repoRoot()) {
   } catch (err) {
     throw new Error(`${file}: invalid JSON (${err.message})`);
   }
-  return { file, exists: true, config: validate({ ...DEFAULTS, ...parsed }, file) };
+  return { file, exists: true, config: validate({ ...DEFAULTS, ...parsed, merge: { ...DEFAULTS.merge, ...parsed.merge } }, file) };
 }
 
 // Best guess at the commands that prove a project builds, for a fresh config.

@@ -32,15 +32,16 @@ Scripts en Node (sin Python, sin dependencias) para tener un solo runtime.
 - [x] Web: editar tarjeta (título, cuerpo, labels, dependencias), crear tarjetas desde la plantilla, avisos de lint y de bloqueo.
 - [ ] Pendiente para un skill: los criterios de lint que requieren juicio (ambigüedad, tarjeta demasiado grande, título y cuerpo que no cuadran), con preguntas al usuario como el `lint` interactivo de super-board.
 
-## Fase 2 · Lanes: build, QA y review
+## Fase 2 · Lanes: build, QA y review ✅
 
-Un skill por lane. Cada uno empieza con `claim`, termina con un comentario de evidencia, `move` y `release`.
+Un skill por lane, sobre tres comandos comunes: `factory start` (claim y checkout en el worktree del worker), `factory verify` y `factory handoff` (comentario, move y release en una sola escritura; cada lane solo puede pasar la tarjeta a columnas concretas).
 
-- [ ] `factory-build`: rama `factory/<id>-<slug>`, cambio mínimo seguro con tests primero, commit, pasa a QA. Nunca mergea. *Origen: `super-build`.*
-- [ ] `factory-qa`: ejecuta `verify`, comprueba que los criterios de aceptación tienen test, pasada de seguridad sobre el diff. Si algo falla, vuelve a Building con el motivo. *Origen: `super-qa`, `pr-security-review`.*
-- [ ] `factory-review`: revisión del diff contra la tarjeta, recuerda hallazgos de rondas anteriores y pasa por el merge gate. *Origen: `super-review`.*
-- [ ] `factory merge <id>` (merge gate): exige estar en Review, rama al día con la base, `verify` en verde sobre el commit revisado y un mutex; después mergea y mueve a Done. *Origen: `super-board-merge-gate.sh`.*
-- [ ] Formato de commits y comentarios (`<emoji> [type] scope: subject`; comentario `[rol] estado · Hecho · Pendiente · Siguiente`). *Origen: `writing-standard.md`.*
+- [x] `factory-build`: rama `factory/<id>-<slug>`, cambio mínimo seguro con tests primero, commit, pasa a QA. Nunca mergea. *Origen: `super-build`.*
+- [x] `factory-qa`: ejecuta `verify`, registro de qué test cubre cada criterio de aceptación, casos límite, "test the tests" y pasada de seguridad sobre el diff. Si algo falla, vuelve a Building con el motivo. Trabaja en detached y nunca commitea. *Origen: `super-qa`, `pr-security-review`.*
+- [x] `factory-review`: primero su propia pasada (hipótesis antes de leer al builder), recuerda los hallazgos R1… de rondas anteriores y pasa por el merge gate. *Origen: `super-review`.*
+- [x] `factory merge <id> --sha <revisado>` (merge gate): mutex, tarjeta en Review, head = commit revisado, rama que contiene la base, política de merge humano (riesgo High, labels sensibles, diff > `merge.maxLines`), `verify` sobre ese commit exacto y fast-forward de la base (sigue el checkout donde esté la base). Mueve la tarjeta según el resultado; exit codes 0/6/7/8/9/10. *Origen: `super-board-merge-gate.sh`.*
+- [x] Formato de commits, comentarios de lane y tabla de hallazgos en `skills/factory-board/references/writing-standard.md`. *Origen: `writing-standard.md`.*
+- [ ] Pendiente: contador de rebotes determinista (hoy los skills cuentan las vueltas a building en el historial) y aprobar merges humanos desde la web.
 
 ## Fase 3 · Orquestador sobre Orca
 

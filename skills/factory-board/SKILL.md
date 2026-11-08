@@ -45,10 +45,16 @@ factory comment <id> "<text>" --role <build|qa|review> --json
 factory release <id> --json
 ```
 
-## Worker loop
+## Lanes
 
-1. `claim` the card. If the claim fails, stop: another worker has it.
-2. Record where you work: `edit <id> --branch … --worktree … --worker …`.
-3. Do the lane's work.
-4. `comment` with what you did and the evidence (commands run, results, commit SHA).
-5. `move` it to the next column (or `blocked`, with a comment saying why), then `release` it.
+Lane workers follow their own skill (`factory-build`, `factory-qa`, `factory-review`), which uses:
+
+```text
+factory start <id> --lane <build|qa|review> --as <name> --json   # claim + checkout, in your own worktree
+factory verify --json                                            # the project's verify commands, here
+factory handoff <id> <column> --lane <l> --as <name> --text-file f --json   # comment + move + release
+factory merge <id> --sha <reviewed-head> --as <name> --json      # review lane only: the merge gate
+```
+
+Comments and commits follow `references/writing-standard.md`. A card reaches `done` only through
+`factory merge`; no lane moves it there by hand.

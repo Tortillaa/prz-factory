@@ -30,11 +30,17 @@ El plan de trabajo está en `ROADMAP.md`, ordenado por fases. Marca allí cada p
 - **Columnas** (`store.COLUMNS`): backlog · ready · building · qa · review · blocked · done. Cambiarlas implica tocar `store.mjs`, los colores de `index.html` y `skills/factory-board/SKILL.md`.
 - **`claim`** falla si otra persona o agente ya tiene la tarjeta; es lo que impide que dos workers tomen la misma.
 
+## Lanes y merge gate
+
+- **`src/lanes.mjs`** — `startLane` comprueba en qué columna está la tarjeta y si este lane es su ruta. Después hace claim y la saca de Ready en una sola escritura, y luego hace el checkout: build se pone en la rama `factory/<id>-<slug>`; qa y review se ponen en *detached* sobre su head, porque la rama puede estar en el worktree del builder y git no deja tener una rama en dos worktrees. Si el checkout falla, libera el claim. Se niega a trabajar en el checkout principal (el de la persona) salvo con `allowMain`. `handoff` hace comentario, move y release en una sola escritura, y solo hacia las columnas que `LANES[lane].to` permite: ningún lane puede mover a Done.
+- **`src/merge.mjs`** — el único camino a Done. Todo ocurre bajo el mutex `<common>/factory/merge.lock`, en este orden: head == commit revisado (6) → la rama contiene la base (8, vuelve a building) → política humana `config.merge` (7, pasa a blocked con `needs-you`; `--human` lo salta y deja mergear desde blocked) → `verify` en un worktree limpio que ya esté en ese commit, o si no en un worktree temporal que se borra al terminar (9, vuelve a building) → fast-forward de la base. Si la base está checkouteada en algún worktree, hace `merge --ff-only` ahí (y exige que esté limpio, si no sale con 10); si no, hace `update-ref` con compare-and-swap. Sin merge commits: lo que aterriza es exactamente lo verificado.
+- **Tests** en `test/lanes.test.mjs`: montan repos git reales con un worktree por lane, y su `verify` falla si existe un archivo `FAIL`.
+
 ## Skills
 
-`skills/<nombre>/SKILL.md` es la fuente de los skills que distribuye la fábrica. Claude Code solo los carga desde `.claude/skills/`, así que `factory install` los copia ahí y deja un marcador `.factory-managed` en cada carpeta. Solo reemplaza las carpetas que tienen el marcador y nunca toca un skill del usuario con el mismo nombre. En este repo `.claude/skills/` está en `.gitignore`: edita siempre `skills/` y vuelve a ejecutar `install .`.
+`skills/<nombre>/SKILL.md` es la fuente de los skills que distribuye la fábrica: `factory-board` (el CLI, más `references/writing-standard.md`, que comparten todos) y un skill por lane (`factory-build`, `factory-qa`, `factory-review`). Los lanes enlazan al estándar con la ruta relativa `../factory-board/references/`, así que se instalan juntos. Claude Code solo los carga desde `.claude/skills/`, así que `factory install` los copia ahí y deja un marcador `.factory-managed` en cada carpeta. Solo reemplaza las carpetas que tienen el marcador y nunca toca un skill del usuario con el mismo nombre. En este repo `.claude/skills/` está en `.gitignore`: edita siempre `skills/` y vuelve a ejecutar `install .`.
 
-`factory.config.json` (en la raíz del proyecto, commiteado; esquema y validación en `src/config.mjs`) define `baseBranch`, `protectedBranches`, `verify` (comandos que deben salir con 0 para mergear) y `maxWorkers`.
+`factory.config.json` (en la raíz del proyecto, commiteado; esquema y validación en `src/config.mjs`) define `baseBranch`, `protectedBranches`, `verify` (comandos que deben salir con 0 para mergear; se ejecutan con shell y paran en el primer fallo), `verifyTimeoutMinutes`, `maxWorkers` y `merge` (`humanRisk`, `humanLabels`, `maxLines`: cuándo el gate deja el merge a una persona).
 
 ## Objetivo
 

@@ -9,7 +9,7 @@ export const COLUMNS = ['backlog', 'ready', 'building', 'qa', 'review', 'blocked
 // Columns a card reaches by being worked on. Leaving Ready for one of these needs its blockers done.
 const WORK_COLUMNS = ['building', 'qa', 'review', 'done'];
 // Execution fields a worker or the orchestrator records on a card.
-export const RUN_FIELDS = ['branch', 'worktree', 'worker', 'reviewedSha'];
+export const RUN_FIELDS = ['branch', 'worktree', 'worker', 'reviewedSha', 'mergedSha'];
 
 const LOCK_STALE_MS = 10_000;
 const LOCK_TIMEOUT_MS = 5_000;
@@ -54,8 +54,10 @@ function sleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-function withLock(file, fn) {
-  const lock = `${file}.lock`;
+// Exclusive lock: a directory, since mkdir is atomic on every platform. A lock older than
+// staleMs is assumed abandoned (its holder crashed) and taken over.
+export function withLock(lock, fn, { staleMs = LOCK_STALE_MS, timeoutMs = LOCK_TIMEOUT_MS, what = 'board' } = {}) {
+  fs.mkdirSync(path.dirname(lock), { recursive: true });
   const start = Date.now();
   for (;;) {
     try {
@@ -64,9 +66,9 @@ function withLock(file, fn) {
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;
       try {
-        if (Date.now() - fs.statSync(lock).mtimeMs > LOCK_STALE_MS) fs.rmSync(lock, { recursive: true, force: true });
+        if (Date.now() - fs.statSync(lock).mtimeMs > staleMs) fs.rmSync(lock, { recursive: true, force: true });
       } catch {}
-      if (Date.now() - start > LOCK_TIMEOUT_MS) throw new Error(`board is locked: ${lock}`);
+      if (Date.now() - start > timeoutMs) throw new Error(`${what} is locked: ${lock}`);
       sleep(25);
     }
   }
@@ -80,7 +82,7 @@ function withLock(file, fn) {
 // Runs mutate(board) under the lock and saves the result. Returns mutate's return value.
 export function update(file, mutate) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  return withLock(file, () => {
+  return withLock(`${file}.lock`, () => {
     const board = load(file);
     const result = mutate(board);
     const tmp = `${file}.${process.pid}.tmp`;

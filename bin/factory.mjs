@@ -52,6 +52,8 @@ Lanes (run inside the worker's own worktree)
 Run (the coordinator; it dispatches, never builds)
   plan                                   Next dispatches for the free worker slots, with placement
   spec <id> --lane <l> --as <worker>     The task text for that worker (pipe to --spec-file -)
+  dispatched <id> --as <worker> --dispatch <d>
+                                         Record the Orca dispatch, only while that worker holds the card
   status                                 Snapshot: columns, in flight (stale claims), needs-you, next
   reclaim <id> [--worker w] [--reason t] Worker ended without a handoff: release it (2nd time: blocked)
   stop [--reason t]                      Release every in-flight card; prints the dispatches to stop
@@ -296,6 +298,11 @@ try {
         `next: ${s.next.map((a) => `#${a.id} ${a.lane}`).join(', ') || 'nothing'}${s.idle ? ' · idle' : ''}`,
       ];
       print(s, lines.join('\n'));
+      break;
+    }
+    case 'dispatched': {
+      const r = store.update(file, (b) => run.recordDispatch(b, need(args[0], 'id'), { worker: need(opts.as, '--as'), dispatch: need(opts.dispatch, '--dispatch') }));
+      print(r, r.recorded ? `recorded ${opts.dispatch} on ${line(r.card)}` : `not recorded: ${r.note}`);
       break;
     }
     case 'reclaim': {

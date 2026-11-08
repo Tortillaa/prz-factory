@@ -95,3 +95,12 @@ test('stop releases everything in flight and lists the dispatches', () => {
   assert.equal(run.inFlight(b).length, 0);
   assert.equal(b.cards[2].assignee, 'x', 'blocked cards are not in flight');
 });
+
+test('recordDispatch writes only while the worker still holds the card', () => {
+  const b = board([{ column: 'building', assignee: 'build-1' }, { column: 'qa' }]);
+  assert.equal(run.recordDispatch(b, 1, { worker: 'build-1', dispatch: 'd1' }).recorded, true);
+  assert.equal(b.cards[0].run.dispatch, 'd1');
+  const late = run.recordDispatch(b, 2, { worker: 'build-2', dispatch: 'd2' });
+  assert.equal(late.recorded, false);
+  assert.equal(b.cards[1].run.dispatch, undefined);
+});

@@ -56,7 +56,8 @@ Each action is `{ id, title, lane, worker, placement }`, already limited to the 
 
    `--repo`, `--name` and `--base-branch` only when `placement.worktree` is `new-top-level`
    (`baseBranch` from `factory.config.json`). Add `--model` only if the user named one.
-3. Record the dispatch: `factory edit <id> --dispatch <dispatch id from the receipt> --json`.
+3. Record the dispatch: `factory dispatched <id> --as <worker> --dispatch <dispatchId from the receipt> --json`.
+   `recorded: false` means the worker already handed off: fine, nothing to do.
 4. If `worker-start` fails, do not rerun it: `factory release <id>`, report the `failedStage`, and
    load Orca's `references/recovery-and-cleanup.md` before any retry.
 
@@ -74,8 +75,10 @@ For each `worker_done` or `escalation`:
 3. If it is still claimed by that worker, it ended without a handoff:
    `factory reclaim <id> --worker <worker> --reason "<the worker's report or stopReason>" --json`.
    The second time, the card goes to blocked with `needs-you` by itself.
-4. Release the worker's terminal when Orca's receipt or `worker-list` gives it a `next` to do so.
-   Kept-open workers in a card's worktree are not needed after the handoff.
+4. Release the worker's terminal: `orca orchestration worker-release --dispatch <dispatchId> --json`.
+   Each lane gets a fresh terminal in the card's worktree, so a settled worker's chat is not needed
+   (workers in new worktrees are kept open by default and would pile up otherwise). If the user
+   said they want to watch or talk to workers, skip this.
 
 A `question` from a worker: answer only from the card and the user's instructions; otherwise
 ask the user. Then go back to §2: dispatch the next plan. A card handed to the next lane is

@@ -79,6 +79,15 @@ export function status(board, config, repoRoot, now = Date.now()) {
   return { counts, inFlight: flying, needsYou, waitingOnDeps, next, idle, maxWorkers: config.maxWorkers };
 }
 
+// Records the Orca dispatch holding a card. A fast worker may have handed off before the
+// coordinator gets here: then the card is no longer its, and nothing is written.
+export function recordDispatch(board, id, { worker, dispatch }) {
+  const card = store.getCard(board, id);
+  if (card.assignee !== worker) return { card, recorded: false, note: `card is ${card.assignee ? `claimed by ${card.assignee}` : 'already handed off'}` };
+  store.editCard(board, id, { run: { dispatch } });
+  return { card, recorded: true };
+}
+
 // A worker ended (worker_done, escalation, failed start) but the card is still claimed by it:
 // it never handed off. Release it so the next plan retries it, or block it after repeated failures.
 export function reclaim(board, id, { worker, reason }) {

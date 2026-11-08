@@ -44,13 +44,16 @@ Un skill por lane, sobre tres comandos comunes: `factory start` (claim y checkou
 - [x] Revisión: contador de rebotes en el store (la cuarta vuelta a building pasa a blocked con `needs-you`), las tarjetas `qa` se cierran por el gate sin merge, y el exit 10 libera la tarjeta.
 - [ ] Pendiente: aprobar merges humanos desde la web (Fase 6).
 
-## Fase 3 · Orquestador sobre Orca
+## Fase 3 · Orquestador sobre Orca ✅
 
-- [ ] Skill `factory-run`: lee Ready (respetando orden y dependencias), reclama tarjetas, lanza un worker de Orca por tarjeta y lane con un spec autocontenido y termina su turno. Cuando Orca le despierta con `worker_done`, reconcilia el tablero y lanza el siguiente lane. *Origen: `run-workflow.md`, `super-board-wave.js`.*
-- [ ] Regla de oro: el orquestador nunca construye, prueba ni arregla; solo despacha y reporta.
-- [ ] `factory status` (snapshot de solo lectura) y `factory stop` (para los workers y libera los claims). *Origen: `status.md`, `stop.md`.*
-- [ ] Límite de workers simultáneos (`maxWorkers` en el config).
-- [ ] Recuperación: claims huérfanos y worktrees abandonados.
+- [x] Skill `factory-run`: lee la cola, reserva cada tarjeta con un claim antes de despachar, lanza un worker de Orca por tarjeta y lane con el spec que genera `factory spec` y termina su turno. Cuando Orca le despierta, reconcilia el tablero y despacha lo siguiente. *Origen: `run-workflow.md`, `super-board-wave.js`.*
+- [x] Un worktree por tarjeta: build lo crea (`new-top-level`), y QA y review lo reutilizan (`path:`). Así el setup del repo corre una vez y el merge gate encuentra el commit exacto limpio para verificar.
+- [x] Regla de oro: el orquestador nunca construye, prueba ni arregla; solo despacha y reporta.
+- [x] `factory status` (snapshot de solo lectura, con claims colgados) y `factory stop` (libera los claims y lista los dispatches que hay que parar). *Origen: `status.md`, `stop.md`.*
+- [x] Límite de workers simultáneos (`maxWorkers`): `factory plan` solo llena los huecos libres, terminando trabajo (review, qa) antes de empezar más.
+- [x] Recuperación: `factory reclaim` libera una tarjeta cuyo worker terminó sin traspasarla; a la segunda, blocked con `needs-you`.
+- [x] Probado de verdad: la tarjeta #1 (`factory --version`) recorrió build → qa → review → merge con workers de Orca y aterrizó en `main` (`58d0552`).
+- [x] Revisión: `factory dispatched` evita la carrera al registrar el dispatch, y el skill libera las terminales de los workers ya reconciliados.
 
 ## Fase 4 · Guard hooks
 
@@ -60,7 +63,7 @@ Hooks de Claude Code en Node (JSON por stdin, decisión por stdout) que `factory
 - [ ] `guard-key-literals`: bloquea escribir claves API literales en el código.
 - [ ] `guard-protected-push`: bloquea push o commit directo a ramas protegidas desde un worker.
 - [ ] `guard-delete-outside`: bloquea `rm` fuera del repo o worktree.
-- [ ] Limpieza de worktrees mergeados al iniciar sesión. *Origen: `cleanup-wt.py`.*
+- [ ] Limpieza de worktrees, ramas de tarjeta y ramas que crea Orca (`<usuario>/factory-<id>`) de tarjetas ya mergeadas. *Origen: `cleanup-wt.py`.*
 
 ## Fase 5 · Entrada de trabajo y onboarding
 

@@ -76,7 +76,19 @@ Setup
 
   --json   machine-readable output (every command except serve)`;
 
-const { values: opts, positionals } = parseArgs({
+// A mistyped option is a usage error (exit 64, like an unknown command), not a crash.
+function parseOptions(config) {
+  try {
+    return parseArgs(config);
+  } catch (err) {
+    if (!err.code?.startsWith('ERR_PARSE_ARGS_')) throw err;
+    if (process.argv.includes('--json')) console.log(JSON.stringify({ error: err.message }));
+    else console.error(`error: ${err.message}\nrun factory --help for usage`);
+    process.exit(64);
+  }
+}
+
+const { values: opts, positionals } = parseOptions({
   allowPositionals: true,
   options: {
     json: { type: 'boolean' },

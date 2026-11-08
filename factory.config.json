@@ -1,0 +1,10 @@
+{
+  "baseBranch": "main",
+  "protectedBranches": [
+    "main"
+  ],
+  "verify": [
+    "npm test"
+  ],
+  "maxWorkers": 2
+}

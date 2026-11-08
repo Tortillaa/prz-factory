@@ -10,8 +10,12 @@ Node ≥ 20, sin dependencias ni paso de build (ESM puro, `.mjs`). No hay linter
 npm test                                   # node --test (test/*.test.mjs)
 node --test --test-name-pattern "claim"    # un solo test por nombre
 npm run board                              # tablero en http://localhost:4747 (--port / FACTORY_PORT)
-node bin/factory.mjs --help                # CLI del tablero: add, list, show, move, comment, claim, release, path
+node bin/factory.mjs --help                # CLI: tablero (add, list, show, move, comment, claim, release, path) + install, doctor
+node bin/factory.mjs install [destino]     # copia skills/ a <destino>/.claude/skills y crea factory.config.json
+node bin/factory.mjs doctor                # comprobaciones de entorno (sale con 1 si alguna falla)
 ```
+
+El plan de trabajo está en `ROADMAP.md`, ordenado por fases. Marca allí cada punto al completarlo.
 
 `FACTORY_BOARD=<ruta>` apunta el CLI y el servidor a otro archivo de tablero; úsalo en pruebas manuales para no tocar el tablero real.
 
@@ -26,7 +30,9 @@ node bin/factory.mjs --help                # CLI del tablero: add, list, show, m
 
 ## Skills
 
-`skills/<nombre>/SKILL.md` contiene los skills que distribuye la fábrica (por ahora `factory-board`, que explica a los agentes cómo usar el CLI). Claude Code solo los carga desde `.claude/skills/`; falta el paso de instalación que los enlace ahí (tipo `install.sh` de super-board).
+`skills/<nombre>/SKILL.md` es la fuente de los skills que distribuye la fábrica. Claude Code solo los carga desde `.claude/skills/`, así que `factory install` los copia ahí y deja un marcador `.factory-managed` en cada carpeta. Solo reemplaza las carpetas que tienen el marcador y nunca toca un skill del usuario con el mismo nombre. En este repo `.claude/skills/` está en `.gitignore`: edita siempre `skills/` y vuelve a ejecutar `install .`.
+
+`factory.config.json` (en la raíz del proyecto, commiteado; esquema y validación en `src/config.mjs`) define `baseBranch`, `protectedBranches`, `verify` (comandos que deben salir con 0 para mergear) y `maxWorkers`.
 
 ## Objetivo
 

@@ -3,6 +3,8 @@
 import { parseArgs } from 'node:util';
 import * as store from '../src/store.mjs';
 import { createServer } from '../src/server.mjs';
+import { install } from '../src/install.mjs';
+import { doctor } from '../src/doctor.mjs';
 
 const USAGE = `factory <command> [options]
 
@@ -15,6 +17,8 @@ const USAGE = `factory <command> [options]
   claim <id> --as <who>                  Fails if someone else holds the card
   release <id>
   path                                   Print the board file location
+  install [target]                       Copy the skills into <target>/.claude/skills, create factory.config.json
+  doctor                                 Check node, git, Orca, config, board and skills (exit 1 if any fail)
 
   --json   machine-readable output (every command except serve)`;
 
@@ -110,6 +114,21 @@ try {
     case 'path':
       print({ file }, file);
       break;
+    case 'install': {
+      const report = install(args[0] || '.');
+      const skills = report.skills.map((s) => `  ${s.status.padEnd(9)} ${s.name}${s.reason ? ` (${s.reason})` : ''}`).join('\n');
+      print(report, `skills → ${report.target}\n${skills}\nconfig: ${report.config.status} ${report.config.file}`);
+      break;
+    }
+    case 'doctor': {
+      const result = doctor();
+      const text = result.checks
+        .map((c) => `${c.ok ? '✔' : '✖'} ${c.name.padEnd(16)} ${c.detail}${c.fix ? `\n  → ${c.fix}` : ''}`)
+        .join('\n');
+      print(result, text);
+      if (!result.ok) process.exitCode = 1;
+      break;
+    }
     default:
       console.log(USAGE);
       if (cmd && !opts.help) process.exitCode = 64;

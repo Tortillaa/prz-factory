@@ -1,3 +1,5 @@
 node_modules/
 .factory/
 *.tmp
+# copias instaladas por `factory install` (la fuente es skills/)
+.claude/skills/

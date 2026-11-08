@@ -59,6 +59,7 @@ Run (the coordinator; it dispatches, never builds)
 Setup
   install [target]                     Copy the skills into <target>/.claude/skills, create factory.config.json
   doctor                                 Check node, git, Orca, config, board and skills (exit 1 if any fail)
+  version, --version                     Print the installed factory version
 
   --json   machine-readable output (every command except serve)`;
 
@@ -91,10 +92,11 @@ const { values: opts, positionals } = parseArgs({
     dispatch: { type: 'string' },
     reason: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
+    version: { type: 'boolean' },
   },
 });
 
-const [cmd, ...args] = positionals;
+const [cmd, ...args] = opts.version ? ['version'] : positionals;
 const file = store.resolveBoardPath();
 
 function print(value, text) {
@@ -309,6 +311,11 @@ try {
     case 'template':
       print({ template: TEMPLATE }, TEMPLATE);
       break;
+    case 'version': {
+      const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+      print({ version: pkg.version }, pkg.version);
+      break;
+    }
     case 'path':
       print({ file }, file);
       break;

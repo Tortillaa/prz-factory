@@ -28,7 +28,7 @@ export function doctor(cwd = process.cwd()) {
   const add = (name, ok, detail, fix) => checks.push({ name, ok, detail, ...(ok || !fix ? {} : { fix }) });
 
   const major = Number(process.versions.node.split('.')[0]);
-  add('node', major >= 20, `v${process.versions.node}`, 'install Node 20 or newer');
+  add('node', major >= 22, `v${process.versions.node}`, 'install Node 22 or newer');
 
   const git = gitOut(['--version'], cwd);
   add('git', !!git, git || 'not found', 'install git');

@@ -5,13 +5,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import * as store from '../src/store.mjs';
+import { GOOD_BODY } from './fixtures.mjs';
 
 const tmpBoard = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-')), 'board.json');
 const CLI = path.join(import.meta.dirname, '..', 'bin', 'factory.mjs');
 
 test('add, move, comment and claim a card', () => {
   const file = tmpBoard();
-  const card = store.update(file, (b) => store.addCard(b, { title: 'First', labels: ['feature'] }));
+  const card = store.update(file, (b) => store.addCard(b, { title: 'First', body: GOOD_BODY, labels: ['feature'] }));
   assert.equal(card.id, 1);
   assert.equal(card.column, 'backlog');
 
@@ -51,7 +52,7 @@ test('concurrent CLI processes never lose a write', async () => {
   assert.deepEqual(new Set(board.cards.map((c) => c.id)).size, N);
 });
 
-test('server pushes a change event for each CLI write', async () => {
+test('server pushes a change event for each CLI write', { timeout: 15_000 }, async () => {
   const { createServer } = await import('../src/server.mjs');
   const file = tmpBoard();
   const server = createServer({ boardFile: file });
@@ -71,7 +72,7 @@ test('server pushes a change event for each CLI write', async () => {
     new Promise((resolve) => spawn(process.execPath, [CLI, ...args], { env: { ...process.env, FACTORY_BOARD: file } }).on('exit', resolve));
   await cli('add', 'one');
   await waitForEvents(1);
-  await cli('move', '1', 'ready');
+  await cli('move', '1', 'ready', '--force');
   await waitForEvents(2);
   ctrl.abort();
   server.close();

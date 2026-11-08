@@ -7,14 +7,14 @@
 <style>
   :root {
     --bg: #f6f7f9; --col: #eceef2; --card: #fff; --text: #1d2129; --muted: #69707d;
-    --border: #d9dde4; --accent: #3b6ef5; --drop: #dfe7fd;
+    --border: #d9dde4; --accent: #3b6ef5; --drop: #dfe7fd; --err: #c93c3c; --warn: #b7791f;
     --c-backlog: #8a919e; --c-ready: #3b6ef5; --c-building: #d98a1c; --c-qa: #8b5cf6;
     --c-review: #0ea5a4; --c-blocked: #dc4a4a; --c-done: #2f9e5b;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #14161a; --col: #1c1f25; --card: #252931; --text: #e6e8ec; --muted: #9aa1ad;
-      --border: #333844; --accent: #7196ff; --drop: #26304a;
+      --border: #333844; --accent: #7196ff; --drop: #26304a; --err: #ff7b7b; --warn: #e8b04a;
     }
   }
   * { box-sizing: border-box; }
@@ -30,23 +30,32 @@
   .column h2 .count { color: var(--muted); font-weight: 400; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; cursor: grab; }
   .card:hover { border-color: var(--accent); }
+  .card.over { box-shadow: 0 -3px 0 var(--accent); }
   .card .id { color: var(--muted); font-size: 12px; }
-  .card .meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
   .tag { font-size: 11px; padding: 1px 6px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); }
   .tag.who { border-color: var(--accent); color: var(--accent); }
-  form.add { display: flex; gap: 6px; margin-top: auto; }
-  input, textarea, select { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; width: 100%; }
+  .tag.err { border-color: var(--err); color: var(--err); }
+  .tag.warn { border-color: var(--warn); color: var(--warn); }
+  input, textarea { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; width: 100%; }
+  textarea { font-family: ui-monospace, Consolas, monospace; font-size: 13px; min-height: 320px; resize: vertical; }
   button { font: inherit; border: 0; border-radius: 6px; padding: 6px 12px; background: var(--accent); color: #fff; cursor: pointer; }
-  dialog { width: min(640px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); padding: 20px; }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .new { margin-top: auto; }
+  dialog { width: min(720px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); padding: 20px; }
   dialog::backdrop { background: rgb(0 0 0 / .4); }
-  dialog h3 { margin: 0 0 6px; }
-  dialog .body { white-space: pre-wrap; margin: 12px 0; }
+  dialog h3 { margin: 0 0 6px; padding-right: 28px; }
+  dialog .body { white-space: pre-wrap; margin: 12px 0; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
   dialog section h4 { font-size: 12px; text-transform: uppercase; color: var(--muted); margin: 16px 0 6px; }
+  .lint li.error { color: var(--err); } .lint li.warn { color: var(--warn); }
+  .lint ul { margin: 0; padding-left: 18px; }
   .comment { border-left: 3px solid var(--border); padding: 2px 10px; margin: 6px 0; white-space: pre-wrap; }
-  .comment .who { color: var(--muted); font-size: 12px; }
-  .history { color: var(--muted); font-size: 12px; }
-  .row { display: flex; gap: 8px; margin-top: 8px; }
-  .close { float: right; background: transparent; color: var(--muted); padding: 0 4px; font-size: 18px; }
+  .comment .who, .history, .hint { color: var(--muted); font-size: 12px; }
+  .row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+  label { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+  .close { position: absolute; top: 14px; right: 14px; background: transparent; color: var(--muted); padding: 0 4px; font-size: 18px; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -55,42 +64,76 @@
 
 <dialog id="detail">
   <button class="close" onclick="this.closest('dialog').close()" aria-label="Cerrar">×</button>
-  <h3 id="d-title"></h3>
-  <div class="meta" id="d-meta"></div>
-  <div class="body" id="d-body"></div>
-  <section><h4>Comentarios</h4><div id="d-comments"></div>
-    <form class="row" id="d-comment"><input name="text" placeholder="Añadir comentario" required><button>Enviar</button></form>
-  </section>
-  <section><h4>Historial</h4><div id="d-history" class="history"></div></section>
+
+  <div id="view">
+    <h3 id="v-title"></h3>
+    <div class="meta" id="v-meta"></div>
+    <section class="lint" id="v-lint"></section>
+    <div class="body" id="v-body"></div>
+    <div class="row"><button id="v-edit">Editar</button></div>
+    <section><h4>Comentarios</h4><div id="v-comments"></div>
+      <form class="row" id="v-comment"><input name="text" placeholder="Añadir comentario" required><button>Enviar</button></form>
+    </section>
+    <section><h4>Historial</h4><div id="v-history" class="history"></div></section>
+  </div>
+
+  <form id="edit" hidden>
+    <h3 id="e-heading"></h3>
+    <label>Título <input name="title" required></label>
+    <div class="grid">
+      <label>Labels (qa, bug, feature…) <input name="labels" placeholder="feature"></label>
+      <label>Bloqueada por (ids) <input name="blockedBy" placeholder="3, 7"></label>
+    </div>
+    <label>Cuerpo <textarea name="body" spellcheck="false"></textarea></label>
+    <p class="hint">Para pasar a Ready, la tarjeta necesita Problem, Fix, Acceptance Criteria (checklist "- [ ] …") y Risk (Low/Medium/High), sin huecos &lt;…&gt; ni TODO/etc.</p>
+    <div class="row"><button>Guardar</button><button type="button" class="ghost" id="e-cancel">Cancelar</button></div>
+  </form>
 </dialog>
 
 <script>
 const COLORS = { backlog: '--c-backlog', ready: '--c-ready', building: '--c-building', qa: '--c-qa', review: '--c-review', blocked: '--c-blocked', done: '--c-done' };
 let state = { columns: [], cards: [] };
-let openId = null;
+let openId = null;   // card shown in the dialog; 'new' while creating one
+let editing = false;
 
+const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => {
   const n = Object.assign(document.createElement(tag), props);
-  n.append(...kids.filter((k) => k != null));
+  n.append(...kids.filter((k) => k != null && k !== false));
   return n;
 };
+const list = (s) => s.split(/[\s,]+/).filter(Boolean);
 
 async function api(path, body) {
   const res = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
   const data = await res.json();
-  if (!res.ok) { alert(data.error); throw new Error(data.error); }
+  if (!res.ok) throw new Error(data.error);
   return data;
 }
 
 function tags(card) {
+  const errors = card.lint.filter((i) => i.severity === 'error').length;
+  const warns = card.lint.length - errors;
+  const showLint = ['backlog', 'ready'].includes(card.column);
   return el('div', { className: 'meta' },
     ...card.labels.map((l) => el('span', { className: 'tag', textContent: l })),
-    card.assignee && el('span', { className: 'tag who', textContent: '@' + card.assignee }));
+    card.assignee && el('span', { className: 'tag who', textContent: '@' + card.assignee }),
+    card.unmet.length > 0 && el('span', { className: 'tag warn', textContent: '⛓ ' + card.unmet.map((d) => '#' + d).join(' '), title: 'Bloqueada por tarjetas sin terminar' }),
+    showLint && errors > 0 && el('span', { className: 'tag err', textContent: `✖ ${errors}`, title: 'Errores de lint: no puede pasar a Ready' }),
+    showLint && !errors && warns > 0 && el('span', { className: 'tag warn', textContent: `⚠ ${warns}`, title: 'Avisos de lint' }),
+    card.run.branch && el('span', { className: 'tag', textContent: 'rama ' + card.run.branch }));
+}
+
+async function move(id, column, before) {
+  try {
+    await api(`/api/cards/${id}/move`, { column, before });
+  } catch (err) {
+    if (confirm(`${err.message}\n\n¿Moverla igualmente?`)) await api(`/api/cards/${id}/move`, { column, before, force: true }).catch((e) => alert(e.message));
+  }
 }
 
 function render() {
-  const board = document.getElementById('board');
-  board.replaceChildren(...state.columns.map((col) => {
+  $('board').replaceChildren(...state.columns.map((col) => {
     const cards = state.cards.filter((c) => c.column === col);
     const column = el('section', { className: 'column' },
       el('h2', {}, col, el('span', { className: 'count', textContent: cards.length })),
@@ -99,52 +142,100 @@ function render() {
           el('div', { className: 'id', textContent: '#' + c.id }), el('div', { textContent: c.title }), tags(c));
         card.ondragstart = (e) => e.dataTransfer.setData('text/plain', c.id);
         card.onclick = () => openCard(c.id);
+        // Dropping on a card places the dragged card before it.
+        card.ondragover = (e) => { e.preventDefault(); card.classList.add('over'); };
+        card.ondragleave = () => card.classList.remove('over');
+        card.ondrop = (e) => {
+          e.preventDefault(); e.stopPropagation(); card.classList.remove('over'); column.classList.remove('drop');
+          const id = Number(e.dataTransfer.getData('text/plain'));
+          if (id !== c.id) move(id, col, c.id);
+        };
         return card;
       }));
     column.style.setProperty('--dot', `var(${COLORS[col]})`);
     column.ondragover = (e) => { e.preventDefault(); column.classList.add('drop'); };
-    column.ondragleave = () => column.classList.remove('drop');
-    column.ondrop = async (e) => {
-      e.preventDefault(); column.classList.remove('drop');
-      await api(`/api/cards/${e.dataTransfer.getData('text/plain')}/move`, { column: col });
-    };
-    if (col === 'backlog') {
-      const form = el('form', { className: 'add' }, el('input', { name: 'title', placeholder: 'Nueva tarjeta', required: true }), el('button', { textContent: '+' }));
-      form.onsubmit = async (e) => { e.preventDefault(); await api('/api/cards', { title: form.title.value }); form.reset(); };
-      column.append(form);
-    }
+    column.ondragleave = (e) => { if (!column.contains(e.relatedTarget)) column.classList.remove('drop'); };
+    column.ondrop = (e) => { e.preventDefault(); column.classList.remove('drop'); move(Number(e.dataTransfer.getData('text/plain')), col, null); };
+    if (col === 'backlog') column.append(el('button', { className: 'ghost new', textContent: '+ Nueva tarjeta', onclick: newCard }));
     return column;
   }));
-  if (openId) fillDetail();
+  if (openId && openId !== 'new' && !editing) fillView();
 }
 
-function openCard(id) { openId = id; fillDetail(); document.getElementById('detail').showModal(); }
+function showMode(edit) {
+  editing = edit;
+  $('view').hidden = edit;
+  $('edit').hidden = !edit;
+}
 
-function fillDetail() {
+function openCard(id) { openId = id; showMode(false); fillView(); $('detail').showModal(); }
+
+async function newCard() {
+  openId = 'new';
+  const { template } = await api('/api/template');
+  const f = $('edit');
+  f.reset();
+  f.body.value = template;
+  $('e-heading').textContent = 'Nueva tarjeta';
+  showMode(true);
+  $('detail').showModal();
+  f.title.focus();
+}
+
+function startEdit() {
   const c = state.cards.find((x) => x.id === openId);
-  if (!c) return;
-  document.getElementById('d-title').textContent = `#${c.id} ${c.title}`;
-  document.getElementById('d-meta').replaceChildren(el('span', { className: 'tag', textContent: c.column }), ...tags(c).childNodes);
-  document.getElementById('d-body').textContent = c.body || '(sin descripción)';
-  document.getElementById('d-comments').replaceChildren(...c.comments.map((m) =>
+  const f = $('edit');
+  f.title.value = c.title;
+  f.labels.value = c.labels.join(', ');
+  f.blockedBy.value = c.blockedBy.join(', ');
+  f.body.value = c.body;
+  $('e-heading').textContent = `Editar #${c.id}`;
+  showMode(true);
+}
+
+function fillView() {
+  const c = state.cards.find((x) => x.id === openId);
+  if (!c) return $('detail').close();
+  $('v-title').textContent = `#${c.id} ${c.title}`;
+  $('v-meta').replaceChildren(el('span', { className: 'tag', textContent: c.column }),
+    ...c.blockedBy.map((d) => el('span', { className: 'tag' + (c.unmet.includes(d) ? ' warn' : ''), textContent: `bloqueada por #${d}` })),
+    ...Object.entries(c.run).map(([k, v]) => el('span', { className: 'tag', textContent: `${k}: ${v}` })),
+    ...tags(c).childNodes);
+  $('v-lint').replaceChildren(...(c.lint.length ? [el('h4', { textContent: 'Lint' }),
+    el('ul', {}, ...c.lint.map((i) => el('li', { className: i.severity, textContent: i.message })))] : []));
+  $('v-body').textContent = c.body || '(sin descripción)';
+  $('v-comments').replaceChildren(...c.comments.map((m) =>
     el('div', { className: 'comment' }, el('div', { className: 'who', textContent: `[${m.role}] ${new Date(m.at).toLocaleString()}` }), m.text)));
-  document.getElementById('d-history').replaceChildren(...c.history.map((h) =>
+  $('v-history').replaceChildren(...c.history.map((h) =>
     el('div', { textContent: `${new Date(h.at).toLocaleString()} · ${h.from ? h.from + ' → ' : ''}${h.to}${h.by ? ' (' + h.by + ')' : ''}` })));
 }
 
-document.getElementById('detail').onclose = () => { openId = null; };
-document.getElementById('d-comment').onsubmit = async (e) => {
+$('v-edit').onclick = startEdit;
+$('e-cancel').onclick = () => (openId === 'new' ? $('detail').close() : (showMode(false), fillView()));
+$('detail').onclose = () => { openId = null; showMode(false); };
+$('edit').onsubmit = async (e) => {
   e.preventDefault();
-  await api(`/api/cards/${openId}/comments`, { text: e.target.text.value });
+  const f = e.target;
+  const data = { title: f.title.value, body: f.body.value, labels: list(f.labels.value), blockedBy: list(f.blockedBy.value).map((d) => Number(d.replace('#', ''))) };
+  try {
+    const card = openId === 'new' ? await api('/api/cards', data) : await api(`/api/cards/${openId}`, data);
+    openId = card.id;
+    await refresh();
+    showMode(false);
+    fillView();
+  } catch (err) { alert(err.message); }
+};
+$('v-comment').onsubmit = async (e) => {
+  e.preventDefault();
+  await api(`/api/cards/${openId}/comments`, { text: e.target.text.value }).catch((err) => alert(err.message));
   e.target.reset();
 };
 
 async function refresh() { state = await api('/api/board'); render(); }
 
-const status = document.getElementById('status');
 const events = new EventSource('/api/events');
-events.onopen = () => { status.textContent = 'en vivo'; refresh(); };
-events.onerror = () => { status.textContent = 'desconectado, reintentando…'; };
+events.onopen = () => { $('status').textContent = 'en vivo'; refresh(); };
+events.onerror = () => { $('status').textContent = 'desconectado, reintentando…'; };
 events.addEventListener('change', refresh);
 </script>
 </body>

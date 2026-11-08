@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as store from './store.mjs';
+import { TEMPLATE } from './ticket.mjs';
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -57,7 +58,10 @@ export function createServer({ boardFile }) {
         return send(res, 200, fs.readFileSync(path.join(PUBLIC_DIR, 'index.html')), 'text/html; charset=utf-8');
       }
       if (req.method === 'GET' && url.pathname === '/api/board') {
-        return send(res, 200, { columns: store.COLUMNS, ...store.load(boardFile) });
+        return send(res, 200, { columns: store.COLUMNS, ...store.annotate(store.load(boardFile)) });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/template') {
+        return send(res, 200, { template: TEMPLATE });
       }
       if (req.method === 'GET' && url.pathname === '/api/events') {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
@@ -74,8 +78,16 @@ export function createServer({ boardFile }) {
         if (url.pathname === '/api/cards') {
           return send(res, 201, store.update(boardFile, (b) => store.addCard(b, body)));
         }
-        let m = url.pathname.match(/^\/api\/cards\/(\d+)\/move$/);
-        if (m) return send(res, 200, store.update(boardFile, (b) => store.moveCard(b, m[1], body.column, 'user')));
+        let m = url.pathname.match(/^\/api\/cards\/(\d+)$/);
+        if (m) {
+          const { title, body: text, labels, blockedBy } = body;
+          return send(res, 200, store.update(boardFile, (b) => store.editCard(b, m[1], { title, body: text, labels, blockedBy })));
+        }
+        m = url.pathname.match(/^\/api\/cards\/(\d+)\/move$/);
+        if (m) {
+          const { column, before = null, force = false } = body;
+          return send(res, 200, store.update(boardFile, (b) => store.moveCard(b, m[1], column, 'user', { before, force: force === true })));
+        }
         m = url.pathname.match(/^\/api\/cards\/(\d+)\/comments$/);
         if (m) return send(res, 200, store.update(boardFile, (b) => store.commentCard(b, m[1], { role: 'user', text: body.text })));
       }

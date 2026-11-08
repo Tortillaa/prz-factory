@@ -9,10 +9,10 @@
   },
   "scripts": {
     "board": "node bin/factory.mjs serve",
-    "test": "node --test"
+    "test": "node --test \"test/*.test.mjs\""
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "license": "MIT"
 }

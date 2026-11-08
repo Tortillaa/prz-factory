@@ -1,22 +1,37 @@
 #!/usr/bin/env node
 // factory: CLI for the local board. Agents use this instead of editing board.json directly.
+import fs from 'node:fs';
 import { parseArgs } from 'node:util';
 import * as store from '../src/store.mjs';
+import { TEMPLATE } from '../src/ticket.mjs';
 import { createServer } from '../src/server.mjs';
 import { install } from '../src/install.mjs';
 import { doctor } from '../src/doctor.mjs';
 
 const USAGE = `factory <command> [options]
 
+Board
   serve [--port 4747]                    Open the board at http://localhost:<port>
-  add <title> [--body t] [--label l]... [--column c]
-  list [--column c]                      Cards, grouped by column
-  show <id>                              One card with comments and history
-  move <id> <column> [--by who]          Columns: ${store.COLUMNS.join(', ')}
+  add <title> [--body t | --body-file f] [--label l]... [--blocked-by ids]
+                                         New card in backlog (body defaults to the template)
+  edit <id> [--title t] [--body t | --body-file f] [--label l]... [--blocked-by ids]
+            [--branch b] [--worktree p] [--worker w] [--reviewed-sha s]
+                                         --label replaces all labels; --blocked-by "" clears
+  list [--column c]                      Cards, grouped by column, in board order
+  show <id>                              One card with lint, blockers, comments and history
+  move <id> <column> [--before id] [--by who] [--force]
+                                         Columns: ${store.COLUMNS.join(', ')}
+                                         Ready needs a card that passes lint; leaving Ready
+                                         for work needs its blockers done. --force skips both.
+  lint [id...]                           Lint cards (default: every backlog and ready card)
+  next                                   Ready cards a worker may start now, in order
   comment <id> <text> [--role r]         Role defaults to "user"
   claim <id> --as <who>                  Fails if someone else holds the card
   release <id>
+  template                               Print the card body template
   path                                   Print the board file location
+
+Setup
   install [target]                       Copy the skills into <target>/.claude/skills, create factory.config.json
   doctor                                 Check node, git, Orca, config, board and skills (exit 1 if any fail)
 
@@ -27,12 +42,21 @@ const { values: opts, positionals } = parseArgs({
   options: {
     json: { type: 'boolean' },
     port: { type: 'string', default: process.env.FACTORY_PORT || '4747' },
+    title: { type: 'string' },
     body: { type: 'string' },
+    'body-file': { type: 'string' },
     label: { type: 'string', multiple: true },
+    'blocked-by': { type: 'string' },
     column: { type: 'string' },
+    before: { type: 'string' },
+    force: { type: 'boolean' },
     by: { type: 'string' },
     role: { type: 'string' },
     as: { type: 'string' },
+    branch: { type: 'string' },
+    worktree: { type: 'string' },
+    worker: { type: 'string' },
+    'reviewed-sha': { type: 'string' },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -47,12 +71,28 @@ function print(value, text) {
 function line(c) {
   const labels = c.labels.length ? ` [${c.labels.join(', ')}]` : '';
   const who = c.assignee ? ` @${c.assignee}` : '';
-  return `#${c.id} ${c.title}${labels}${who}`;
+  const deps = c.blockedBy?.length ? ` ⛓ ${c.blockedBy.map((d) => `#${d}`).join(' ')}` : '';
+  return `#${c.id} ${c.title}${labels}${who}${deps}`;
+}
+
+function lintText(issues) {
+  return issues.map((i) => `  ${i.severity === 'error' ? '✖' : '⚠'} ${i.message}`).join('\n');
 }
 
 function need(value, name) {
   if (!value) throw new Error(`missing ${name}\n\n${USAGE}`);
   return value;
+}
+
+function bodyOpt() {
+  if (opts['body-file'] !== undefined) return fs.readFileSync(opts['body-file'], 'utf8');
+  return opts.body;
+}
+
+function depsOpt() {
+  const raw = opts['blocked-by'];
+  if (raw === undefined) return undefined;
+  return raw.split(/[\s,]+/).filter(Boolean).map((d) => Number(d.replace(/^#/, '')));
 }
 
 try {
@@ -66,9 +106,22 @@ try {
     }
     case 'add': {
       const card = store.update(file, (b) =>
-        store.addCard(b, { title: need(args.join(' '), 'title'), body: opts.body, labels: opts.label, column: opts.column }),
+        store.addCard(b, { title: need(args.join(' '), 'title'), body: bodyOpt(), labels: opts.label, blockedBy: depsOpt() }),
       );
       print(card, `added ${line(card)} → ${card.column}`);
+      break;
+    }
+    case 'edit': {
+      const run = { branch: opts.branch, worktree: opts.worktree, worker: opts.worker, reviewedSha: opts['reviewed-sha'] };
+      const patch = {
+        title: opts.title,
+        body: bodyOpt(),
+        labels: opts.label,
+        blockedBy: depsOpt(),
+        run: Object.fromEntries(Object.entries(run).filter(([, v]) => v !== undefined)),
+      };
+      const card = store.update(file, (b) => store.editCard(b, need(args[0], 'id'), patch));
+      print(card, `edited ${line(card)}`);
       break;
     }
     case 'list': {
@@ -84,14 +137,48 @@ try {
       break;
     }
     case 'show': {
-      const card = store.getCard(store.load(file), need(args[0], 'id'));
+      const card = store.annotate(store.load(file)).cards.find((c) => c.id === Number(need(args[0], 'id')));
+      if (!card) throw new Error(`card #${args[0]} not found`);
+      const run = Object.entries(card.run).map(([k, v]) => `${k}: ${v}`).join(' · ');
       const comments = card.comments.map((c) => `  [${c.role}] ${c.at}\n    ${c.text}`).join('\n');
-      print(card, `${line(card)}\ncolumn: ${card.column}\n\n${card.body || '(no body)'}\n\ncomments:\n${comments || '  (none)'}`);
+      print(
+        card,
+        [
+          line(card),
+          `column: ${card.column}${card.unmet.length ? ` · waiting on ${card.unmet.map((d) => `#${d}`).join(', ')}` : ''}`,
+          run ? `run: ${run}` : null,
+          '',
+          card.body || '(no body)',
+          '',
+          `lint:\n${lintText(card.lint) || '  ✔ ok'}`,
+          `comments:\n${comments || '  (none)'}`,
+        ]
+          .filter((l) => typeof l === 'string')
+          .join('\n'),
+      );
       break;
     }
     case 'move': {
-      const card = store.update(file, (b) => store.moveCard(b, need(args[0], 'id'), need(args[1], 'column'), opts.by ?? null));
+      const card = store.update(file, (b) =>
+        store.moveCard(b, need(args[0], 'id'), need(args[1], 'column'), opts.by ?? null, { before: opts.before ?? null, force: opts.force }),
+      );
       print(card, `moved ${line(card)} → ${card.column}`);
+      break;
+    }
+    case 'lint': {
+      const board = store.annotate(store.load(file));
+      const ids = args.map(Number);
+      const cards = ids.length
+        ? ids.map((id) => board.cards.find((c) => c.id === id) || (() => { throw new Error(`card #${id} not found`); })())
+        : board.cards.filter((c) => ['backlog', 'ready'].includes(c.column));
+      const results = cards.map((c) => ({ id: c.id, title: c.title, ok: !store.hasErrors(c.lint), issues: c.lint }));
+      print(results, results.map((r) => `${r.ok ? '✔' : '✖'} #${r.id} ${r.title}${r.issues.length ? `\n${lintText(r.issues)}` : ''}`).join('\n') || 'no cards to lint');
+      if (results.some((r) => !r.ok)) process.exitCode = 1;
+      break;
+    }
+    case 'next': {
+      const queue = store.readyQueue(store.load(file));
+      print(queue, queue.map((c) => `${line(c)} → ${c.next}`).join('\n') || 'nothing ready');
       break;
     }
     case 'comment': {
@@ -111,6 +198,9 @@ try {
       print(card, `released ${line(card)}`);
       break;
     }
+    case 'template':
+      print({ template: TEMPLATE }, TEMPLATE);
+      break;
     case 'path':
       print({ file }, file);
       break;

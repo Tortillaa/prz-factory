@@ -14,7 +14,7 @@ Scripts en Node (sin Python, sin dependencias) para tener un solo runtime.
 
 ---
 
-## Fase 0 · Fundaciones ✅ (en parte)
+## Fase 0 · Fundaciones ✅
 
 - [x] Tablero en localhost, CLI `factory`, skill `factory-board`, tests (`d806263`)
 - [x] `.gitattributes` con finales de línea LF
@@ -22,14 +22,15 @@ Scripts en Node (sin Python, sin dependencias) para tener un solo runtime.
 - [x] `factory install [destino]`: copia los skills a `<destino>/.claude/skills/` (solo pisa los que gestiona la fábrica) y crea el config si falta. *Origen: `install.sh`.*
 - [x] `factory doctor`: comprueba node, git, Orca, config, tablero y skills instalados. *Origen: `super-board-setup.py check`.*
 
-## Fase 1 · Tablero v2: la tarjeta como contrato
+## Fase 1 · Tablero v2: la tarjeta como contrato ✅
 
-- [ ] Formato de tarjeta: Problem · Context · Fix · Acceptance Criteria · Risk · Blocked by. `factory lint <id>` marca los criterios vagos. *Origen: `ticket-format.md`, `lint.md`.*
-- [ ] Dependencias (`blockedBy: [ids]`): una tarjeta no sale de Ready hasta que sus dependencias están en Done.
-- [ ] Labels que enrutan: `qa` se salta Building; `bug` y `feature` (o sin label) se construyen. *Origen: "Lanes and label routing".*
-- [ ] Orden manual dentro de cada columna (arrastrar para reordenar = prioridad).
-- [ ] Campos de ejecución en la tarjeta: rama, worktree, commit revisado, worker de Orca.
-- [ ] Web: editar tarjeta (título, cuerpo, labels, dependencias) y crear tarjetas con el formato completo.
+- [x] Formato de tarjeta: Problem · Context · Fix · Acceptance Criteria · Risk (las dependencias van en el campo `blockedBy`, no en el cuerpo). `factory lint` aplica los criterios deterministas de `lint.md`: secciones, checklist, palabras vagas, huecos de plantilla, TODO/etc. y nivel de riesgo. Una tarjeta con errores no entra en Ready. *Origen: `ticket-format.md`, `lint.md`.*
+- [x] Dependencias (`blockedBy: [ids]`, sin ciclos): una tarjeta no sale de Ready hacia trabajo hasta que sus dependencias están en Done. `factory next` da la cola.
+- [x] Labels que enrutan: `qa` se salta Building; `bug` y `feature` (o sin label) se construyen. *Origen: "Lanes and label routing".*
+- [x] Orden manual dentro de cada columna (arrastrar para reordenar = prioridad; `move --before`).
+- [x] Campos de ejecución en la tarjeta (`run`): rama, worktree, commit revisado, worker de Orca.
+- [x] Web: editar tarjeta (título, cuerpo, labels, dependencias), crear tarjetas desde la plantilla, avisos de lint y de bloqueo.
+- [ ] Pendiente para un skill: los criterios de lint que requieren juicio (ambigüedad, tarjeta demasiado grande, título y cuerpo que no cuadran), con preguntas al usuario como el `lint` interactivo de super-board.
 
 ## Fase 2 · Lanes: build, QA y review
 

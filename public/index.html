@@ -121,7 +121,8 @@ function tags(card) {
     card.unmet.length > 0 && el('span', { className: 'tag warn', textContent: '⛓ ' + card.unmet.map((d) => '#' + d).join(' '), title: 'Bloqueada por tarjetas sin terminar' }),
     showLint && errors > 0 && el('span', { className: 'tag err', textContent: `✖ ${errors}`, title: 'Errores de lint: no puede pasar a Ready' }),
     showLint && !errors && warns > 0 && el('span', { className: 'tag warn', textContent: `⚠ ${warns}`, title: 'Avisos de lint' }),
-    card.run.branch && el('span', { className: 'tag', textContent: 'rama ' + card.run.branch }));
+    card.run.branch && el('span', { className: 'tag', textContent: 'rama ' + card.run.branch }),
+    card.source?.seen > 1 && el('span', { className: 'tag warn', textContent: `🔁 ${card.source.seen}`, title: `Encontrado ${card.source.seen} veces por factory-collect` }));
 }
 
 async function move(id, column, before) {

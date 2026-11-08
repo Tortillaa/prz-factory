@@ -49,6 +49,11 @@ El plan de trabajo está en `ROADMAP.md`, ordenado por fases. Marca allí cada p
 - Los guards están activos en esta sesión. Si uno bloquea algo legítimo, arregla el guard y su test; no lo esquives.
 - `src/cleanup.mjs` solo toca lo que creó la fábrica (`factory-<id>`, `factory/*`, `*/factory-<id>`) de tarjetas que no están activas, y vuelve a comprobar cada rama justo antes de borrarla.
 
+## Entrada de trabajo (Fase 5)
+
+- `store.collectCard` deduplica por `card.source.key` (la huella que da `factory-collect`). El lint (`src/ticket.mjs`) ignora la sección `## Evidence`, que cita salida real.
+- `src/agentsmd.mjs` escribe el bloque gestionado. Este mismo `CLAUDE.md` lo lleva al final: no edites dentro de los marcadores; cambia `block()` y ejecuta `factory agents-md`.
+
 ## Skills
 
 `skills/<nombre>/SKILL.md` es la fuente de los skills que distribuye la fábrica: `factory-board` (el CLI, más `references/writing-standard.md`, que comparten todos), un skill por lane (`factory-build`, `factory-qa`, `factory-review`) y el del coordinador (`factory-run`). Los lanes enlazan al estándar con la ruta relativa `../factory-board/references/`, así que se instalan juntos. Claude Code solo los carga desde `.claude/skills/`, así que `factory install` los copia ahí y deja un marcador `.factory-managed` en cada carpeta. Solo reemplaza las carpetas que tienen el marcador y nunca toca un skill del usuario con el mismo nombre. En este repo las copias instaladas (`.claude/skills/`, `.claude/hooks/factory-guard.mjs`, `.claude/settings.json`) se commitean, porque los workers en worktrees nuevos las necesitan: edita siempre la fuente (`skills/`, `hooks/`) y ejecuta `factory install .`; `test/cleanup.test.mjs` falla si las copias se desvían.
@@ -80,3 +85,26 @@ Partimos de estudiar https://github.com/EricTechPro/super-board (licencia MIT: s
 - **Guard hooks**: scripts Python solo con la stdlib, JSON de entrada y de salida, que bloquean secretos, push a ramas protegidas, borrados fuera del repo y rutas de worktree incorrectas.
 - **Estándar de escritura único** para commits, cuerpos de PR, tickets y comentarios, aplicado tanto en el propio repo como en los proyectos donde se instala.
 - **Evals por skill** (`evals/<caso>/case.yaml`, `prompt.md`, `graders/`) y una suite offline de seguridad (`tests/run-safety.sh`) que se ejecuta en CI antes de publicar una versión.
+
+<!-- prz-factory:begin (managed by `factory agents-md`; edits inside are overwritten) -->
+## prz-factory
+
+This project is worked by prz-factory: cards on a local board, one Orca worker per card and lane.
+Board: backlog · ready · building · qa · review · blocked · done (`factory serve` shows it).
+
+| When | Use | Never |
+|---|---|---|
+| Write or check a card | `factory-lint` skill · `factory lint` | Move a card to ready with lint errors |
+| Drain the board | `factory-run` skill | Build, test or merge from the coordinator |
+| Build / QA / review one card | `factory-build` · `factory-qa` · `factory-review` | Work outside the card's worktree |
+| Land a card | `factory merge` (review lane) | `git merge` or push to main by hand |
+| Turn problems into cards | `factory-collect` skill | File a card without verifying the problem |
+
+| Rule | Value |
+|---|---|
+| Base branch | `main` (protected: main) |
+| Proof of build | `npm test` |
+| Merge by a person | risk high · labels auth, money, schema, needs-human · diff > 400 lines |
+| Writing | commits and comments: `.claude/skills/factory-board/references/writing-standard.md` |
+| Secrets | never read `.env` or key files; never write a key literal (guard hooks block both) |
+<!-- prz-factory:end -->

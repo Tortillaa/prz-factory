@@ -68,14 +68,27 @@ export function loadConfig(root = repoRoot()) {
 }
 
 // Best guess at the commands that prove a project builds, for a fresh config.
+// A guess only: onboarding runs the result and asks the person before trusting it.
 export function detectVerify(root) {
-  try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-    const scripts = pkg.scripts || {};
-    return ['lint', 'typecheck', 'test', 'build'].filter((s) => scripts[s]).map((s) => (s === 'test' ? 'npm test' : `npm run ${s}`));
-  } catch {
-    return [];
+  const has = (f) => fs.existsSync(path.join(root, f));
+  if (has('package.json')) {
+    try {
+      const scripts = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).scripts || {};
+      const pm = has('pnpm-lock.yaml') ? 'pnpm' : has('yarn.lock') ? 'yarn' : has('bun.lockb') || has('bun.lock') ? 'bun' : 'npm';
+      const run = (s) => (pm === 'npm' ? (s === 'test' ? 'npm test' : `npm run ${s}`) : `${pm} ${s === 'test' ? 'test' : `run ${s}`}`);
+      return ['lint', 'typecheck', 'test', 'build'].filter((s) => scripts[s]).map(run);
+    } catch {
+      return [];
+    }
   }
+  if (has('Cargo.toml')) return ['cargo build', 'cargo test'];
+  if (has('go.mod')) return ['go vet ./...', 'go test ./...'];
+  if (has('pyproject.toml') || has('setup.py') || has('requirements.txt')) return has('tests') || has('test') ? ['python -m pytest'] : [];
+  if (has('Makefile')) {
+    const make = fs.readFileSync(path.join(root, 'Makefile'), 'utf8');
+    return /^test:/m.test(make) ? ['make test'] : [];
+  }
+  return [];
 }
 
 export function detectBaseBranch(root) {

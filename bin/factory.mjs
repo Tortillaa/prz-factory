@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // factory: CLI for the local board. Agents use this instead of editing board.json directly.
 import fs from 'node:fs';
+import path from 'node:path';
 import { parseArgs } from 'node:util';
 import * as store from '../src/store.mjs';
 import { TEMPLATE } from '../src/ticket.mjs';
@@ -14,13 +15,15 @@ import { mergeCard } from '../src/merge.mjs';
 import * as run from '../src/run.mjs';
 import { worktrees } from '../src/git.mjs';
 import { findLeftovers, applyCleanup } from '../src/cleanup.mjs';
+import { writeBlock } from '../src/agentsmd.mjs';
 
 const USAGE = `factory <command> [options]
 
 Board
   serve [--port 4747]                    Open the board at http://localhost:<port>
-  add <title> [--body t | --body-file f] [--label l]... [--blocked-by ids]
-                                         New card in backlog (body defaults to the template)
+  add <title> [--body t | --body-file f] [--label l]... [--blocked-by ids] [--source kind:key [--evidence t]]
+                                         New card in backlog (body defaults to the template). With --source,
+                                         dedupes by fingerprint: an open twin gets "seen again" instead
   edit <id> [--title t] [--body t | --body-file f] [--label l]... [--blocked-by ids]
             [--branch b] [--worktree p] [--worker w] [--reviewed-sha s]
                                          --label replaces all labels; --blocked-by "" clears
@@ -60,8 +63,9 @@ Run (the coordinator; it dispatches, never builds)
   stop [--reason t]                      Release every in-flight card; prints the dispatches to stop
 
 Setup
-  install [target] [--no-hooks]        Copy skills and guard hooks into <target>/.claude, create factory.config.json
-  cleanup [--apply]                    Worktrees and branches of merged cards, temp verify folders (dry run by default)
+  install [target] [--no-hooks]          Copy skills and guard hooks into <target>/.claude, create factory.config.json
+  agents-md [--file f]                   Write the managed prz-factory block into CLAUDE.md (or AGENTS.md)
+  cleanup [--apply]                      Worktrees and branches of merged cards, temp verify folders (dry run by default)
   doctor                                 Check node, git, Orca, config, board and skills (exit 1 if any fail)
   version, --version                     Print the installed factory version
 
@@ -96,6 +100,9 @@ const { values: opts, positionals } = parseArgs({
     dispatch: { type: 'string' },
     reason: { type: 'string' },
     apply: { type: 'boolean' },
+    source: { type: 'string' },
+    evidence: { type: 'string' },
+    file: { type: 'string' },
     hint: { type: 'boolean' },
     'no-hooks': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
@@ -152,6 +159,14 @@ try {
       break;
     }
     case 'add': {
+      if (opts.source !== undefined) {
+        const [kind, ...key] = opts.source.split(':');
+        const r = store.update(file, (b) =>
+          store.collectCard(b, { title: need(args.join(' '), 'title'), body: bodyOpt(), labels: opts.label, source: { kind, key: key.join(':') }, evidence: opts.evidence }),
+        );
+        print(r, `${r.status}: ${line(r.card)}${r.previous ? ` (reaparece #${r.previous})` : ''}`);
+        break;
+      }
       const card = store.update(file, (b) =>
         store.addCard(b, { title: need(args.join(' '), 'title'), body: bodyOpt(), labels: opts.label, blockedBy: depsOpt() }),
       );
@@ -341,6 +356,12 @@ try {
       const done = applyCleanup(found, { cwd: process.cwd() });
       print(done, [`removed ${done.worktrees.length} worktrees, ${done.branches.length} branches, ${done.temp.length} temp folders`, ...done.errors.map((e) => `✖ ${e}`)].join('\n'));
       if (done.errors.length) process.exitCode = 1;
+      break;
+    }
+    case 'agents-md': {
+      const root = mainCheckout();
+      const r = writeBlock(root, loadConfig(root).config, opts.file ? path.resolve(opts.file) : undefined);
+      print(r, `${r.status} ${r.file}`);
       break;
     }
     case 'template':

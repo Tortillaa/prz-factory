@@ -88,7 +88,8 @@ export function lintCard(card, board) {
     if (vague.length) warn('ac-vague', `criterios no medibles: ${vague.join(', ')} (pon un umbral o un comportamiento observable)`);
   }
 
-  const text = stripCode(body);
+  // Evidence quotes real output (stack traces, TODO lines, "..."): it is not the card's own words.
+  const text = stripCode(body.replace(/^##\s+Evidence\s*$[\s\S]*?(?=^##\s|(?![\s\S]))/im, ''));
   const holes = text.match(new RegExp(PLACEHOLDER_RE.source, 'g')) || [];
   if (holes.length === 1) error('placeholder', `queda un hueco de la plantilla: ${holes[0]}`);
   else if (holes.length > 1) error('placeholder', `quedan ${holes.length} huecos de la plantilla, empezando por ${holes[0]}`);

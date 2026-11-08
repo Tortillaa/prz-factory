@@ -30,7 +30,7 @@ Scripts en Node (sin Python, sin dependencias) para tener un solo runtime.
 - [x] Orden manual dentro de cada columna (arrastrar para reordenar = prioridad; `move --before`).
 - [x] Campos de ejecución en la tarjeta (`run`): rama, worktree, commit revisado, worker de Orca.
 - [x] Web: editar tarjeta (título, cuerpo, labels, dependencias), crear tarjetas desde la plantilla, avisos de lint y de bloqueo.
-- [ ] Pendiente para un skill: los criterios de lint que requieren juicio (ambigüedad, tarjeta demasiado grande, título y cuerpo que no cuadran), con preguntas al usuario como el `lint` interactivo de super-board.
+- [x] Los criterios de lint que requieren juicio (ambigüedad, tamaño, título y cuerpo que no cuadran, decisiones que faltan) están en el skill `factory-lint` (Fase 5), que pregunta al usuario como el `lint` interactivo de super-board.
 
 ## Fase 2 · Lanes: build, QA y review ✅
 
@@ -67,10 +67,14 @@ Un único script autocontenido (`hooks/factory-guard.mjs`, sin imports de `src/`
 - [x] Probado en vivo: el hook bloqueó una lectura de `.env` en esta misma sesión, y `cleanup --apply` limpió el worktree y las ramas de la tarjeta #1 también en Orca.
 - [x] Revisión: `doctor` comprueba que los guards estén cableados; las copias instaladas se commitean en este repo (los workers en worktrees nuevos las necesitan) y un test vigila que coincidan con la fuente.
 
-## Fase 5 · Entrada de trabajo y onboarding
+## Fase 5 · Entrada de trabajo y onboarding ✅
 
-- [ ] `factory onboard`: asistente que crea el config, detecta los comandos de `verify` del proyecto y escribe un bloque gestionado en `AGENTS.md`/`CLAUDE.md`. *Origen: `onboard.md`, `agents-md-block.md`.*
-- [ ] `factory-collect`: busca problemas (tests rotos, TODOs, logs de errores), los verifica y los convierte en tarjetas Backlog sin duplicados. *Origen: `super-collect`.*
+- [x] Skill `factory-onboard`: doctor, install, demostrar `verify` ejecutándolo (y proponer los comandos del CI del proyecto si falla), política de merge, bloque para agentes, commit con permiso. *Origen: `onboard.md`.*
+- [x] `factory agents-md`: bloque gestionado entre marcadores en `CLAUDE.md` (o `AGENTS.md`) con las reglas del proyecto; nunca toca el resto del archivo. *Origen: `agents-md-block.md`.*
+- [x] Detección de `verify` para npm/pnpm/yarn/bun, Cargo, Go, Python y Makefile.
+- [x] Skill `factory-collect` + `factory add --source <tipo>:<huella>`: verifica cada problema, lo archiva como tarjeta en backlog y deduplica por huella ("visto otra vez" si hay una abierta, `recurrence` si la anterior ya estaba hecha). *Origen: `super-collect`.*
+- [x] Skill `factory-lint`: los criterios de lint que requieren juicio, preguntando al usuario.
+- [x] Revisión: el lint ignora la sección `## Evidence` (los stack traces y los TODO citados bloqueaban Ready); la web muestra cuántas veces se ha visto un hallazgo.
 
 ## Fase 6 · Calidad y extras
 

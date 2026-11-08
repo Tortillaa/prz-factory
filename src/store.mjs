@@ -46,6 +46,7 @@ export function load(file) {
   for (const card of board.cards) {
     card.blockedBy ??= [];
     card.run ??= {};
+    card.source ??= null;
   }
   return board;
 }
@@ -200,6 +201,26 @@ export function moveCard(board, id, column, by = null, { before = null, force = 
   }
   card.updatedAt = now();
   return card;
+}
+
+// Files a card found by a collector, deduplicated by a stable fingerprint (source.key).
+// An open card with the same key gets a "seen again" comment instead of a twin; a key whose
+// only cards are done is a recurrence: a new card that names the old one.
+export function collectCard(board, { title, body, labels = [], source, evidence = '' }) {
+  if (!source?.kind || !source?.key) throw new Error('a collected card needs --source <kind>:<fingerprint>');
+  const same = board.cards.filter((c) => c.source?.key === source.key);
+  const open = same.filter((c) => c.column !== 'done').at(-1);
+  if (open) {
+    open.source.seen = (open.source.seen || 1) + 1;
+    commentCard(board, open.id, { role: 'collect', text: `[collect] 🔁 visto otra vez (${open.source.seen})${evidence ? `\n${evidence}` : ''}` });
+    return { status: 'duplicate', card: open };
+  }
+  const closed = same.at(-1);
+  const card = addCard(board, { title, body, labels: closed ? [...labels, 'recurrence'] : labels });
+  card.source = { kind: source.kind, key: source.key, seen: 1 };
+  if (closed) commentCard(board, card.id, { role: 'collect', text: `[collect] ↩️ reaparece: #${closed.id} ya estaba en done${evidence ? `\n${evidence}` : ''}` });
+  else if (evidence) commentCard(board, card.id, { role: 'collect', text: `[collect] evidencia\n${evidence}` });
+  return { status: closed ? 'recurrence' : 'created', card, ...(closed ? { previous: closed.id } : {}) };
 }
 
 // Ready cards a worker may start now, in board order: unclaimed and with every blocker done.

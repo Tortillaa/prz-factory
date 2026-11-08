@@ -73,7 +73,7 @@ test('doctor flags a project that is not set up, then passes the setup checks af
 
     install(dir);
     const after = Object.fromEntries(doctor(dir).checks.map((c) => [c.name, c]));
-    for (const name of ['node', 'git', 'git repo', 'config', 'board', 'skills']) assert.equal(after[name].ok, true, name);
+    for (const name of ['node', 'git', 'git repo', 'config', 'board', 'skills', 'guard hooks']) assert.equal(after[name].ok, true, name);
   } finally {
     if (env === undefined) delete process.env.FACTORY_BOARD;
     else process.env.FACTORY_BOARD = env;

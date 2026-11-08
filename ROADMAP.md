@@ -55,15 +55,17 @@ Un skill por lane, sobre tres comandos comunes: `factory start` (claim y checkou
 - [x] Probado de verdad: la tarjeta #1 (`factory --version`) recorrió build → qa → review → merge con workers de Orca y aterrizó en `main` (`58d0552`).
 - [x] Revisión: `factory dispatched` evita la carrera al registrar el dispatch, y el skill libera las terminales de los workers ya reconciliados.
 
-## Fase 4 · Guard hooks
+## Fase 4 · Guard hooks ✅
 
-Hooks de Claude Code en Node (JSON por stdin, decisión por stdout) que `factory install` cablea en `.claude/settings.json`. *Origen: `hooks/`.*
+Un único script autocontenido (`hooks/factory-guard.mjs`, sin imports de `src/`) que `factory install` copia a `.claude/hooks/` y cablea en `.claude/settings.json` sin tocar los hooks del usuario. Recibe JSON por stdin; sale con 2 y un motivo para bloquear. *Origen: `hooks/`.*
 
-- [ ] `guard-secrets`: bloquea leer `.env`, claves, etc.
-- [ ] `guard-key-literals`: bloquea escribir claves API literales en el código.
-- [ ] `guard-protected-push`: bloquea push o commit directo a ramas protegidas desde un worker.
-- [ ] `guard-delete-outside`: bloquea `rm` fuera del repo o worktree.
-- [ ] Limpieza de worktrees, ramas de tarjeta y ramas que crea Orca (`<usuario>/factory-<id>`) de tarjetas ya mergeadas. *Origen: `cleanup-wt.py`.*
+- [x] `secrets`: bloquea leer o escribir `.env*` (menos `.env.example` y similares), claves, `id_rsa`, credenciales; en Bash/PowerShell solo con verbos que leen (`cat`, `Get-Content`, `curl -d @…`).
+- [x] `key-literals`: bloquea escribir claves con pinta de reales (Anthropic, OpenAI, AWS, GitHub, Slack, Google, Stripe, claves privadas).
+- [x] `protected-push`: force-push a ramas protegidas, bloqueado para todos; en worktrees de workers además commit, push, switch, `branch -f` o `update-ref` sobre la base. El checkout de la persona trabaja con normalidad.
+- [x] `delete-outside`: borrados recursivos (`rm -r`, `Remove-Item -Recurse`, `rd /s`) solo dentro del proyecto o de la carpeta temporal; nunca el proyecto entero ni el home.
+- [x] `factory cleanup [--apply]`: worktrees `factory-<id>`, ramas `factory/*` y `<usuario>/factory-<id>` de tarjetas ya terminadas, solo si están mergeadas y sin ningún cambio (ni archivos sin trackear), y las carpetas temporales de verify. Usa `orca worktree rm` si Orca está. Al iniciar sesión, un hook solo avisa (no borra). *Origen: `cleanup-wt.py`.*
+- [x] Probado en vivo: el hook bloqueó una lectura de `.env` en esta misma sesión, y `cleanup --apply` limpió el worktree y las ramas de la tarjeta #1 también en Orca.
+- [x] Revisión: `doctor` comprueba que los guards estén cableados; las copias instaladas se commitean en este repo (los workers en worktrees nuevos las necesitan) y un test vigila que coincidan con la fuente.
 
 ## Fase 5 · Entrada de trabajo y onboarding
 

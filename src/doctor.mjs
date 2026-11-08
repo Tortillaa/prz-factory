@@ -65,5 +65,13 @@ export function doctor(cwd = process.cwd()) {
   const missing = listSkills().filter((name) => !fs.existsSync(path.join(root, '.claude', 'skills', name, MARKER)));
   add('skills', missing.length === 0, missing.length ? `not installed: ${missing.join(', ')}` : 'all installed', 'run `factory install`');
 
+  let guards = [];
+  try {
+    const settings = JSON.parse(fs.readFileSync(path.join(root, '.claude', 'settings.json'), 'utf8'));
+    guards = Object.values(settings.hooks || {}).flat().flatMap((g) => g.hooks || []).map((h) => h.command || '').filter((c) => c.includes('factory-guard.mjs'));
+  } catch {}
+  const guardFile = fs.existsSync(path.join(root, '.claude', 'hooks', 'factory-guard.mjs'));
+  add('guard hooks', guards.length >= 4 && guardFile, guardFile ? `${guards.length} guards wired` : 'factory-guard.mjs not installed', 'run `factory install` (without --no-hooks)');
+
   return { ok: checks.every((c) => c.ok), checks };
 }

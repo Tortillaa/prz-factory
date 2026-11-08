@@ -13,6 +13,7 @@ import { runVerify, verifySummary } from '../src/verify.mjs';
 import { mergeCard } from '../src/merge.mjs';
 import * as run from '../src/run.mjs';
 import { worktrees } from '../src/git.mjs';
+import { findLeftovers, applyCleanup } from '../src/cleanup.mjs';
 
 const USAGE = `factory <command> [options]
 
@@ -59,7 +60,8 @@ Run (the coordinator; it dispatches, never builds)
   stop [--reason t]                      Release every in-flight card; prints the dispatches to stop
 
 Setup
-  install [target]                     Copy the skills into <target>/.claude/skills, create factory.config.json
+  install [target] [--no-hooks]        Copy skills and guard hooks into <target>/.claude, create factory.config.json
+  cleanup [--apply]                    Worktrees and branches of merged cards, temp verify folders (dry run by default)
   doctor                                 Check node, git, Orca, config, board and skills (exit 1 if any fail)
   version, --version                     Print the installed factory version
 
@@ -93,6 +95,9 @@ const { values: opts, positionals } = parseArgs({
     'allow-main': { type: 'boolean' },
     dispatch: { type: 'string' },
     reason: { type: 'string' },
+    apply: { type: 'boolean' },
+    hint: { type: 'boolean' },
+    'no-hooks': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean' },
   },
@@ -315,6 +320,29 @@ try {
       print(r, r.stopped.map((s) => `released #${s.id} from ${s.worker}${s.dispatch ? ` · stop dispatch ${s.dispatch}` : ''}`).join('\n') || 'nothing in flight');
       break;
     }
+    case 'cleanup': {
+      const root = mainCheckout();
+      const found = findLeftovers({ cwd: process.cwd(), board: store.load(file), config: loadConfig(root).config });
+      const total = found.worktrees.length + found.branches.length + found.temp.length;
+      if (opts.hint) {
+        // SessionStart hook: one line of context, and only when there is something to clean.
+        if (total) console.log(`prz-factory: ${found.worktrees.length} worktrees y ${found.branches.length} ramas de tarjetas ya mergeadas se pueden limpiar con \`factory cleanup --apply\`.`);
+        break;
+      }
+      if (!opts.apply) {
+        const text = [
+          ...found.worktrees.map((w) => `worktree ${w.path} (#${w.card}, ${w.reason})`),
+          ...found.branches.map((b) => `branch   ${b.branch} (#${b.card})`),
+          ...found.temp.map((t) => `temp     ${t}`),
+        ].join('\n');
+        print(found, text ? `${text}\n\nrun again with --apply to remove them` : 'nothing to clean');
+        break;
+      }
+      const done = applyCleanup(found, { cwd: process.cwd() });
+      print(done, [`removed ${done.worktrees.length} worktrees, ${done.branches.length} branches, ${done.temp.length} temp folders`, ...done.errors.map((e) => `✖ ${e}`)].join('\n'));
+      if (done.errors.length) process.exitCode = 1;
+      break;
+    }
     case 'template':
       print({ template: TEMPLATE }, TEMPLATE);
       break;
@@ -327,9 +355,9 @@ try {
       print({ file }, file);
       break;
     case 'install': {
-      const report = install(args[0] || '.');
+      const report = install(args[0] || '.', { hooks: !opts['no-hooks'] });
       const skills = report.skills.map((s) => `  ${s.status.padEnd(9)} ${s.name}${s.reason ? ` (${s.reason})` : ''}`).join('\n');
-      print(report, `skills → ${report.target}\n${skills}\nconfig: ${report.config.status} ${report.config.file}`);
+      print(report, `skills → ${report.target}\n${skills}\nconfig: ${report.config.status} ${report.config.file}\nhooks: ${report.hooks ? report.hooks.file : 'skipped (--no-hooks)'}`);
       break;
     }
     case 'doctor': {

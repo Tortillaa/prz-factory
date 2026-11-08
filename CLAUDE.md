@@ -13,6 +13,7 @@ npm run board                              # tablero en http://localhost:4747 (-
 factory --help                             # CLI (enlazado con npm link; si no, node bin/factory.mjs)
 node bin/factory.mjs install [destino]     # copia skills/ a <destino>/.claude/skills y crea factory.config.json
 node bin/factory.mjs doctor                # comprobaciones de entorno (sale con 1 si alguna falla)
+factory cleanup [--apply]                  # restos de tarjetas terminadas (por defecto solo lista)
 ```
 
 El plan de trabajo está en `ROADMAP.md`, ordenado por fases. Marca allí cada punto al completarlo.
@@ -42,9 +43,15 @@ El plan de trabajo está en `ROADMAP.md`, ordenado por fases. Marca allí cada p
 - **El claim es la reserva**: el coordinador hace `claim` con el nombre del worker (`<lane>-<id>`) antes de `worker-start`, y `factory start` acepta ese mismo nombre. Una tarjeta reservada no vuelve a salir en `plan`. `releaseCard` borra `run.dispatch`.
 - **Orca**: `worker-start --spec-file -` lee el spec por stdin. Al crear un worktree `new-top-level`, Orca crea además una rama `<usuario-git>/<name>`. Los workers en worktrees nuevos se quedan abiertos hasta `worker-release`.
 
+## Guard hooks (Fase 4)
+
+- `hooks/factory-guard.mjs <guard>` es un hook PreToolUse autocontenido: se copia tal cual a cada proyecto, así que **no puede importar nada de `src/`**. Exporta cada guard como función pura (`guardSecrets`, `guardKeyLiterals`, `guardProtectedPush`, `guardDeleteOutside`), que es lo que prueban los tests; `protectedPush` y `deleteOutside` aceptan un `ctx` para no depender de git en los tests. Un guard desconocido o un JSON roto nunca bloquean (exit 0).
+- Los guards están activos en esta sesión. Si uno bloquea algo legítimo, arregla el guard y su test; no lo esquives.
+- `src/cleanup.mjs` solo toca lo que creó la fábrica (`factory-<id>`, `factory/*`, `*/factory-<id>`) de tarjetas que no están activas, y vuelve a comprobar cada rama justo antes de borrarla.
+
 ## Skills
 
-`skills/<nombre>/SKILL.md` es la fuente de los skills que distribuye la fábrica: `factory-board` (el CLI, más `references/writing-standard.md`, que comparten todos), un skill por lane (`factory-build`, `factory-qa`, `factory-review`) y el del coordinador (`factory-run`). Los lanes enlazan al estándar con la ruta relativa `../factory-board/references/`, así que se instalan juntos. Claude Code solo los carga desde `.claude/skills/`, así que `factory install` los copia ahí y deja un marcador `.factory-managed` en cada carpeta. Solo reemplaza las carpetas que tienen el marcador y nunca toca un skill del usuario con el mismo nombre. En este repo `.claude/skills/` está en `.gitignore`: edita siempre `skills/` y vuelve a ejecutar `install .`.
+`skills/<nombre>/SKILL.md` es la fuente de los skills que distribuye la fábrica: `factory-board` (el CLI, más `references/writing-standard.md`, que comparten todos), un skill por lane (`factory-build`, `factory-qa`, `factory-review`) y el del coordinador (`factory-run`). Los lanes enlazan al estándar con la ruta relativa `../factory-board/references/`, así que se instalan juntos. Claude Code solo los carga desde `.claude/skills/`, así que `factory install` los copia ahí y deja un marcador `.factory-managed` en cada carpeta. Solo reemplaza las carpetas que tienen el marcador y nunca toca un skill del usuario con el mismo nombre. En este repo las copias instaladas (`.claude/skills/`, `.claude/hooks/factory-guard.mjs`, `.claude/settings.json`) se commitean, porque los workers en worktrees nuevos las necesitan: edita siempre la fuente (`skills/`, `hooks/`) y ejecuta `factory install .`; `test/cleanup.test.mjs` falla si las copias se desvían.
 
 `factory.config.json` (en la raíz del proyecto, commiteado; esquema y validación en `src/config.mjs`) define `baseBranch`, `protectedBranches`, `verify` (comandos que deben salir con 0 para mergear; se ejecutan con shell y paran en el primer fallo), `verifyTimeoutMinutes`, `maxWorkers` y `merge` (`humanRisk`, `humanLabels`, `maxLines`: cuándo el gate deja el merge a una persona).
 

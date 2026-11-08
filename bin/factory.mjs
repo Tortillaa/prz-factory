@@ -165,6 +165,14 @@ try {
   switch (cmd) {
     case 'serve': {
       const server = createServer({ boardFile: file, repoRoot: mainCheckout() });
+      server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          console.error(`error: port ${opts.port} is already in use; a board is probably already open at http://localhost:${opts.port} (choose another port with --port <n> or FACTORY_PORT)`);
+        } else {
+          console.error(`error: ${err.message}`);
+        }
+        process.exit(1);
+      });
       server.listen(Number(opts.port), '127.0.0.1', () => {
         console.log(`board: http://localhost:${opts.port}\nfile:  ${file}`);
       });

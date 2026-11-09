@@ -169,3 +169,35 @@ test('needs-human holds a merge even when the project lists other labels', () =>
   assert.deepEqual(humanReasons({ body: GOOD_BODY, labels: ['feature', 'needs-human'] }, 1, policy), ['label needs-human']);
   assert.deepEqual(humanReasons({ body: GOOD_BODY, labels: ['feature', 'auth'] }, 1, policy), [], 'only what the project lists');
 });
+
+test('every step of the chain is told to load its ponytail skill, and the skills ship with the factory', async () => {
+  const run = await import('../src/run.mjs');
+  const { listSkills, FACTORY_ROOT, install } = await import('../src/install.mjs');
+  const card = { id: 7, title: 'x' };
+  const root = path.resolve('/repo');
+  assert.match(run.spec(card, 'spec', 'spec-7', root), /load the `ponytail` skill too[\s\S]*skills[\\/]ponytail[\\/]SKILL\.md[\s\S]*scope of the card/);
+  assert.match(run.spec(card, 'build', 'build-7', root), /load the `ponytail` skill too[\s\S]*smallest change that fully solves the card/);
+  assert.match(run.spec(card, 'review', 'review-code-7', root, 'code'), /load the `ponytail-review` skill too[\s\S]*skills[\\/]ponytail-review[\\/]SKILL\.md/);
+  assert.doesNotMatch(run.spec(card, 'qa', 'qa-7', root), /ponytail/, 'a qa card writes and reviews no code');
+
+  // Vendored from DietrichGebert/ponytail (MIT): the licence travels with each copy.
+  for (const name of ['ponytail', 'ponytail-review']) {
+    assert.ok(listSkills().includes(name), name);
+    assert.match(fs.readFileSync(path.join(FACTORY_ROOT, 'skills', name, 'LICENSE'), 'utf8'), /MIT License[\s\S]*DietrichGebert/);
+    assert.match(fs.readFileSync(path.join(FACTORY_ROOT, 'skills', name, 'SKILL.md'), 'utf8'), new RegExp(`^---\\r?\\nname: ${name}\\r?\\n`));
+  }
+  // Each lane skill names the one it loads.
+  const skill = (name) => fs.readFileSync(path.join(FACTORY_ROOT, 'skills', name, 'SKILL.md'), 'utf8');
+  assert.match(skill('factory-spec'), /Load the `ponytail` skill/);
+  assert.match(skill('factory-build'), /Load the `ponytail` skill before you write a line/);
+  assert.match(skill('factory-review'), /Load the `ponytail-review` skill before you read the diff/);
+
+  // A project that already has its own ponytail keeps it, and install copies the licence with ours.
+  const dir = tmp('factory-pony-');
+  fs.mkdirSync(path.join(dir, '.claude', 'skills', 'ponytail'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.claude', 'skills', 'ponytail', 'SKILL.md'), 'mine');
+  const report = install(dir);
+  assert.equal(report.skills.find((s) => s.name === 'ponytail').status, 'skipped');
+  assert.equal(fs.readFileSync(path.join(dir, '.claude', 'skills', 'ponytail', 'SKILL.md'), 'utf8'), 'mine');
+  assert.ok(fs.existsSync(path.join(dir, '.claude', 'skills', 'ponytail-review', 'LICENSE')));
+});

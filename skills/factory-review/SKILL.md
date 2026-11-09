@@ -32,6 +32,23 @@ The diff under review: `git diff <base>...HEAD` (`base` is in the result).
 
 ## 2 · Your own pass first
 
+**Load the `ponytail-review` skill before you read the diff** (if it is not installed, read
+`../ponytail-review/SKILL.md`). Review like the senior developer who will be paged when this
+breaks. Take from it:
+
+- **How to read:** the diff, then the code it touches (callers of every changed function, what
+  it calls, the tests), and the real flow of the data. A change can break code it does not touch.
+- **What to look for:** the categories your lens owns (your section of `references/lenses.md`
+  names them: bug, risk, scale, missing test, speed, lean).
+- **When a finding counts:** only with a concrete case, "this input or situation leads to this
+  wrong result", confirmed on the lines. No case, no finding. No style taste, no "consider".
+- **What a fix looks like:** the smallest one that works, preferring fixes that delete code. A
+  `shortcut:` comment that names its limit is a decision, not a finding, unless the expected load
+  already crosses it.
+
+It does not change how you report: findings go in this skill's table, and you end with
+`factory verdict`, not with ponytail-review's "Verdict:" line.
+
 Before reading the builder's comment or earlier reviews, read the card's Acceptance Criteria and
 the raw diff, and write down 2-4 hypotheses for your lens: what must be true for this to be right,
 and where it would most likely break. Check each against the code and the tests, following your
@@ -42,8 +59,9 @@ table, re-check every open finding first and mark it ✅ fixed (with the proof) 
 Keep the IDs.
 
 Classify each finding (Gap · Bug · Verification miss · Scope drift · Over-engineering) with a
-severity (Blocker · Should fix · Nit). The scope is the diff, never the whole codebase. Report only
-what you can point to on a line and explain. Over-engineering never blocks alone.
+severity (Blocker · Should fix · Nit). You judge the diff, reading whatever code it touches. Report
+only what you can point to on a line and explain. Code that could be shorter never blocks alone;
+code that should not exist at all does, in the `code` lens.
 
 ## 3 · Verdict
 

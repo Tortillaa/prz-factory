@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, execSync } from 'node:child_process';
 import { loadConfig, repoRoot } from './config.mjs';
-import { listSkills, MARKER } from './install.mjs';
+import { listSkills } from './install.mjs';
 import * as store from './store.mjs';
 
 // Runs a fixed command line. Goes through the shell so Windows .cmd shims (orca, factory) resolve.
@@ -62,7 +62,8 @@ export function doctor(cwd = process.cwd()) {
     add('board', false, `${boardFile}: ${err.message}`, 'repair or remove the board file');
   }
 
-  const missing = listSkills().filter((name) => !fs.existsSync(path.join(root, '.claude', 'skills', name, MARKER)));
+  // A skill the project already has under the same name (its own ponytail, say) counts: install leaves it alone.
+  const missing = listSkills().filter((name) => !fs.existsSync(path.join(root, '.claude', 'skills', name, 'SKILL.md')));
   add('skills', missing.length === 0, missing.length ? `not installed: ${missing.join(', ')}` : 'all installed', 'run `factory install`');
 
   let guards = [];

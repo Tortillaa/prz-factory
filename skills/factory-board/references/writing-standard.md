@@ -41,6 +41,7 @@ The merge gate fast-forwards, so these commits land on the base branch as they a
 Did: <what this lane did, one line>
 ✅ Done: <what passed or landed, with evidence>
 ❌ Not done: <what failed or was skipped, and why>     (omit when nothing)
+Skipped: <build only: what you chose not to build, each `shortcut:` left, risks>
 Next: <build | review | merge | user | none>
 Head: <commit SHA this comment is about>
 ```

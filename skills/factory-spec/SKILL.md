@@ -35,6 +35,24 @@ and symbols in the card. If the idea is already true in the code, say so in the 
 
 ## 3 · Write the card
 
+**First, cut the scope like a lazy senior developer.** Load the `ponytail` skill (if it is not
+installed, read `../ponytail/SKILL.md`) and run its ladder on the idea itself, before any section
+exists. You write no code, so apply it to what the card will ask for:
+
+1. **Does it need to exist?** Is the problem real in the code today? If it is already solved, or
+   the idea asks for something nobody needs, block (step 6) and say so. Drop features, options
+   and flexibility the idea did not ask for.
+2. **Is it already in this codebase?** Name the helper, component or pattern the builder must
+   reuse, in Context or Fix. A card that makes the builder rebuild what exists is a bad card.
+3. **Does the standard library, the platform or an installed dependency do it?** Say which, in Fix.
+4. **Otherwise, the smallest version that does the core job.** That is the card. Everything else
+   is a later card, or nothing.
+
+Never cut what ponytail never cuts: validation at trust boundaries, error handling that prevents
+data loss, security, accessibility, anything the user explicitly asked for. Write what you left
+out, and why, in one `- **Not doing:**` line under Context, so the builder and the reviewers do
+not add it back.
+
 `factory template` prints the format. Fill every section:
 
 - **Title:** the outcome, in the imperative ("Return 0 for the average of an empty cart").

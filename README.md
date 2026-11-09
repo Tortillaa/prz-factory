@@ -4,7 +4,7 @@ Una fábrica de software para agentes de código que corre en [Orca](https://www
 
 La guía paso a paso está en [docs/GUIA.md](docs/GUIA.md).
 
-Inspirada en [super-board](https://github.com/EricTechPro/super-board) (MIT), con tablero propio en `localhost` en lugar de GitHub Projects y merges locales por fast-forward.
+Inspirada en [super-board](https://github.com/EricTechPro/super-board) (MIT) e incluye las skills `ponytail` y `ponytail-review` de [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT), con tablero propio en `localhost` en lugar de GitHub Projects y merges locales por fast-forward.
 
 ## Requisitos
 
@@ -42,6 +42,7 @@ O, desde Claude Code en el proyecto, pide "onboard" y el skill `factory-onboard`
 - **Spec Writer.** Lee el código, redacta la tarjeta y clasifica su impacto en el negocio (labels `auth`, `payments`, `pricing`, `schema`, `ops`). Si le falta una decisión, no la inventa: te la pregunta en el tablero.
 - **Tarjeta como contrato.** Una tarjeta solo entra en Ready si pasa `factory lint`: Problem, Fix, Acceptance Criteria comprobables y Risk.
 - **Dependencias.** Una tarjeta no sale de Ready hasta que lo que la bloquea está en Done.
+- **Código que merece existir.** Cada paso carga la skill [ponytail](https://github.com/DietrichGebert/ponytail) (MIT, incluida en la fábrica): antes de escribir, se pregunta si eso tiene que existir, si ya está en el código, si lo da la librería estándar o una dependencia instalada, y solo entonces escribe el mínimo que funciona. Los reviewers usan `ponytail-review` y devuelven el código que sobra.
 - **Panel de revisión.** Un reviewer por lente (`review.lenses`), todos a la vez y sobre el mismo commit. Tienen que aprobar todos; un solo fallo devuelve la tarjeta al Builder.
 - **Merge gate.** Antes de mergear comprueba que la rama no ha cambiado desde la revisión, que contiene la base, que el panel entero aprobó ese commit y que `verify` pasa sobre él. Deja el merge a una persona si el riesgo es High, la tarjeta lleva un label de negocio, el diff toca una ruta sensible (`merge.humanPaths`), supera `merge.maxLines` o un reviewer lo escaló.
 - **Rebotes.** La cuarta vuelta a Building pasa a Blocked para una persona.

@@ -14,13 +14,24 @@ Cómo usar la fábrica, paso a paso: desde que escribes una idea hasta que el ca
                                               └────→  blocked (te espera a ti)
 ```
 
+En cada paso, el agente carga la skill **ponytail** y trabaja como un desarrollador senior que no escribe una línea de más. Antes de añadir código recorre esta escalera y se queda con el primer peldaño que resuelve el problema entero:
+
+1. ¿Esto tiene que existir?
+2. ¿Ya está en este código?
+3. ¿Lo da la librería estándar o la plataforma?
+4. ¿Lo da una dependencia que ya está instalada?
+5. ¿Cabe en una línea que se entienda de un vistazo?
+6. Si no, el mínimo código que funcione.
+
+Nunca recorta la validación, el manejo de errores que evita perder datos, la seguridad ni nada que hayas pedido tú.
+
 Tú solo haces dos cosas: **mandar ideas** y **responder a las solicitudes** que te llegan al tablero. Todo lo demás lo hacen agentes, cada uno en su propio worktree de Orca.
 
 | Quién | Qué hace | Qué no hace nunca |
 |---|---|---|
-| **Spec Writer** | Lee el código, convierte tu idea en una tarjeta completa, decide si toca el negocio y la pasa a Ready él solo | Escribir código, inventarse una decisión de producto |
-| **Builder** | Construye la tarjeta en su rama, con los tests primero | Mergear |
-| **Reviewers** (uno por lente) | Revisan el mismo commit en paralelo, cada uno con su especialidad | Arreglar el código, revisar fuera de su lente |
+| **Spec Writer** | Lee el código, recorta la idea a la versión más pequeña que resuelve el problema, la convierte en una tarjeta completa, decide si toca el negocio y la pasa a Ready él solo | Escribir código, inventarse una decisión de producto |
+| **Builder** | Construye la tarjeta en su rama, con los tests primero y el mínimo código; al entregar dice qué ha decidido no construir (`Skipped:`) | Mergear |
+| **Reviewers** (uno por lente) | Revisan el mismo commit en paralelo, cada uno con su especialidad, y devuelven el código que no debería existir | Arreglar el código, revisar fuera de su lente |
 | **Merge gate** | Comprueba todo y mergea, o te pide aprobación | Mergear algo que no aprobó el panel entero |
 | **Coordinador** | Lanza a los demás y te avisa | Construir, revisar o mergear |
 
@@ -130,7 +141,7 @@ Abre una sesión de Claude Code **dentro de Orca**, en el proyecto, y escribe:
 
 En el tablero verás la tarjeta moverse sola:
 
-1. **SPEC → READY.** El Spec Writer ha leído el código y ha reescrito tu idea como una tarjeta completa (problema, solución, criterios de aceptación comprobables y riesgo). Ábrela para leer lo que ha entendido.
+1. **SPEC → READY.** El Spec Writer ha leído el código y ha reescrito tu idea como una tarjeta completa (problema, solución, criterios de aceptación comprobables y riesgo). Ábrela para leer lo que ha entendido. La línea **"Not doing"** dice qué ha dejado fuera a propósito: si lo querías, coméntalo y devuélvela a SPEC.
 2. **READY → BUILDING.** El Builder la construye en su rama.
 3. **BUILDING → REVIEW.** Entra el panel. En la tarjeta ves una etiqueta por reviewer:
 
@@ -151,7 +162,7 @@ Qué mira cada reviewer:
 |---|---|
 | **qa** | ¿Hace lo que dice la tarjeta, y hay un test que lo notaría si dejara de hacerlo? |
 | **security** | ¿Se puede abusar de este cambio? |
-| **code** | ¿Es el cambio correcto, y solo ese cambio? |
+| **code** | ¿Es el cambio correcto, y hace falta cada línea? El código que sobra (algo que nadie pidió, o que ya existía en el repo) devuelve la tarjeta al Builder |
 | **ops** | ¿Qué le hace esto al negocio y al producto en marcha? |
 
 ### Paso 5. Responde a las solicitudes
@@ -217,6 +228,7 @@ factory cleanup --apply    # lo borra
 | Buscar problemas en el código y convertirlos en tarjetas | Pide a Claude "busca problemas" (skill `factory-collect`). Llegan a BACKLOG; mueve a SPEC las que quieras |
 | Probar algo que ya está en `main`, sin construir nada | Una tarjeta con la etiqueta `qa`: un agente la prueba y abre una idea por cada fallo |
 | Forzar que un cambio pase por mí | Añade la etiqueta `needs-human` a la tarjeta |
+| Que ponytail sea más o menos estricto | Viene incluido y los agentes lo cargan solos. Si prefieres tu propia versión, pon tu skill `ponytail` en `.claude/skills/` del proyecto: `factory install` no la pisa |
 | Añadir o quitar un reviewer | Cambia `review.lenses` en `factory.config.json` |
 | Ver todos los comandos | `factory --help` |
 

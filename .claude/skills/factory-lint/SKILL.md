@@ -28,11 +28,14 @@ Flag a card when:
 1. **Ambiguous:** a criterion could reasonably mean two different things. Name both readings.
 2. **No trigger + outcome:** "login works". Rewrite as given / when / then.
 3. **No test surface:** nothing says where it is seen (route, command, file, function).
-4. **Too big:** likely over the project's `merge.maxLines`, or touches several unrelated areas. Split it into vertical slices, each with its own ACs, linked with `--blocked-by`.
-5. **Bundled:** unrelated features in one card. Split.
-6. **Title and body disagree.** Ask which is right.
-7. **A decision is missing:** product, design, data or security choices a worker would have to invent. Ask the user; write the answer into Context.
-8. **Proven against a fake only:** an AC tested with a mock while nothing builds the real thing. Name the card that does, or file it.
+4. **Should not exist, or not all of it:** the `ponytail` question. The problem is already solved in
+   the code, or the card asks for options and flexibility nobody needs. Propose the smallest version
+   that does the core job.
+5. **Too big:** likely over the project's `merge.maxLines`, or touches several unrelated areas. Split it into vertical slices, each with its own ACs, linked with `--blocked-by`.
+6. **Bundled:** unrelated features in one card. Split.
+7. **Title and body disagree.** Ask which is right.
+8. **A decision is missing:** product, design, data or security choices a worker would have to invent. Ask the user; write the answer into Context.
+9. **Proven against a fake only:** an AC tested with a mock while nothing builds the real thing. Name the card that does, or file it.
 
 ## 3 · Fix it with the user
 

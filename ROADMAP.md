@@ -99,6 +99,7 @@ El proceso que pidió el usuario: manda una tarjeta con sus palabras, un Spec Wr
 - [x] Evals nuevas: `spec-empty-cart`, `spec-pricing-is-business`, `review-qa-missing-test`, `review-code-merge`, `review-ops-escalates-pricing`.
 - [x] Probado de extremo a extremo con el CLI real en un repo temporal: una tarjeta pequeña se mergea sola al aprobar la cuarta lente, y una de precios queda en blocked esperando la aprobación. Web comprobada en el navegador de Orca.
 - [x] Guía de uso paso a paso: `docs/GUIA.md`.
+- [x] Cada paso consulta ponytail ([DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail), MIT), incluido en `skills/` para que todos los workers lo tengan: el Spec Writer recorta el alcance con su escalera ("¿tiene que existir?"), el Builder la aplica a cada línea y deja una línea `Skipped:`, y cada reviewer carga `ponytail-review`. En la lente `code`, el código que no debería existir es un Blocker.
 
 ## Pendiente fuera del código
 

@@ -63,6 +63,14 @@ const FINISH = {
   review: 'exactly one `factory verdict` (it runs the merge gate itself when yours completes the panel)',
 };
 
+// The ponytail skill each step of the chain consults, and what it applies it to. Vendored in
+// skills/ (MIT, DietrichGebert/ponytail) so every worker has it; the lane skills say how to use it.
+export const CRAFT = {
+  spec: { skill: 'ponytail', use: 'apply its ladder to the scope of the card (does this need to exist? what is the smallest version that does the core job?), not to code: you write none' },
+  build: { skill: 'ponytail', use: 'apply it, at level full, to every line you write: the smallest change that fully solves the card' },
+  review: { skill: 'ponytail-review', use: 'use its checks for your lens and its rule that a finding needs a concrete case; the verdict and comment formats stay the ones of `factory-review`' },
+};
+
 // The self-contained task a worker gets. Orca appends its own preamble (Task and Dispatch IDs,
 // how to report worker_done), so this only has to say what the factory expects.
 export function spec(card, lane, worker, repoRoot, lens = null) {
@@ -74,13 +82,18 @@ export function spec(card, lane, worker, repoRoot, lens = null) {
     ? `\n   You are the **${lens}** reviewer of a parallel panel: review only through that lens, as
    the skill's \`references/lenses.md\` says. Other reviewers cover the other lenses.`
     : '';
+  const craft = CRAFT[lane];
+  const craftLine = craft
+    ? `\n   Then load the \`${craft.skill}\` skill too, before you start (if it is not installed, read
+   ${path.join(FACTORY_ROOT, 'skills', craft.skill, 'SKILL.md')}): ${craft.use}.`
+    : '';
   return `You are a prz-factory ${lane}${lens ? ` (${lens})` : ''} worker. Your worker name is ${worker}.
 
 Card #${card.id}: ${card.title}
 Repository: ${repoRoot}
 
 1. Load the \`factory-${lane}\` skill and follow it for card #${card.id}. If it is not installed in this
-   worktree, read ${skill} and follow that file.${lensLine}
+   worktree, read ${skill} and follow that file.${lensLine}${craftLine}
 2. The card is already claimed as ${worker}: use \`--as ${worker}\` in every factory command, starting with
    \`factory start ${card.id} --lane ${lane}${lensFlag} --as ${worker} --json\`. If \`factory\` is not on PATH, run
    \`node ${cli}\` instead.

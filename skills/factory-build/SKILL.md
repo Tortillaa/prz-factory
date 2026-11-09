@@ -29,12 +29,23 @@ verify, or a rebase).
 
 ## 2 · Build
 
+**Load the `ponytail` skill before you write a line** (if it is not installed, read
+`../ponytail/SKILL.md`) and keep it on, at level `full`, for the whole card. Before each piece of
+code, walk its ladder and take the first rung that fully works: does this need to exist → is it
+already in this codebase → standard library or platform → an installed dependency → one clear
+line → the minimum code that works. Where this skill and ponytail differ, this skill wins: the
+card's Acceptance Criteria and the tests that prove them are what the task asks for, and ponytail
+never cuts what the task asks for.
+
 1. **Rebase first if the card came back for it**: `git rebase <base>` (base from `factory.config.json`).
    Resolve conflicts within the card's scope; if that needs a product decision, block (step 4).
 2. **Test first.** For each Acceptance Criterion, write the test that asserts it, run it, see it
    fail for the right reason, then write the code that makes it pass. One AC at a time.
-3. **Smallest safe change.** Reuse what the codebase already has before adding a dependency,
-   abstraction, config option or file. Build what the ACs need, nothing more. No drive-by refactors.
+3. **Smallest complete change** (ponytail's ladder). Reuse what the codebase already has before
+   adding a dependency, abstraction, config option or file. Build what the ACs need, nothing more:
+   no "for later" code, no drive-by refactors. Lazy about the solution, never about the change:
+   finish every caller, test and fixture your change touches. A shortcut with a known limit gets
+   the comment `shortcut: <the limit>, <when to upgrade>`.
 4. **Third-party APIs, upgrades, auth, payments:** read the official docs for the version in use
    before writing code. Do not code from memory.
 5. **Follow the repo's own rules** in `CLAUDE.md` / `AGENTS.md`.
@@ -53,7 +64,9 @@ Leave the worktree clean (`git status` shows nothing to commit).
 ## 4 · Hand off
 
 Write the comment to a file (writing standard §2: one line per AC with the test that proves it,
-the verify result, `Head: <sha>`), then:
+the verify result, `Head: <sha>`). Add ponytail's closing line as `Skipped:` — what you chose not
+to build or could not check, every `shortcut:` you left, and any risk the reviewers must know
+(`Skipped: nothing` when there is none). Then:
 
 ```text
 factory handoff <id> review --lane build --as <your-worker-name> --text-file <comment.md> --json

@@ -30,6 +30,7 @@ Also backlog (parked), qa (\`qa\` cards) and blocked (waiting for a person). \`f
 | Review panel | ${config.review.lenses.join(' · ')}: every lens must pass the same commit |
 | Merge by a person | risk ${config.merge.humanRisk.join('/')} · labels ${config.merge.humanLabels.join(', ')}${config.merge.humanPaths.length ? ` · paths ${config.merge.humanPaths.map((p) => `\`${p}\``).join(', ')}` : ''} · diff > ${config.merge.maxLines} lines |
 | Business labels | agents may add one (or \`needs-human\`), never remove one |
+| Craft | every step loads \`ponytail\` (spec, build) or \`ponytail-review\` (reviewers): the smallest change that fully works, and no code that should not exist |
 | Writing | commits and comments: \`.claude/skills/factory-board/references/writing-standard.md\` |
 | Secrets | never read \`.env\` or key files; never write a key literal (guard hooks block both) |
 ${END}`;

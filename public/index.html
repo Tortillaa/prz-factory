@@ -7,14 +7,14 @@
 <style>
   :root {
     --bg: #f6f7f9; --col: #eceef2; --card: #fff; --text: #1d2129; --muted: #69707d;
-    --border: #d9dde4; --accent: #3b6ef5; --drop: #dfe7fd; --err: #c93c3c; --warn: #b7791f;
-    --c-backlog: #8a919e; --c-ready: #3b6ef5; --c-building: #d98a1c; --c-qa: #8b5cf6;
+    --border: #d9dde4; --accent: #3b6ef5; --drop: #dfe7fd; --err: #c93c3c; --warn: #b7791f; --ok: #2f9e5b; --ask: #fff4d6;
+    --c-backlog: #8a919e; --c-spec: #c2569b; --c-ready: #3b6ef5; --c-building: #d98a1c; --c-qa: #8b5cf6;
     --c-review: #0ea5a4; --c-blocked: #dc4a4a; --c-done: #2f9e5b;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #14161a; --col: #1c1f25; --card: #252931; --text: #e6e8ec; --muted: #9aa1ad;
-      --border: #333844; --accent: #7196ff; --drop: #26304a; --err: #ff7b7b; --warn: #e8b04a;
+      --border: #333844; --accent: #7196ff; --drop: #26304a; --err: #ff7b7b; --warn: #e8b04a; --ok: #5fd08a; --ask: #3a321c;
     }
   }
   * { box-sizing: border-box; }
@@ -22,7 +22,7 @@
   header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
   header h1 { font-size: 16px; margin: 0; }
   header .status { margin-left: auto; color: var(--muted); font-size: 12px; }
-  .board { display: grid; grid-template-columns: repeat(7, minmax(220px, 1fr)); gap: 12px; padding: 16px 20px; overflow-x: auto; min-height: calc(100vh - 54px); }
+  .board { display: grid; grid-template-columns: repeat(8, minmax(210px, 1fr)); gap: 12px; padding: 16px 20px; overflow-x: auto; min-height: calc(100vh - 54px); }
   .column { background: var(--col); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 200px; }
   .column.drop { background: var(--drop); }
   .column h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; margin: 2px 4px 4px; display: flex; gap: 8px; align-items: center; }
@@ -37,6 +37,14 @@
   .tag.who { border-color: var(--accent); color: var(--accent); }
   .tag.err { border-color: var(--err); color: var(--err); }
   .tag.warn { border-color: var(--warn); color: var(--warn); }
+  .tag.ok { border-color: var(--ok); color: var(--ok); }
+  .requests { margin: 12px 20px 0; padding: 10px 14px; border: 1px solid var(--warn); border-radius: 10px; background: var(--ask); }
+  .requests h2 { font-size: 13px; margin: 0 0 6px; }
+  .request { display: flex; gap: 10px; align-items: baseline; padding: 4px 0; cursor: pointer; }
+  .request:hover .what { text-decoration: underline; }
+  .request .why { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .request .kind { flex: none; font-size: 11px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--warn); color: var(--warn); }
+  .request .what { flex: none; }
   input, textarea { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; width: 100%; }
   textarea { font-family: ui-monospace, Consolas, monospace; font-size: 13px; min-height: 320px; resize: vertical; }
   button { font: inherit; border: 0; border-radius: 6px; padding: 6px 12px; background: var(--accent); color: #fff; cursor: pointer; }
@@ -59,7 +67,8 @@
 </style>
 </head>
 <body>
-<header><h1>prz-factory</h1><span class="status" id="status">conectando…</span></header>
+<header><h1>prz-factory</h1><button id="new-idea" title="Escribe lo que quieres; el Spec Writer la redacta y la fábrica la construye">+ Nueva idea</button><span class="status" id="status">conectando…</span></header>
+<section class="requests" id="requests" hidden></section>
 <main class="board" id="board"></main>
 
 <dialog id="detail">
@@ -69,6 +78,7 @@
     <h3 id="v-title"></h3>
     <div class="meta" id="v-meta"></div>
     <section class="lint" id="v-lint"></section>
+    <section id="v-panel"></section>
     <div class="body" id="v-body"></div>
     <div class="row"><button id="v-edit">Editar</button><button id="v-approve" class="ghost" hidden>Aprobar y mergear</button><span id="v-approve-status" class="hint"></span></div>
     <section><h4>Comentarios</h4><div id="v-comments"></div>
@@ -79,20 +89,22 @@
 
   <form id="edit" hidden>
     <h3 id="e-heading"></h3>
+    <p class="hint" id="e-idea" hidden>Escríbela con tus palabras: qué quieres y dónde. El Spec Writer lee el código, la convierte en una tarjeta completa y la pasa a Ready él solo. Si le falta una decisión, te la pregunta aquí.</p>
     <label>Título <input name="title" required></label>
     <div class="grid">
       <label>Labels (qa, bug, feature…) <input name="labels" placeholder="feature"></label>
       <label>Bloqueada por (ids) <input name="blockedBy" placeholder="3, 7"></label>
     </div>
     <label>Cuerpo <textarea name="body" spellcheck="false"></textarea></label>
-    <p class="hint">Para pasar a Ready, la tarjeta necesita Problem, Fix, Acceptance Criteria (checklist "- [ ] …") y Risk (Low/Medium/High), sin huecos &lt;…&gt; ni TODO/etc.</p>
+    <p class="hint" id="e-rules">Para pasar a Ready, la tarjeta necesita Problem, Fix, Acceptance Criteria (checklist "- [ ] …") y Risk (Low/Medium/High), sin huecos &lt;…&gt; ni TODO/etc.</p>
     <div class="row"><button>Guardar</button><button type="button" class="ghost" id="e-cancel">Cancelar</button></div>
   </form>
 </dialog>
 
 <script>
-const COLORS = { backlog: '--c-backlog', ready: '--c-ready', building: '--c-building', qa: '--c-qa', review: '--c-review', blocked: '--c-blocked', done: '--c-done' };
-let state = { columns: [], cards: [] };
+const COLORS = { backlog: '--c-backlog', spec: '--c-spec', ready: '--c-ready', building: '--c-building', qa: '--c-qa', review: '--c-review', blocked: '--c-blocked', done: '--c-done' };
+let state = { columns: [], lenses: [], cards: [] };
+let newColumn = 'backlog'; // where the card being created will be filed
 let openId = null;   // card shown in the dialog; 'new' while creating one
 let editing = false;
 
@@ -118,11 +130,47 @@ function tags(card) {
   return el('div', { className: 'meta' },
     ...card.labels.map((l) => el('span', { className: 'tag', textContent: l })),
     card.assignee && el('span', { className: 'tag who', textContent: '@' + card.assignee }),
+    ...(card.column === 'review' ? panel(card) : []),
     card.unmet.length > 0 && el('span', { className: 'tag warn', textContent: '⛓ ' + card.unmet.map((d) => '#' + d).join(' '), title: 'Bloqueada por tarjetas sin terminar' }),
     showLint && errors > 0 && el('span', { className: 'tag err', textContent: `✖ ${errors}`, title: 'Errores de lint: no puede pasar a Ready' }),
     showLint && !errors && warns > 0 && el('span', { className: 'tag warn', textContent: `⚠ ${warns}`, title: 'Avisos de lint' }),
     card.run.branch && el('span', { className: 'tag', textContent: 'rama ' + card.run.branch }),
     card.source?.seen > 1 && el('span', { className: 'tag warn', textContent: `🔁 ${card.source.seen}`, title: `Encontrado ${card.source.seen} veces por factory-collect` }));
+}
+
+// One chip per review lens: passed, failed, being reviewed, or waiting for a reviewer.
+function lensState(card, lens) {
+  const s = card.panel?.lenses?.[lens] || {};
+  if (s.verdict === 'pass') return { cls: 'ok', mark: '✓', title: 'ha aprobado este commit' };
+  if (s.verdict === 'fail') return { cls: 'err', mark: '✖', title: 'ha encontrado un bloqueo' };
+  if (s.worker) return { cls: 'who', mark: '…', title: 'revisando: ' + s.worker };
+  return { cls: '', mark: '·', title: 'esperando reviewer' };
+}
+function panel(card) {
+  return state.lenses.map((lens) => {
+    const st = lensState(card, lens);
+    return el('span', { className: 'tag ' + st.cls, textContent: `${lens} ${st.mark}`, title: `Reviewer ${lens}: ${st.title}` });
+  });
+}
+
+// What waits for the user: merges the gate held (approve them) and cards a lane blocked (answer them).
+function renderRequests() {
+  const waiting = state.cards.filter((c) => c.column === 'blocked' && (c.labels.includes('merge-approval') || c.labels.includes('needs-you')));
+  const box = $('requests');
+  box.hidden = waiting.length === 0;
+  if (!waiting.length) return;
+  const last = (c) => (c.comments.at(-1)?.text || '').split('\n').filter(Boolean).slice(0, 2).join(' · ');
+  box.replaceChildren(
+    el('h2', { textContent: `🙋 ${waiting.length === 1 ? '1 solicitud espera' : waiting.length + ' solicitudes esperan'} tu respuesta` }),
+    ...waiting.map((c) => {
+      const approve = c.labels.includes('merge-approval');
+      const row = el('div', { className: 'request' },
+        el('span', { className: 'kind', textContent: approve ? 'aprobar merge' : 'responder' }),
+        el('span', { className: 'what', textContent: `#${c.id} ${c.title}` }),
+        el('span', { className: 'why', textContent: last(c) }));
+      row.onclick = () => openCard(c.id);
+      return row;
+    }));
 }
 
 async function move(id, column, before) {
@@ -157,9 +205,11 @@ function render() {
     column.ondragover = (e) => { e.preventDefault(); column.classList.add('drop'); };
     column.ondragleave = (e) => { if (!column.contains(e.relatedTarget)) column.classList.remove('drop'); };
     column.ondrop = (e) => { e.preventDefault(); column.classList.remove('drop'); move(Number(e.dataTransfer.getData('text/plain')), col, null); };
-    if (col === 'backlog') column.append(el('button', { className: 'ghost new', textContent: '+ Nueva tarjeta', onclick: newCard }));
+    if (col === 'backlog') column.append(el('button', { className: 'ghost new', textContent: '+ Nueva tarjeta', onclick: () => newCard('backlog') }));
+    if (col === 'spec') column.append(el('button', { className: 'ghost new', textContent: '+ Nueva idea', onclick: () => newCard('spec') }));
     return column;
   }));
+  renderRequests();
   if (openId && openId !== 'new' && !editing) fillView();
 }
 
@@ -171,13 +221,18 @@ function showMode(edit) {
 
 function openCard(id) { openId = id; showMode(false); fillView(); $('detail').showModal(); }
 
-async function newCard() {
+// column 'spec': a rough idea for the spec writer, free text. Otherwise a full card from the template.
+async function newCard(column = 'backlog') {
   openId = 'new';
-  const { template } = await api('/api/template');
+  newColumn = column;
+  const idea = column === 'spec';
   const f = $('edit');
   f.reset();
-  f.body.value = template;
-  $('e-heading').textContent = 'Nueva tarjeta';
+  f.body.value = idea ? '' : (await api('/api/template')).template;
+  f.body.placeholder = idea ? 'Qué quieres que cambie, dónde, y cualquier detalle que ya tengas decidido.' : '';
+  $('e-heading').textContent = idea ? 'Nueva idea para el Spec Writer' : 'Nueva tarjeta';
+  $('e-idea').hidden = !idea;
+  $('e-rules').hidden = idea;
   showMode(true);
   $('detail').showModal();
   f.title.focus();
@@ -191,6 +246,8 @@ function startEdit() {
   f.blockedBy.value = c.blockedBy.join(', ');
   f.body.value = c.body;
   $('e-heading').textContent = `Editar #${c.id}`;
+  $('e-idea').hidden = true;
+  $('e-rules').hidden = c.column === 'spec';
   showMode(true);
 }
 
@@ -202,8 +259,14 @@ function fillView() {
     ...c.blockedBy.map((d) => el('span', { className: 'tag' + (c.unmet.includes(d) ? ' warn' : ''), textContent: `bloqueada por #${d}` })),
     ...Object.entries(c.run).map(([k, v]) => el('span', { className: 'tag', textContent: `${k}: ${v}` })),
     ...tags(c).childNodes);
-  $('v-lint').replaceChildren(...(c.lint.length ? [el('h4', { textContent: 'Lint' }),
+  $('v-lint').replaceChildren(...(c.lint.length && c.column !== 'spec' ? [el('h4', { textContent: 'Lint' }),
     el('ul', {}, ...c.lint.map((i) => el('li', { className: i.severity, textContent: i.message })))] : []));
+  // The review panel: who passed this commit, who is still looking.
+  const lenses = c.panel?.head || c.column === 'review' ? state.lenses : [];
+  $('v-panel').replaceChildren(...(lenses.length ? [
+    el('h4', { textContent: `Panel de revisión${c.panel?.head ? ' · commit ' + c.panel.head.slice(0, 8) : ''}` }),
+    el('div', { className: 'meta' }, ...panel(c)),
+  ] : []));
   $('v-body').textContent = c.body || '(sin descripción)';
   // The merge gate handed this one to a person: they can approve the pinned commit from here.
   $('v-approve').hidden = !(c.labels.includes('merge-approval') && c.run.branch && c.run.reviewedSha);
@@ -213,6 +276,7 @@ function fillView() {
     el('div', { textContent: `${new Date(h.at).toLocaleString()} · ${h.from ? h.from + ' → ' : ''}${h.to}${h.by ? ' (' + h.by + ')' : ''}` })));
 }
 
+$('new-idea').onclick = () => newCard('spec');
 $('v-edit').onclick = startEdit;
 $('v-approve').onclick = async () => {
   const c = state.cards.find((x) => x.id === openId);
@@ -239,7 +303,7 @@ $('edit').onsubmit = async (e) => {
   const f = e.target;
   const data = { title: f.title.value, body: f.body.value, labels: list(f.labels.value), blockedBy: list(f.blockedBy.value).map((d) => Number(d.replace('#', ''))) };
   try {
-    const card = openId === 'new' ? await api('/api/cards', data) : await api(`/api/cards/${openId}`, data);
+    const card = openId === 'new' ? await api('/api/cards', { ...data, column: newColumn }) : await api(`/api/cards/${openId}`, data);
     openId = card.id;
     await refresh();
     showMode(false);

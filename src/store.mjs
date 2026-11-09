@@ -5,7 +5,13 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { TEMPLATE, lintCard, hasErrors, dependencyProblems } from './ticket.mjs';
 
-export const COLUMNS = ['backlog', 'ready', 'building', 'qa', 'review', 'blocked', 'done'];
+// spec: rough ideas waiting for the spec writer, who turns them into cards that pass lint.
+export const COLUMNS = ['backlog', 'spec', 'ready', 'building', 'qa', 'review', 'blocked', 'done'];
+// Columns a new card may be filed in. Ready still requires a card that passes lint.
+const ENTRY_COLUMNS = ['backlog', 'spec', 'ready'];
+// Labels that mean "this card waits for the user" while it sits in blocked: needs-you for any
+// request, merge-approval for a merge the gate held (the only one that can be approved).
+export const REQUEST_LABELS = ['needs-you', 'merge-approval'];
 // Columns a card reaches by being worked on. Leaving Ready for one of these needs its blockers done.
 const WORK_COLUMNS = ['building', 'qa', 'review', 'done'];
 // Execution fields a worker or the orchestrator records on a card.
@@ -47,8 +53,30 @@ export function load(file) {
     card.blockedBy ??= [];
     card.run ??= {};
     card.source ??= null;
+    card.panel ??= emptyPanel();
   }
   return board;
+}
+
+// The review panel of a card in review: the head under review and one slot per lens,
+// { worker, claimedAt, dispatch, worktree, verdict: 'pass'|'fail', sha, at, failedDispatches }.
+export function emptyPanel() {
+  return { head: null, lenses: {} };
+}
+
+// A new round (the card re-enters review): verdicts and claims go, each lens keeps its worktree.
+function resetPanel(card) {
+  const lenses = {};
+  for (const [lens, slot] of Object.entries(card.panel?.lenses || {})) if (slot.worktree) lenses[lens] = { worktree: slot.worktree };
+  card.panel = { head: null, lenses };
+}
+
+function clearLensClaims(card) {
+  for (const slot of Object.values(card.panel?.lenses || {})) {
+    slot.worker = null;
+    slot.claimedAt = null;
+    delete slot.dispatch;
+  }
 }
 
 function sleep(ms) {
@@ -130,22 +158,30 @@ export function route(card) {
 export function addCard(board, { title, body, labels = [], column = 'backlog', blockedBy = [] }) {
   if (!title || !String(title).trim()) throw new Error('title is required');
   checkColumn(column);
-  if (column !== 'backlog') throw new Error('new cards start in backlog; move them once they are ready');
+  if (!ENTRY_COLUMNS.includes(column)) throw new Error(`new cards start in ${ENTRY_COLUMNS.join(', ')}, not ${column}`);
   const id = board.nextId;
   const card = {
     id,
     title: String(title).trim(),
-    body: body ?? TEMPLATE,
-    column,
+    // An idea for the spec writer is free text; anything else starts from the template.
+    body: body ?? (column === 'spec' ? '' : TEMPLATE),
+    column: 'backlog',
     labels: cleanLabels(labels),
     blockedBy: cleanDeps(board, id, blockedBy),
     assignee: null,
     run: {},
+    panel: emptyPanel(),
     comments: [],
-    history: [{ at: now(), to: column }],
+    history: [{ at: now(), to: 'backlog' }],
     createdAt: now(),
     updatedAt: now(),
   };
+  if (column === 'ready') {
+    const issues = lintCard(card, board).filter((i) => i.severity === 'error');
+    if (issues.length) throw new Error(`a new card in ready must pass lint:\n- ${issues.map((i) => i.message).join('\n- ')}`);
+  }
+  card.column = column;
+  card.history = [{ at: now(), to: column }];
   board.nextId++;
   board.cards.push(card);
   return card;
@@ -196,6 +232,11 @@ export function moveCard(board, id, column, by = null, { before = null, force = 
   board.cards.splice(board.cards.indexOf(card), 1);
   board.cards.splice(before != null ? board.cards.findIndex((c) => c.id === Number(before)) : board.cards.length, 0, card);
   if (card.column !== column) {
+    // Every entry to review is a new panel round; leaving it ends every reviewer's claim.
+    if (column === 'review') resetPanel(card);
+    if (card.column === 'review') clearLensClaims(card);
+    // A card that leaves blocked no longer waits for the person: the request labels go with it.
+    if (card.column === 'blocked') card.labels = card.labels.filter((l) => !REQUEST_LABELS.includes(l));
     card.history.push({ at: now(), from: card.column, to: column, by });
     card.column = column;
   }
@@ -265,6 +306,51 @@ export function releaseCard(board, id) {
   delete card.run.dispatch; // the Orca dispatch that held the claim is over
   card.updatedAt = now();
   return card;
+}
+
+// A reviewer's claim on one lens of a card in review. Lenses run in parallel, so each is claimed
+// apart from the card itself, with the same rule: one worker per lens.
+export function claimLens(board, id, lens, who) {
+  const card = findCard(board, id);
+  if (card.column !== 'review') throw new Error(`card #${id} is in ${card.column}; reviewers work on cards in review`);
+  const slot = (card.panel.lenses[lens] ??= {});
+  if (slot.worker && slot.worker !== who) throw new Error(`lens ${lens} of card #${id} is already claimed by ${slot.worker}`);
+  if (slot.verdict) throw new Error(`lens ${lens} of card #${id} already has a verdict this round (${slot.verdict})`);
+  if (slot.worker !== who) slot.claimedAt = now();
+  slot.worker = who;
+  card.updatedAt = now();
+  return card;
+}
+
+export function releaseLens(board, id, lens) {
+  const card = findCard(board, id);
+  const slot = card.panel.lenses[lens];
+  if (slot) {
+    slot.worker = null;
+    slot.claimedAt = null;
+    delete slot.dispatch;
+  }
+  card.updatedAt = now();
+  return card;
+}
+
+// What `worker` holds on this card: { lens: null } for the card itself, { lens } for a review
+// lens, or null when it holds nothing.
+export function holding(card, worker) {
+  if (!worker) return null;
+  if (card.assignee === worker) return { lens: null };
+  for (const [lens, slot] of Object.entries(card.panel?.lenses || {})) if (slot.worker === worker) return { lens };
+  return null;
+}
+
+// Every claim on a card: its own assignee and each claimed lens.
+export function claimsOf(card) {
+  const out = [];
+  if (card.assignee) out.push({ worker: card.assignee, lens: null, claimedAt: card.claimedAt, dispatch: card.run.dispatch ?? null });
+  for (const [lens, slot] of Object.entries(card.panel?.lenses || {})) {
+    if (slot.worker) out.push({ worker: slot.worker, lens, claimedAt: slot.claimedAt, dispatch: slot.dispatch ?? null });
+  }
+  return out;
 }
 
 export const MAX_BOUNCES = 3;

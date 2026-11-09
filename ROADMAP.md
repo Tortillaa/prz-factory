@@ -1,6 +1,6 @@
 # Roadmap de prz-factory
 
-Objetivo final: añades tarjetas al tablero, las mueves a **Ready**, y la fábrica las devuelve como cambios probados, revisados y mergeados, ejecutando los agentes en Orca.
+Objetivo final: mandas una idea al tablero y la fábrica la devuelve como un cambio redactado, construido, revisado por un panel de expertos y mergeado (o esperando tu aprobación si toca el negocio), ejecutando los agentes en Orca.
 
 Cada fase indica de qué parte de [super-board](https://github.com/EricTechPro/super-board) (MIT) sale (la "ingeniería inversa") y qué cambia aquí. Las diferencias de fondo son tres:
 
@@ -85,8 +85,24 @@ Un único script autocontenido (`hooks/factory-guard.mjs`, sin imports de `src/`
 - [x] Aprobar desde la web los merges que esperan a una persona, fijados al commit revisado (pendiente de la Fase 2).
 - [x] Revisión: la aprobación exige la etiqueta `merge-approval`, que solo pone el gate. `needs-you` también marca tarjetas que rebotaron, y esas nunca deben poder mergearse.
 
+## Fase 7 · De la idea al merge: Spec Writer, panel de reviewers y solicitudes ✅
+
+El proceso que pidió el usuario: manda una tarjeta con sus palabras, un Spec Writer la redacta, un Builder la construye, varios reviewers expertos la revisan en paralelo, y se mergea sola si es un cambio pequeño o le llega una solicitud si afecta al negocio. Sustituye a la cadena build → QA → review de la Fase 2.
+
+- [x] Columna `spec` y lane `spec` (skill `factory-spec`): la idea entra en texto libre (`factory add --column spec`, botón "+ Nueva idea"), el Spec Writer lee el código, redacta la tarjeta, clasifica su impacto en el negocio y la pasa a Ready él solo. Si falta una decisión, la manda a blocked con las preguntas. Puede dividirla en tarjetas que nacen ya en Ready.
+- [x] Panel de revisión en paralelo: un reviewer por lente (`review.lenses`: qa, security, code, ops), cada uno en su worktree y sobre el mismo commit. Claims por lente, `factory verdict` (pass, fail, escalar a una persona) y un checklist por lente en `skills/factory-review/references/lenses.md`. Un fallo devuelve la tarjeta a building y cierra la ronda; el veredicto que completa el panel ejecuta el merge gate.
+- [x] Negocio: labels `auth`, `payments`, `pricing`, `schema`, `ops` (y `needs-human`), `merge.humanPaths` (rutas sensibles que el gate comprueba en el diff, diga lo que diga la tarjeta) y la lente `ops`, que escala lo que el Spec Writer no marcó. Los agentes pueden subir una tarjeta a revisión humana, nunca bajarla.
+- [x] El merge gate exige el panel completo sobre el head (exit 11 si falta alguna lente).
+- [x] Solicitudes: franja en la web con los merges que esperan aprobación y las tarjetas que esperan respuesta; `factory status` las separa (`approvals`, `needsYou`) y el coordinador avisa de cada una en cuanto aparece. Un handoff a blocked pone `needs-you`, y salir de blocked la quita.
+- [x] El lane `qa` queda solo para las tarjetas `qa` (prueban la base y se cierran por el gate); en las tarjetas construidas, QA es una lente del panel.
+- [x] Coordinador: `plan` despacha una acción por lente y las ideas de spec; `status`, `reclaim`, `stop` y `dispatched` entienden los claims por lente. `cleanup` reconoce los worktrees `factory-<id>-<lens>`.
+- [x] Evals nuevas: `spec-empty-cart`, `spec-pricing-is-business`, `review-qa-missing-test`, `review-code-merge`, `review-ops-escalates-pricing`.
+- [x] Probado de extremo a extremo con el CLI real en un repo temporal: una tarjeta pequeña se mergea sola al aprobar la cuarta lente, y una de precios queda en blocked esperando la aprobación. Web comprobada en el navegador de Orca.
+- [x] Guía de uso paso a paso: `docs/GUIA.md`.
+
 ## Pendiente fuera del código
 
+- [ ] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): los skills nuevos solo se han probado con el CLI, no con agentes.
 - [ ] Ejecutar las evals con un agente real (`factory eval`): lanzan Claude Code headless con Bash en repos temporales y requieren tu permiso.
 - [ ] Instalar el plugin en Orca (`orca-plugin/README.md`): es `trusted-worker` y requiere tu aprobación.
 - [ ] Subir el repo a GitHub para que corra el CI.

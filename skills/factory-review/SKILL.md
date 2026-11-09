@@ -1,75 +1,95 @@
 ---
 name: factory-review
 description: >-
-  Reviewer lane of prz-factory: review a tested card's diff against its Acceptance Criteria,
-  remember findings from earlier rounds, and land it through the `factory merge` gate or send it
-  back. The only lane that moves cards to Done, and only through the gate. Use when told to review
+  Reviewer lane of prz-factory: one expert of a parallel review panel (lenses qa, security, code,
+  ops). Review a built card's diff through your lens only, record a verdict with `factory verdict`,
+  and let the merge gate land the card when the whole panel has passed it. Use when told to review
   card #N, when dispatched as a factory review worker, or when the user says "factory-review".
 ---
 
 # factory-review
 
-You decide whether this exact commit should land. Board commands are in `factory-board`; formats
-in `../factory-board/references/writing-standard.md` (§3 for findings).
+A built card is reviewed by a panel: one reviewer per lens, all at the same time, each in its own
+worktree, all on the same commit. You are one of them. The card lands only when **every** lens
+passes that commit; one fail sends it back to the builder and ends the round for everyone.
+
+Your lens is in your task (`--lens <qa|security|code|ops>`). Read its section in
+[references/lenses.md](references/lenses.md) and review through it only: the other reviewers
+cover the rest, and a finding outside your lens is theirs to make. Board commands are in
+`factory-board`; formats in `../factory-board/references/writing-standard.md` (§3 for findings).
 
 ## 1 · Start
 
 ```text
-factory start <id> --lane review --as <your-worker-name> --json
+factory start <id> --lane review --lens <lens> --as <your-worker-name> --json
+factory show <id> --json
 ```
 
-Your worktree is now on the branch head, detached. Note the `head` SHA from the result: that is
-the commit you are reviewing, and the only one you may merge.
+Your worktree is now on the branch head, detached. Note `head` in the result: it is the commit the
+panel reviews and the only one your verdict may name. You never commit.
+
+The diff under review: `git diff <base>...HEAD` (`base` is in the result).
 
 ## 2 · Your own pass first
 
-Before reading the builder's and QA's comments, read the card's Acceptance Criteria and the raw
-diff (`git diff <base>...HEAD`), and write down 2-4 hypotheses: what must be true for this to be
-right, and where it would most likely break. Then check each hypothesis against the code and tests.
+Before reading the builder's comment or earlier reviews, read the card's Acceptance Criteria and
+the raw diff, and write down 2-4 hypotheses for your lens: what must be true for this to be right,
+and where it would most likely break. Check each against the code and the tests, following your
+lens's checklist. Only then read the comments: each claim there is a lead, not evidence.
 
-Only then read the earlier comments. Each claim there is a lead, not evidence: check it.
+**Remember earlier rounds.** If an earlier comment of your lens (`review:<lens>`) has a findings
+table, re-check every open finding first and mark it ✅ fixed (with the proof) or keep it ❌ open.
+Keep the IDs.
 
-**Remember earlier rounds.** If an earlier `[review]` comment has a findings table, re-check every
-open finding first and mark it ✅ fixed (with the proof) or keep it ❌ open. Keep the IDs.
+Classify each finding (Gap · Bug · Verification miss · Scope drift · Over-engineering) with a
+severity (Blocker · Should fix · Nit). The scope is the diff, never the whole codebase. Report only
+what you can point to on a line and explain. Over-engineering never blocks alone.
 
-Classify every finding (Gap · Bug · Verification miss · Scope drift · Over-engineering) and give it
-a severity (Blocker · Should fix · Nit). The scope is the diff, never the whole codebase. Apply the
-repo's rules from `CLAUDE.md` / `AGENTS.md`. Over-engineering is always Should fix: it never blocks
-alone.
+## 3 · Verdict
 
-## 3 · Decide
-
-**Any open Blocker** → send it back with the findings table:
-
-```text
-factory handoff <id> building --lane review --as <name> --text-file <comment.md> --json
-```
-
-(Use `qa` instead of `building` when the problem is missing evidence, not code. Use `blocked` with
-🙋 when it needs a product or design decision. After 3 round trips the board itself turns a
-fourth send-back into `blocked` with `needs-you`.)
-
-**No Blockers** → merge through the gate, pinned to the head you reviewed:
+Write the comment to a file (writing standard §2, role `review:<lens>`, your findings table,
+`Head: <sha>`), then exactly one:
 
 ```text
-factory merge <id> --sha <head> --as <name> --json
+# No open Blocker in your lens:
+factory verdict <id> --lens <lens> --as <name> --sha <head> --pass --text-file <comment.md> --json
+
+# Pass, but a person must approve the merge (see "Escalate"):
+factory verdict <id> --lens <lens> --as <name> --sha <head> --pass --escalate "<why>" --text-file <comment.md> --json
+
+# Any open Blocker: back to the builder, with the findings table
+factory verdict <id> --lens <lens> --as <name> --sha <head> --fail --text-file <comment.md> --json
+
+# It needs a product or design decision only the user can make
+factory verdict <id> --lens <lens> --as <name> --sha <head> --fail --to blocked --text-file <comment.md> --json
 ```
 
-First write your review comment with `factory comment <id> --role review --text-file <f>`
-(✅ merge-ready, the findings table if any, `Head: <sha>`). The gate then decides by exit code:
+**Escalate** when the change touches the business or what keeps the product running (auth,
+payments, pricing, schema, operations) and the card does not already say so, or when a mistake
+here would be costly and hard to undo. It adds `needs-human`: the gate will ask the user instead
+of merging. You may raise that bar; you may never lower it.
 
-| Exit | Meaning | What happened / what you do |
+Read the result:
+
+- `complete: false` → other lenses are still reviewing. You are done.
+- `merge` present → your verdict completed the panel and the merge gate ran:
+
+| Exit | `merge.status` | What happened |
 |---|---|---|
-| 0 | merged | Card is Done. Report the merged SHA. |
-| 6 | head moved after your review | Card stays in review. Review the new commits (restart from §2), never merge a head you did not see. |
-| 7 | needs a person | The gate moved it to blocked with `needs-you` + `merge-approval` and the reasons; the person approves it on the web board or with `--human`. Nothing else to do. |
-| 8 | branch behind base | The gate sent it to building for a rebase. Nothing else to do. |
-| 9 | verify failed | The gate sent it to building with the output. Nothing else to do. |
-| 10 | base checkout has uncommitted changes | Card stays in review, released. Tell the user; do not touch their checkout. |
-| 1 | error | Report the message and release the card: `factory release <id>`. |
+| 0 | merged | The card is Done. Report the merged SHA. |
+| 7 | needs-human | The gate moved it to blocked with `needs-you` + `merge-approval`: the user approves it on the board. Report the reasons. |
+| 8 | behind | The branch is behind the base: back to building for a rebase. |
+| 9 | verify-failed | Verify failed on that commit: back to building with the output. |
+| 10 | base-dirty | The base checkout has uncommitted changes. The card stays in review, fully passed. Tell the user; do not touch their checkout. |
+| 6 · 1 | head-moved · error | Report the message. |
+
+- An error saying the round is over means another lens failed the card first. Stop: there is
+  nothing left to record.
+- After 3 round trips the board turns a fourth send-back into `blocked` with `needs-you` by itself.
 
 ## Never
 
-- Merge with `git merge`, push to the base branch, or move a card to Done yourself.
-- Pass `--human` to `factory merge`: that flag means a person approved it.
+- Review outside your lens, or pass a commit you did not read.
+- Merge with `git merge`, push to the base branch, or run `factory merge` yourself: the verdict does it.
+- Pass `--human` to anything: that flag means a person approved it.
 - Fix the code yourself. Findings go back to build.

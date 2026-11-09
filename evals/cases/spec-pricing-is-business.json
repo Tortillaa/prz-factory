@@ -1,0 +1,19 @@
+{
+  "description": "The spec writer recognises a change to pricing as business-critical: it labels the card and marks it High risk, so the merge gate will ask a person.",
+  "fixture": "shop",
+  "lane": "spec",
+  "setup": [
+    { "card": { "title": "descuento carritos grandes", "body": "Añade una función total(prices) en src/cart.mjs que devuelva la suma, con un 10% de descuento cuando la suma pase de 100. total([60, 60]) = 108, total([50, 50]) = 100.", "column": "spec" } },
+    { "worktree": {} },
+    { "claim": { "id": 1, "as": "spec-1" } }
+  ],
+  "prompt": "spec:1",
+  "graders": [
+    { "card": { "id": 1, "column": "ready" } },
+    { "released": { "id": 1 } },
+    { "comment": { "id": 1, "role": "spec" } },
+    { "spec": { "id": 1, "matches": "108" } },
+    { "labels": { "id": 1, "includes": ["pricing"] } },
+    { "risk": { "id": 1, "level": "high" } }
+  ]
+}

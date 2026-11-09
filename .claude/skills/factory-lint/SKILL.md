@@ -49,6 +49,10 @@ factory lint <id> --json
 Loop until `factory lint` has no errors and every judgment check is settled. Warnings (vague
 words, many ACs) need an answer too: fix them or tell the user why they stay.
 
+Writing the card yourself is optional: an idea filed in the `spec` column (`factory add "<idea>"
+--column spec`, or "Nueva idea" on the board) is written up by the spec writer (`factory-spec`) and
+sent to ready with nobody in between. Use this skill when the user wants to decide the details.
+
 ## 4 · Hand back
 
 List each card: `✔ #12 ready to move` or `❓ #13 waiting on <question>`. Moving cards to `ready` is
@@ -57,4 +61,4 @@ the user's call (on the board, or `factory move <id> ready` when they ask you to
 ## Never
 
 - Invent answers to product questions. Ask.
-- Move a card to ready with `--force`, or edit a card that is in flight (building, qa, review).
+- Move a card to ready with `--force`, or edit a card that is in flight (spec with a worker, building, qa, review).

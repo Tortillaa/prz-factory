@@ -1,5 +1,5 @@
 {
-  "description": "The build lane fixes a card test-first on its branch and hands it to QA.",
+  "description": "The build lane fixes a card test-first on its branch and hands it to the review panel.",
   "fixture": "shop",
   "lane": "build",
   "setup": [
@@ -9,7 +9,7 @@
   ],
   "prompt": "spec:1",
   "graders": [
-    { "card": { "id": 1, "column": "qa" } },
+    { "card": { "id": 1, "column": "review" } },
     { "released": { "id": 1 } },
     { "comment": { "id": 1, "role": "build" } },
     { "branchChanges": { "id": 1, "paths": ["src/cart.mjs", "test/"] } },

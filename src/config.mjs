@@ -5,6 +5,12 @@ import { execFileSync } from 'node:child_process';
 
 export const CONFIG_NAME = 'factory.config.json';
 
+// Labels that mark business-critical work. The spec writer sets them; the merge gate hands any card
+// carrying one to a person. needs-human is the escape hatch any agent may add, never remove.
+export const BUSINESS_LABELS = ['auth', 'payments', 'pricing', 'schema', 'ops', 'money', 'needs-human'];
+// Review lenses the factory ships a checklist for (skills/factory-review/references/lenses.md).
+export const LENSES = ['qa', 'security', 'code', 'ops'];
+
 export const DEFAULTS = Object.freeze({
   baseBranch: 'main',
   protectedBranches: ['main'],
@@ -12,8 +18,11 @@ export const DEFAULTS = Object.freeze({
   verify: [],
   verifyTimeoutMinutes: 20,
   maxWorkers: 2,
-  // When the merge gate hands the merge to a person instead of doing it.
-  merge: { humanRisk: ['high'], humanLabels: ['auth', 'money', 'schema', 'needs-human'], maxLines: 400 },
+  // When the merge gate hands the merge to a person instead of doing it: anything that can touch
+  // the business or keep the product running. humanPaths are globs checked against the diff.
+  merge: { humanRisk: ['high'], humanLabels: BUSINESS_LABELS, humanPaths: [], maxLines: 400 },
+  // The review panel: one expert reviewer per lens, in parallel. All must pass the same commit.
+  review: { lenses: LENSES },
   // Optional GitHub mirror: `factory pr` and, with pushBase, a push of the base after each merge.
   github: { remote: 'origin', pushBase: false, draft: true },
 });
@@ -46,7 +55,12 @@ function validate(config, file) {
     fail('"merge.humanRisk" must list low, medium or high');
   }
   if (!strings(m.humanLabels)) fail('"merge.humanLabels" must be an array of strings');
+  if (!strings(m.humanPaths)) fail('"merge.humanPaths" must be an array of glob strings');
   if (!Number.isInteger(m.maxLines) || m.maxLines < 1) fail('"merge.maxLines" must be a positive integer');
+  const r = config.review;
+  if (!r || !strings(r.lenses) || !r.lenses.length || !r.lenses.every((l) => LENSES.includes(l)) || new Set(r.lenses).size !== r.lenses.length) {
+    fail(`"review.lenses" must list one or more of ${LENSES.join(', ')}, without repeats`);
+  }
   const g = config.github;
   if (!g || typeof g.remote !== 'string' || !g.remote || typeof g.pushBase !== 'boolean' || typeof g.draft !== 'boolean') {
     fail('"github" must be { remote: string, pushBase: boolean, draft: boolean }');
@@ -70,7 +84,7 @@ export function loadConfig(root = repoRoot()) {
   } catch (err) {
     throw new Error(`${file}: invalid JSON (${err.message})`);
   }
-  return { file, exists: true, config: validate({ ...DEFAULTS, ...parsed, merge: { ...DEFAULTS.merge, ...parsed.merge }, github: { ...DEFAULTS.github, ...parsed.github } }, file) };
+  return { file, exists: true, config: validate({ ...DEFAULTS, ...parsed, merge: { ...DEFAULTS.merge, ...parsed.merge }, review: { ...DEFAULTS.review, ...parsed.review }, github: { ...DEFAULTS.github, ...parsed.github } }, file) };
 }
 
 // Best guess at the commands that prove a project builds, for a fresh config.

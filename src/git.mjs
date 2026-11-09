@@ -74,3 +74,26 @@ export function slugify(text, max = 40) {
     .replace(/^-+|-+$/g, '');
   return slug.slice(0, max).replace(/-+$/, '') || 'card';
 }
+
+// Files changed between two commits (posix paths, as git prints them).
+export function diffFiles(from, to, cwd) {
+  return git(['diff', '--name-only', `${from}...${to}`], cwd).split(/\r?\n/).filter(Boolean);
+}
+
+// A small glob for config paths: `**` crosses folders, `*` and `?` stay inside one.
+export function globToRegExp(glob) {
+  let re = '';
+  for (let i = 0; i < glob.length; i++) {
+    const ch = glob[i];
+    if (ch === '*' && glob[i + 1] === '*') {
+      i++;
+      if (glob[i + 1] === '/') {
+        i++;
+        re += '(?:.*/)?';
+      } else re += '.*';
+    } else if (ch === '*') re += '[^/]*';
+    else if (ch === '?') re += '[^/]';
+    else re += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${re}$`);
+}

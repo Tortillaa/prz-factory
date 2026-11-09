@@ -9,7 +9,7 @@ import { createServer } from '../src/server.mjs';
 import { install } from '../src/install.mjs';
 import { doctor } from '../src/doctor.mjs';
 import { loadConfig, repoRoot } from '../src/config.mjs';
-import { startLane, handoff } from '../src/lanes.mjs';
+import { startLane, handoff, verdict } from '../src/lanes.mjs';
 import { runVerify, verifySummary } from '../src/verify.mjs';
 import { mergeCard } from '../src/merge.mjs';
 import * as run from '../src/run.mjs';
@@ -23,9 +23,11 @@ const USAGE = `factory <command> [options]
 
 Board
   serve [--port 4747]                    Open the board at http://localhost:<port>
-  add <title> [--body t | --body-file f] [--label l]... [--blocked-by ids] [--source kind:key [--evidence t]]
-                                         New card in backlog (body defaults to the template). With --source,
-                                         dedupes by fingerprint: an open twin gets "seen again" instead
+  add <title> [--body t | --body-file f] [--label l]... [--blocked-by ids] [--column backlog|spec|ready]
+      [--source kind:key [--evidence t]]
+                                         New card, in backlog by default. --column spec files a rough idea
+                                         for the spec writer (free text); ready needs a card that passes lint.
+                                         With --source, dedupes by fingerprint: an open twin gets "seen again"
   edit <id> [--title t] [--body t | --body-file f] [--label l]... [--blocked-by ids]
             [--branch b] [--worktree p] [--worker w] [--reviewed-sha s]
                                          --label replaces all labels; --blocked-by "" clears
@@ -39,25 +41,31 @@ Board
   next                                   Ready cards a worker may start now, in order
   comment <id> (<text> | --text-file f) [--role r]
                                          Role defaults to "user"
-  claim <id> --as <who>                  Fails if someone else holds the card
-  release <id>
+  claim <id> --as <who> [--lens l]       Fails if someone else holds the card (or that review lens)
+  release <id> [--lens l]
   template                               Print the card body template
   path                                   Print the board file location
 
 Lanes (run inside the worker's own worktree)
-  start <id> --lane <build|qa|review> --as <who> [--allow-main]
+  start <id> --lane <spec|build|qa|review> [--lens l] --as <who> [--allow-main]
                                          Claim, leave Ready if needed, check out the card's code
-                                         (build: branch factory/<id>-<slug>; qa/review: detached)
+                                         (spec: base, detached; build: branch factory/<id>-<slug>;
+                                         qa/review: the branch, detached). review needs --lens
   handoff <id> <column> --lane <l> --as <who> (--text t | --text-file f)
-                                         Comment + move + release in one write
+                                         Comment + move + release in one write (spec, build, qa)
+  verdict <id> --lens <l> --as <who> --sha <head> (--pass [--escalate why] | --fail [--to building|blocked])
+          (--text t | --text-file f)     A reviewer's verdict on the head the panel reviews. The verdict
+                                         that completes the panel runs the merge gate (same exit codes)
   verify                                 Run the config's verify commands here (exit 1 on failure)
   merge <id> --sha <reviewed> [--as who] [--human]
                                          Merge gate. Exit 0 merged · 6 head moved · 7 needs a person
                                          · 8 behind base · 9 verify failed · 10 base checkout dirty
+                                         · 11 review panel incomplete
 
 Run (the coordinator; it dispatches, never builds)
   plan                                   Next dispatches for the free worker slots, with placement
-  spec <id> --lane <l> --as <worker>     The task text for that worker (pipe to --spec-file -)
+  spec <id> --lane <l> [--lens l] --as <worker>
+                                         The task text for that worker (pipe to --spec-file -)
   dispatched <id> --as <worker> --dispatch <d>
                                          Record the Orca dispatch, only while that worker holds the card
   status                                 Snapshot: columns, in flight (stale claims), needs-you, next
@@ -109,6 +117,11 @@ const { values: opts, positionals } = parseOptions({
     worker: { type: 'string' },
     'reviewed-sha': { type: 'string' },
     lane: { type: 'string' },
+    lens: { type: 'string' },
+    pass: { type: 'boolean' },
+    fail: { type: 'boolean' },
+    to: { type: 'string' },
+    escalate: { type: 'string' },
     text: { type: 'string' },
     'text-file': { type: 'string' },
     sha: { type: 'string' },
@@ -205,7 +218,7 @@ try {
         break;
       }
       const card = store.update(file, (b) =>
-        store.addCard(b, { title: need(args.join(' '), 'title'), body: bodyOpt(), labels: opts.label, blockedBy: depsOpt() }),
+        store.addCard(b, { title: need(args.join(' '), 'title'), body: bodyOpt(), labels: opts.label, blockedBy: depsOpt(), column: opts.column ?? 'backlog' }),
       );
       print(card, `added ${line(card)} → ${card.column}`);
       break;
@@ -291,27 +304,44 @@ try {
       break;
     }
     case 'claim': {
-      const card = store.update(file, (b) => store.claimCard(b, need(args[0], 'id'), need(opts.as, '--as')));
-      print(card, `claimed ${line(card)}`);
+      const card = store.update(file, (b) =>
+        opts.lens ? store.claimLens(b, need(args[0], 'id'), opts.lens, need(opts.as, '--as')) : store.claimCard(b, need(args[0], 'id'), need(opts.as, '--as')),
+      );
+      print(card, `claimed ${line(card)}${opts.lens ? ` (lens ${opts.lens})` : ''}`);
       break;
     }
     case 'release': {
-      const card = store.update(file, (b) => store.releaseCard(b, need(args[0], 'id')));
+      const card = store.update(file, (b) => (opts.lens ? store.releaseLens(b, need(args[0], 'id'), opts.lens) : store.releaseCard(b, need(args[0], 'id'))));
       print(card, `released ${line(card)}`);
       break;
     }
     case 'start': {
       const r = startLane({
-        file, id: need(args[0], 'id'), who: opts.as, lane: need(opts.lane, '--lane'),
+        file, id: need(args[0], 'id'), who: opts.as, lane: need(opts.lane, '--lane'), lens: opts.lens ?? null,
         cwd: process.cwd(), config: loadConfig(repoRoot()).config, allowMain: opts['allow-main'],
       });
-      print(r, `${r.lane}: ${line(r.card)}\n  ${r.branch ? `branch ${r.branch}` : `base ${r.base}`} @ ${r.head.slice(0, 8)}${r.lane === 'build' ? '' : ' (detached)'}\n  worktree ${r.worktree}`);
+      print(r, `${r.lane}${r.lens ? ` (${r.lens})` : ''}: ${line(r.card)}\n  ${r.branch ? `branch ${r.branch}` : `base ${r.base}`} @ ${r.head.slice(0, 8)}${r.lane === 'build' ? '' : ' (detached)'}\n  worktree ${r.worktree}`);
       break;
     }
     case 'handoff': {
       const text = opts['text-file'] !== undefined ? fs.readFileSync(opts['text-file'], 'utf8') : opts.text;
       const card = handoff({ file, id: need(args[0], 'id'), to: need(args[1], 'column'), lane: need(opts.lane, '--lane'), who: need(opts.as, '--as'), text });
       print(card, `handed off ${line(card)} → ${card.column}`);
+      break;
+    }
+    case 'verdict': {
+      if (!!opts.pass === !!opts.fail) throw new Error('pass exactly one of --pass or --fail');
+      const text = opts['text-file'] !== undefined ? fs.readFileSync(opts['text-file'], 'utf8') : opts.text;
+      const { config } = loadConfig(repoRoot());
+      const id = Number(need(args[0], 'id'));
+      const who = need(opts.as, '--as');
+      const v = verdict({ file, id, who, lens: need(opts.lens, '--lens'), sha: need(opts.sha, '--sha'), pass: !!opts.pass, to: opts.to, escalate: opts.escalate, text, config });
+      const out = { verdict: v.verdict, complete: v.complete, column: v.card.column, merge: null };
+      // The verdict that completes the panel lands the card through the gate, so it never sits approved.
+      if (v.complete) out.merge = mergeCard({ file, id, who, sha: v.card.run.reviewedSha, cwd: process.cwd(), config });
+      const tail = out.merge ? `\n${out.merge.status === 'merged' ? '✅' : '✖'} ${out.merge.status}: ${out.merge.message}` : v.verdict === 'pass' ? '\npanel still waiting on other lenses' : '';
+      print(out, `${v.verdict} recorded on ${line(v.card)} → ${v.card.column}${tail}`);
+      if (out.merge) process.exitCode = out.merge.code;
       break;
     }
     case 'verify': {
@@ -334,12 +364,12 @@ try {
     case 'plan': {
       const root = mainCheckout();
       const actions = run.plan(store.load(file), loadConfig(root).config, root);
-      print(actions, actions.map((a) => `#${a.id} ${a.lane.padEnd(6)} as ${a.worker} · ${a.placement.worktree}`).join('\n') || 'nothing to dispatch');
+      print(actions, actions.map((a) => `#${a.id} ${(a.lens ? `${a.lane}:${a.lens}` : a.lane).padEnd(15)} as ${a.worker} · ${a.placement.worktree}`).join('\n') || 'nothing to dispatch');
       break;
     }
     case 'spec': {
       const card = store.getCard(store.load(file), need(args[0], 'id'));
-      const text = run.spec(card, need(opts.lane, '--lane'), need(opts.as, '--as'), mainCheckout());
+      const text = run.spec(card, need(opts.lane, '--lane'), need(opts.as, '--as'), mainCheckout(), opts.lens ?? null);
       print({ spec: text }, text);
       break;
     }
@@ -349,7 +379,9 @@ try {
       const lines = [
         store.COLUMNS.map((c) => `${c} ${s.counts[c]}`).join(' · '),
         `in flight ${s.inFlight.length}/${s.maxWorkers}`,
-        ...s.inFlight.map((f) => `  #${f.id} ${f.column} ${f.worker} ${f.ageMinutes ?? '?'}min${f.stale ? ' ⚠️ stale' : ''}${f.dispatch ? ` dispatch ${f.dispatch}` : ''}`),
+        ...s.inFlight.map((f) => `  #${f.id} ${f.column}${f.lens ? `:${f.lens}` : ''} ${f.worker} ${f.ageMinutes ?? '?'}min${f.stale ? ' ⚠️ stale' : ''}${f.dispatch ? ` dispatch ${f.dispatch}` : ''}`),
+        ...(s.approvals.length ? ['🙋 waiting for your approval (web board, or factory merge <id> --sha <sha> --human)', ...s.approvals.map((a) => `  #${a.id} ${a.title} (${a.branch} @ ${(a.sha || '').slice(0, 8)})`)] : []),
+        ...s.panels.map((p) => `  review #${p.id}: ${Object.entries(p.lenses).map(([l, v]) => `${l} ${v}`).join(' · ')}`),
         ...(s.needsYou.length ? ['needs you', ...s.needsYou.map((n) => `  #${n.id} ${n.title} (${n.column})`)] : []),
         ...(s.waitingOnDeps.length ? ['waiting on blockers', ...s.waitingOnDeps.map((w) => `  #${w.id} ← ${w.waitingOn.map((d) => `#${d}`).join(' ')}`)] : []),
         `next: ${s.next.map((a) => `#${a.id} ${a.lane}`).join(', ') || 'nothing'}${s.idle ? ' · idle' : ''}`,
@@ -364,12 +396,12 @@ try {
     }
     case 'reclaim': {
       const r = store.update(file, (b) => run.reclaim(b, need(args[0], 'id'), { worker: opts.worker, reason: opts.reason }));
-      print(r, `${r.action}: ${line(r.card)}${r.note ? ` (${r.note})` : ''}`);
+      print(r, `${r.action}${r.lens ? ` (lens ${r.lens})` : ''}: ${line(r.card)}${r.note ? ` (${r.note})` : ''}`);
       break;
     }
     case 'stop': {
       const r = store.update(file, (b) => run.stop(b, opts.reason));
-      print(r, r.stopped.map((s) => `released #${s.id} from ${s.worker}${s.dispatch ? ` · stop dispatch ${s.dispatch}` : ''}`).join('\n') || 'nothing in flight');
+      print(r, r.stopped.map((s) => `released #${s.id}${s.lens ? `:${s.lens}` : ''} from ${s.worker}${s.dispatch ? ` · stop dispatch ${s.dispatch}` : ''}`).join('\n') || 'nothing in flight');
       break;
     }
     case 'cleanup': {

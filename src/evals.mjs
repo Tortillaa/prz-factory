@@ -1,5 +1,5 @@
 // Skill evals: each case builds a throwaway repo from a fixture, sets up the board and git state
-// for one lane, hands an agent the same spec a real worker gets, and grades what changed with
+// for one lane (and, in review, one lens), hands an agent the same spec a real worker gets, and grades what changed with
 // deterministic checks. The agent is a shell command (headless Claude Code by default).
 import fs from 'node:fs';
 import os from 'node:os';
@@ -11,6 +11,7 @@ import { install, FACTORY_ROOT } from './install.mjs';
 import { loadConfig } from './config.mjs';
 import { runVerify } from './verify.mjs';
 import { git, revParse, isAncestor } from './git.mjs';
+import { riskLevel } from './ticket.mjs';
 
 export const EVALS_DIR = path.join(FACTORY_ROOT, 'evals');
 export const DEFAULT_AGENT = 'claude -p --permission-mode acceptEdits --allowedTools "Bash Read Edit Write Glob Grep Skill"';
@@ -42,6 +43,8 @@ export function prepare(c, { dir = EVALS_DIR } = {}) {
   install(repo);
   const cfg = JSON.parse(fs.readFileSync(path.join(repo, 'factory.config.json'), 'utf8'));
   if (c.verify) cfg.verify = c.verify;
+  // A case reviews with its own panel: one lens lets a single agent complete it and reach the gate.
+  if (c.lenses) cfg.review = { lenses: c.lenses };
   fs.writeFileSync(path.join(repo, 'factory.config.json'), JSON.stringify(cfg, null, 2) + '\n');
   git(['add', '-A'], repo);
   git(['commit', '-qm', 'fixture'], repo);
@@ -54,7 +57,7 @@ export function prepare(c, { dir = EVALS_DIR } = {}) {
   for (const step of c.setup) {
     if (step.card) {
       const { title, bodyFile, labels, column = 'backlog' } = step.card;
-      const body = bodyFile ? fs.readFileSync(path.join(dir, 'fixtures', c.fixture, bodyFile), 'utf8') : undefined;
+      const body = bodyFile ? fs.readFileSync(path.join(dir, 'fixtures', c.fixture, bodyFile), 'utf8') : step.card.body;
       store.update(file, (b) => {
         const card = store.addCard(b, { title, body, labels });
         if (column !== 'backlog') store.moveCard(b, card.id, column, 'eval', { force: true });
@@ -74,7 +77,7 @@ export function prepare(c, { dir = EVALS_DIR } = {}) {
     } else if (step.comment) {
       store.update(file, (b) => store.commentCard(b, step.comment.id, step.comment));
     } else if (step.claim) {
-      store.update(file, (b) => store.claimCard(b, step.claim.id, step.claim.as));
+      store.update(file, (b) => (step.claim.lens ? store.claimLens(b, step.claim.id, step.claim.lens, step.claim.as) : store.claimCard(b, step.claim.id, step.claim.as)));
     } else {
       throw new Error(`${c.name}: unknown setup step ${JSON.stringify(step)}`);
     }
@@ -90,7 +93,7 @@ export function promptFor(c, world) {
   if (!c.prompt.startsWith('spec:')) return c.prompt;
   const id = Number(c.prompt.slice(5));
   const card = store.getCard(store.load(world.file), id);
-  return run.spec(card, c.lane, run.workerName(id, c.lane), world.repo);
+  return run.spec(card, c.lane, run.workerName(id, c.lane, c.lens ?? null), world.repo, c.lens ?? null);
 }
 
 const GRADERS = {
@@ -100,12 +103,32 @@ const GRADERS = {
   },
   released: ({ id }, w) => {
     const c = store.getCard(store.load(w.file), id);
-    return [!c.assignee, c.assignee ? `still claimed by ${c.assignee}` : 'released'];
+    const held = store.claimsOf(c).map((k) => k.worker);
+    return [held.length === 0, held.length ? `still claimed by ${held.join(', ')}` : 'released'];
   },
   comment: ({ id, role, matches }, w) => {
     const all = store.getCard(store.load(w.file), id).comments.filter((x) => x.role === role);
     const hit = matches ? all.filter((x) => new RegExp(matches, 'i').test(x.text)) : all;
     return [hit.length > 0, `${all.length} ${role} comments${matches ? `, ${hit.length} matching /${matches}/` : ''}`];
+  },
+  // The spec writer's output: a body that passes lint (and, optionally, matches a pattern).
+  spec: ({ id, matches }, w) => {
+    const board = store.load(w.file);
+    const c = store.getCard(board, id);
+    const errors = store.lintCard(c, board).filter((i) => i.severity === 'error');
+    if (errors.length) return [false, `lint: ${errors.map((e) => e.message).join('; ')}`];
+    const ok = !matches || new RegExp(matches, 'i').test(c.body);
+    return [ok, ok ? 'body passes lint' : `body does not match /${matches}/`];
+  },
+  labels: ({ id, includes = [], excludes = [] }, w) => {
+    const { labels } = store.getCard(store.load(w.file), id);
+    const missing = includes.filter((l) => !labels.includes(l));
+    const extra = excludes.filter((l) => labels.includes(l));
+    return [!missing.length && !extra.length, `labels [${labels.join(', ')}]${missing.length ? `, missing ${missing.join(', ')}` : ''}${extra.length ? `, unexpected ${extra.join(', ')}` : ''}`];
+  },
+  risk: ({ id, level }, w) => {
+    const got = riskLevel(store.getCard(store.load(w.file), id).body);
+    return [got === level, `risk ${got}, expected ${level}`];
   },
   branchChanges: ({ id, paths }, w) => {
     const branch = store.getCard(store.load(w.file), id).run.branch;

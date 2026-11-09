@@ -1,13 +1,17 @@
-// Lane bookkeeping shared by the build, qa and review skills: start a card in this worktree,
-// and hand it to the next lane. The judgment work happens in the skills; this is the plumbing.
+// Lane bookkeeping shared by the spec, build, qa and review skills: start a card in this worktree,
+// hand it to the next lane, and record a reviewer's verdict. The judgment work happens in the
+// skills; this is the plumbing.
 import * as store from './store.mjs';
 import { git, revParse, isClean, toplevel, worktrees, samePath, slugify } from './git.mjs';
 
 export const LANES = {
   // lane: { column it works in, where it may hand a card to }
-  build: { column: 'building', to: ['qa', 'blocked'] },
-  qa: { column: 'qa', to: ['review', 'building', 'blocked'] },
-  review: { column: 'review', to: ['building', 'qa', 'blocked'] }, // Done only through `factory merge`
+  spec: { column: 'spec', to: ['ready', 'blocked'] },
+  build: { column: 'building', to: ['review', 'blocked'] },
+  // qa works only on qa-labelled cards (tests of the base branch): it closes them through `factory merge`.
+  qa: { column: 'qa', to: ['blocked'] },
+  // The review panel records verdicts with `factory verdict`; Done only through `factory merge`.
+  review: { column: 'review', to: [] },
 };
 
 function checkLane(lane) {
@@ -15,14 +19,22 @@ function checkLane(lane) {
   return LANES[lane];
 }
 
+function checkLens(lens, config) {
+  if (!lens) throw new Error(`the review lane needs --lens (use: ${config.review.lenses.join(', ')})`);
+  if (!config.review.lenses.includes(lens)) throw new Error(`unknown lens "${lens}" (this project reviews with: ${config.review.lenses.join(', ')})`);
+}
+
 export const branchName = (card) => card.run.branch || `factory/${card.id}-${slugify(card.title)}`;
 
-// Claims the card, moves it out of Ready when this lane is its route, and checks out its code:
-// build gets the card's branch; qa and review get a detached checkout of it (the branch itself
-// may be checked out in the builder's worktree). Refuses the main checkout unless allowMain.
-export function startLane({ file, id, who, lane, cwd, config, allowMain = false }) {
+// Claims the card (or, in review, one lens of it), moves it out of Ready when this lane is its
+// route, and checks out its code: build gets the card's branch; spec gets the base, detached; qa and
+// review get a detached checkout of the branch (it may be checked out in the builder's worktree).
+// Refuses the main checkout unless allowMain.
+export function startLane({ file, id, who, lane, lens = null, cwd, config, allowMain = false }) {
   const { column } = checkLane(lane);
   if (!who) throw new Error('missing --as <worker-name>');
+  if (lane === 'review') checkLens(lens, config);
+  else if (lens) throw new Error(`--lens is only for the review lane`);
   const root = toplevel(cwd);
   if (!allowMain && samePath(worktrees(cwd)[0].path, root)) {
     throw new Error(`${root} is the main checkout: run lanes in their own worktree (Orca gives one per worker), or pass --allow-main`);
@@ -31,6 +43,11 @@ export function startLane({ file, id, who, lane, cwd, config, allowMain = false 
 
   const card = store.update(file, (b) => {
     const c = store.getCard(b, id);
+    if (lane === 'review') {
+      if (!c.run.branch) throw new Error(`card #${id} has no branch to review`);
+      store.claimLens(b, id, lens, who);
+      return structuredClone(c);
+    }
     if (c.column === 'ready') {
       if (store.route(c) !== column) throw new Error(`card #${id} goes to ${store.route(c)} from ready, not ${column}`);
     } else if (c.column !== column) {
@@ -48,18 +65,33 @@ export function startLane({ file, id, who, lane, cwd, config, allowMain = false 
       branch = branchName(card);
       if (revParse(`refs/heads/${branch}`, root)) git(['switch', branch], root);
       else git(['switch', '-c', branch, base], root);
+    } else if (lane === 'spec') {
+      git(['switch', '--detach', base], root);
     } else {
       branch = card.run.branch || null;
       // A qa card with no build has no branch: QA tests the base branch as it is.
       git(['switch', '--detach', branch || base], root);
     }
     const head = git(['rev-parse', 'HEAD'], root);
-    const run = { worktree: root, worker: who, ...(lane === 'build' ? { branch } : {}) };
-    const updated = store.update(file, (b) => store.editCard(b, id, { run }));
-    return { card: updated, lane, branch, head, worktree: root, base };
+    const updated = store.update(file, (b) => {
+      if (lane !== 'review') return store.editCard(b, id, { run: { worktree: root, worker: who, ...(lane === 'build' ? { branch } : {}) } });
+      // Every lens of a round reviews the same commit. A head that moved under the panel (someone
+      // committed on the branch) invalidates the verdicts already given.
+      const c = store.getCard(b, id);
+      if (c.panel.head !== head) {
+        for (const slot of Object.values(c.panel.lenses)) {
+          delete slot.verdict;
+          delete slot.sha;
+        }
+        c.panel.head = head;
+      }
+      c.panel.lenses[lens].worktree = root;
+      return c;
+    });
+    return { card: updated, lane, lens, branch, head, worktree: root, base };
   } catch (err) {
     // The checkout failed: give the card back so another worker can take it.
-    store.update(file, (b) => store.releaseCard(b, id));
+    store.update(file, (b) => (lane === 'review' ? store.releaseLens(b, id, lens) : store.releaseCard(b, id)));
     throw err;
   }
 }
@@ -67,6 +99,7 @@ export function startLane({ file, id, who, lane, cwd, config, allowMain = false 
 // Comment, move and release in one write, so a card is never left claimed but moved (or the reverse).
 export function handoff({ file, id, who, lane, to, text }) {
   const { column, to: allowed } = checkLane(lane);
+  if (lane === 'review') throw new Error('reviewers finish with `factory verdict`, not a handoff');
   if (!text || !text.trim()) throw new Error('a handoff needs a comment with what you did and the evidence');
   return store.update(file, (b) => {
     const card = store.getCard(b, id);
@@ -77,6 +110,67 @@ export function handoff({ file, id, who, lane, to, text }) {
     if (to === 'building') return store.sendBack(b, id, { who, role: lane, text });
     store.commentCard(b, id, { role: lane, text });
     store.moveCard(b, id, to, who);
+    // A lane that blocks a card is asking the user something: mark it so the request reaches them.
+    if (to === 'blocked' && !card.labels.includes('needs-you')) card.labels.push('needs-you');
     return store.releaseCard(b, id);
+  });
+}
+
+// Lenses of this round that have not passed yet.
+export function pendingLenses(card, config) {
+  return config.review.lenses.filter((l) => card.panel?.lenses?.[l]?.verdict !== 'pass');
+}
+
+/**
+ * One reviewer's verdict on the head the panel is reviewing, in one write.
+ * fail: the card goes back to building (or to blocked, with needs-you, for a decision a person
+ * must make) and the round ends for every lens. pass: the lens is done; `escalate` adds
+ * needs-human, so the merge gate hands the merge to a person. Agents can raise that bar, never
+ * lower it. Returns { card, verdict, complete }: complete when every lens passed this head.
+ */
+export function verdict({ file, id, who, lens, sha, pass, to = 'building', escalate = null, text, config }) {
+  checkLens(lens, config);
+  if (typeof pass !== 'boolean') throw new Error('a verdict is --pass or --fail');
+  if (!text || !text.trim()) throw new Error('a verdict needs a comment with the findings and the evidence');
+  if (!sha || sha.length < 7) throw new Error('pass --sha <head you reviewed> (at least 7 characters)');
+  return store.update(file, (b) => {
+    const card = store.getCard(b, id);
+    if (card.column !== 'review') throw new Error(`card #${id} is in ${card.column}: this review round is over`);
+    const slot = card.panel.lenses[lens];
+    if (!slot || slot.worker !== who) throw new Error(`lens ${lens} of card #${id} is claimed by ${slot?.worker ?? 'nobody'}, not ${who}`);
+    const head = card.panel.head;
+    if (!head || !head.startsWith(sha)) throw new Error(`the panel is reviewing ${head ? head.slice(0, 8) : 'nothing'}, not ${sha.slice(0, 8)}: restart the review on the current head`);
+    const role = `review:${lens}`;
+    slot.failedDispatches = 0;
+
+    if (!pass) {
+      if (!['building', 'blocked'].includes(to)) throw new Error(`a failed review goes to building or blocked, not ${to}`);
+      slot.verdict = 'fail';
+      slot.sha = head;
+      slot.at = new Date().toISOString();
+      if (to === 'building') store.sendBack(b, id, { who, role, text });
+      else {
+        store.commentCard(b, id, { role, text });
+        if (!card.labels.includes('needs-you')) card.labels.push('needs-you');
+        store.moveCard(b, id, 'blocked', who);
+      }
+      return { card, verdict: 'fail', complete: false };
+    }
+
+    slot.verdict = 'pass';
+    slot.sha = head;
+    slot.at = new Date().toISOString();
+    slot.worker = null;
+    slot.claimedAt = null;
+    delete slot.dispatch;
+    let note = '';
+    if (escalate && escalate.trim()) {
+      if (!card.labels.includes('needs-human')) card.labels.push('needs-human');
+      note = `\n🙋 escalado a una persona: ${escalate.trim()}`;
+    }
+    store.commentCard(b, id, { role, text: text + note });
+    const complete = pendingLenses(card, config).length === 0;
+    if (complete) store.editCard(b, id, { run: { reviewedSha: head } });
+    return { card, verdict: 'pass', complete };
   });
 }

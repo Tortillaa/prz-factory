@@ -3,13 +3,13 @@ name: factory-build
 description: >-
   Builder lane of prz-factory: take one card from Ready (or one sent back to Building), make the
   smallest safe change that meets its Acceptance Criteria test-first, commit on the card's branch
-  and hand it to QA. Never merges. Use when told to build card #N, when dispatched as a factory
+  and hand it to the review panel. Never merges. Use when told to build card #N, when dispatched as a factory
   build worker, or when the user says "factory-build" / "construye la tarjeta".
 ---
 
 # factory-build
 
-You build exactly one card, in your own worktree, and hand it to QA. Board commands are in the
+You build exactly one card, in your own worktree, and hand it to the review panel. Board commands are in the
 `factory-board` skill; commit and comment shapes in `../factory-board/references/writing-standard.md`.
 Pass `--json` to `factory` and stop on any error.
 
@@ -24,7 +24,7 @@ This claims the card, moves it Ready → Building and switches this worktree to 
 and stop: another worker has the card, the worktree is dirty, or the card is not yours to build.
 
 Then read the card: `factory show <id> --json`. Read every comment too: a card that came back
-from QA, review or the merge gate says exactly what to fix (findings `R1`, `R2`…, a failing
+from the review panel or the merge gate says exactly what to fix (findings `Q1`, `S1`, `C1`, `O1`…, a failing
 verify, or a rebase).
 
 ## 2 · Build
@@ -56,7 +56,7 @@ Write the comment to a file (writing standard §2: one line per AC with the test
 the verify result, `Head: <sha>`), then:
 
 ```text
-factory handoff <id> qa --lane build --as <your-worker-name> --text-file <comment.md> --json
+factory handoff <id> review --lane build --as <your-worker-name> --text-file <comment.md> --json
 ```
 
 **Block instead** when you cannot meet the ACs without guessing: the ACs contradict the code or

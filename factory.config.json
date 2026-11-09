@@ -6,5 +6,37 @@
   "verify": [
     "npm test"
   ],
-  "maxWorkers": 2
+  "maxWorkers": 4,
+  "review": {
+    "lenses": [
+      "qa",
+      "security",
+      "code",
+      "ops"
+    ]
+  },
+  "merge": {
+    "humanRisk": [
+      "high"
+    ],
+    "humanLabels": [
+      "auth",
+      "payments",
+      "pricing",
+      "schema",
+      "ops",
+      "money",
+      "needs-human"
+    ],
+    "humanPaths": [
+      "src/merge.mjs",
+      "src/store.mjs",
+      "src/lanes.mjs",
+      "hooks/**",
+      ".claude/hooks/**",
+      ".claude/settings.json",
+      "factory.config.json"
+    ],
+    "maxLines": 400
+  }
 }

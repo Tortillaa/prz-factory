@@ -56,7 +56,13 @@ Ask, with the defaults as the recommended answers:
 
 1. `baseBranch` / `protectedBranches`: the branch work lands on (detected from HEAD).
 2. `merge.maxLines` (default 400): bigger diffs wait for a person.
-3. `merge.humanLabels` (default auth, money, schema, needs-human) and `merge.humanRisk` (default high).
+3. `merge.humanLabels` (default auth, payments, pricing, schema, ops, money, needs-human) and
+   `merge.humanRisk` (default high): the business areas whose changes wait for the user.
+4. `merge.humanPaths` (default none): globs of files that always need a person, whatever the card
+   says (`src/billing/**`, `migrations/**`, `**/*.sql`, the deploy config). Ask the user where the
+   money, the permissions, the schema and the deploy live in this repo, and list those paths.
+5. `review.lenses` (default qa, security, code, ops): the experts of the review panel. Set
+   `maxWorkers` to at least that many so a panel runs fully in parallel.
 4. `maxWorkers` (default 2): parallel Orca workers. More workers, more machine and usage.
 
 Write the answers to `factory.config.json` and run `factory doctor` again: `config` must pass.

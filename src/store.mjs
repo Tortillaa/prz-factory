@@ -149,7 +149,7 @@ function findCard(board, id) {
   return card;
 }
 
-function checkColumn(column) {
+export function checkColumn(column) {
   if (!COLUMNS.includes(column)) throw new Error(`unknown column "${column}" (use: ${COLUMNS.join(', ')})`);
 }
 

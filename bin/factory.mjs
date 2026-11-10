@@ -244,6 +244,7 @@ try {
       break;
     }
     case 'list': {
+      if (opts.column !== undefined) store.checkColumn(opts.column);
       const board = store.load(file);
       const cards = opts.column ? board.cards.filter((c) => c.column === opts.column) : board.cards;
       const text = store.COLUMNS.filter((col) => !opts.column || col === opts.column)

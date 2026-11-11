@@ -102,7 +102,7 @@ Repository: ${repoRoot}
    (Claude Code and Grok find it in \`.claude/skills/\`), read ${skill} and follow that file.${lensLine}${craftLine}
 2. The card is already claimed as ${worker}: use \`--as ${worker}\` in every factory command, starting with
    \`factory start ${card.id} --lane ${lane}${lensFlag} --as ${worker} --json\`. If \`factory\` is not on PATH, run
-   \`node ${cli}\` instead.
+   \`node .prz-factory/bin/factory.mjs\` from this worktree's root (or \`node ${cli}\`) instead.
 3. Work only in this worktree and only on card #${card.id}.
 4. Finish with ${FINISH[lane]}, as the skill says. If the card cannot be done without a decision it does
    not contain, send it to \`blocked\` with the reason; do not ask the coordinator product questions.

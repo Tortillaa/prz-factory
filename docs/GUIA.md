@@ -41,25 +41,34 @@ Tú solo haces dos cosas: **mandar ideas** y **responder a las solicitudes** que
 
 ## Parte 1 · Preparar un proyecto (una sola vez)
 
-### Paso 1. Instala el comando `factory`
+No hay que instalar nada antes. Solo necesitas Node 22 o superior, git, Orca, y acceso a GitHub (el repo de la fábrica es privado: basta con haber hecho `gh auth login`).
 
-Necesitas Node 22 o superior, git y Orca.
+### Paso 1. Pídeselo a tu agente
+
+Abre el proyecto en Orca, arranca un agente (Claude Code o Grok) y escríbele:
+
+> Instala prz-factory en este repositorio: ejecuta `npx -y github:Tortillaa/prz-factory install .` y después sigue la skill factory-onboard que se acaba de instalar.
+
+El agente descarga la fábrica de GitHub, la copia dentro del proyecto y te guía por el resto: comprueba que los tests del proyecto pasan, te pregunta la política de merge y escribe las reglas para los agentes.
+
+Si prefieres hacerlo tú, en la terminal del proyecto:
 
 ```sh
-cd C:\Users\aitor\Github\Documents\prz-factory
-npm link            # deja el comando `factory` disponible en cualquier carpeta
-factory --version   # comprueba que responde
+npx -y github:Tortillaa/prz-factory install .
 ```
 
-### Paso 2. Instala la fábrica en tu proyecto
+### Paso 2. Qué ha quedado en tu proyecto
 
-```sh
-cd <tu proyecto>
-factory install .   # copia los skills y los guard hooks a .claude/ y crea factory.config.json
-factory doctor      # te dice qué falta
-```
+| Carpeta o archivo | Qué es |
+|---|---|
+| `.prz-factory/` | La fábrica entera: el CLI, el tablero web, los guards y las skills |
+| `.claude/skills/` | Las skills que leen los agentes (Claude Code y Grok) |
+| `.claude/settings.json` y `.claude/hooks/` | Los guards de seguridad |
+| `factory.config.json` | Tu configuración |
 
-También puedes abrir Claude Code en el proyecto y decir **"onboard"**: el skill `factory-onboard` hace estos pasos contigo y te pregunta lo que necesita.
+A partir de aquí, el comando de la fábrica es `node .prz-factory/bin/factory.mjs`. En esta guía se escribe `factory` para abreviar: si quieres teclear solo `factory`, ejecuta `npm link` dentro de `.prz-factory`. Comprueba que todo está bien con `node .prz-factory/bin/factory.mjs doctor`.
+
+Para actualizar la fábrica a su última versión, repite la línea de `npx`: reemplaza `.prz-factory/` y las skills, y no toca tu configuración.
 
 ### Paso 3. Ajusta `factory.config.json`
 
@@ -115,7 +124,7 @@ factory agents-md                 # escribe las reglas del proyecto en CLAUDE.md
 git add -A && git commit -m "Instala prz-factory"
 ```
 
-Hay que commitear `.claude/` y `factory.config.json`: cada agente trabaja en un worktree nuevo y los necesita.
+Hay que commitear `.prz-factory/`, `.claude/` y `factory.config.json`: cada agente trabaja en un worktree nuevo y los necesita.
 
 ---
 

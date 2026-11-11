@@ -13,7 +13,8 @@ description: >-
 The board is one JSON file shared by every worktree of the repo (`factory path` prints it).
 Never edit that file by hand: always go through the `factory` CLI, which locks and writes atomically.
 Pass `--json` and read the result; a failure prints `{"error": "..."}` and exits non-zero.
-If `factory` is not on PATH, run `node <prz-factory>/bin/factory.mjs` instead.
+If `factory` is not on PATH, run `node .prz-factory/bin/factory.mjs` from the repo or worktree root
+instead: `factory install` copies the CLI into the project, so every worktree has it.
 
 ## Columns and rules
 

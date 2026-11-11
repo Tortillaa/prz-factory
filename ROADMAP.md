@@ -126,6 +126,14 @@ Para no gastar cuota de Claude en todo, cada lane puede correr en otro agente de
 - [x] Probado con Claude Sonnet 5.5: con peticiones en lenguaje natural que no nombran la skill, eligió la correcta en 8 de 9. La novena (qué hay en el tablero) la resolvió directamente con `factory list`, sin skill.
 - [x] Spec Writer en Claude Sonnet 5.5 (`agents.spec`), con un subagente Opus 5.5 para las tarjetas difíciles de redactar (`factory-spec` fija cuándo).
 
+## Fase 11 · Instalar sin instalar nada ✅
+
+- [x] `install` copia el runtime de la fábrica al proyecto (`.prz-factory/`): el proyecto ya no depende de un clon de este repo ni de `npm link`, y cada worktree tiene el CLI porque la carpeta se commitea.
+- [x] Un solo comando desde cualquier repo: `npx -y github:Tortillaa/prz-factory install .`, o un prompt para el agente: «Instala prz-factory en este repositorio: ejecuta `npx -y github:Tortillaa/prz-factory install .` y después sigue la skill factory-onboard que se acaba de instalar.».
+- [x] Skills, spec de los workers, hook de SessionStart y `doctor` usan `node .prz-factory/bin/factory.mjs` cuando `factory` no está en el PATH. `doctor` solo marca Grok como fallo si alguna lane corre en Grok.
+- [x] Probado: un repo vacío queda listo con `npm exec` sobre este repo local, `doctor` en verde, y el tablero se usa desde un worktree.
+- [ ] Subir `main` a GitHub: hasta entonces, `npx github:` descarga la versión antigua.
+
 ## Pendiente fuera del código
 
 - [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.

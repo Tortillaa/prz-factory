@@ -470,7 +470,9 @@ try {
     case 'install': {
       const report = install(args[0] || '.', { hooks: !opts['no-hooks'] });
       const skills = report.skills.map((s) => `  ${s.status.padEnd(9)} ${s.name}${s.reason ? ` (${s.reason})` : ''}`).join('\n');
-      print(report, `skills → ${report.target}\n${skills}\nconfig: ${report.config.status} ${report.config.file}\nhooks: ${report.hooks ? report.hooks.file : 'skipped (--no-hooks)'}`);
+      const rt = report.runtime;
+      const next = rt.status === 'skipped' ? '' : `\n\nNext:\n  1. Commit .claude/, ${path.basename(rt.dir)}/ and factory.config.json (worker worktrees need them).\n  2. Ask your agent: "onboard" (skill factory-onboard): it proves verify and sets the merge policy.\n  3. The CLI is now in the repo: node ${path.basename(rt.dir)}/bin/factory.mjs <command> (or \`factory\` if on PATH).`;
+      print(report, `skills → ${report.target}\n${skills}\nruntime: ${rt.status} ${rt.dir}${rt.reason ? ` (${rt.reason})` : ''}\nconfig: ${report.config.status} ${report.config.file}\nhooks: ${report.hooks ? report.hooks.file : 'skipped (--no-hooks)'}${next}`);
       break;
     }
     case 'doctor': {

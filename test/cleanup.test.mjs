@@ -88,7 +88,8 @@ test('install wires the guard hooks and keeps the user own hooks', () => {
   const commands = once.hooks.PreToolUse.flatMap((g) => g.hooks.map((h) => h.command));
   assert.ok(commands.includes('my-lint.sh'));
   assert.equal(commands.filter((c) => c.endsWith('secrets')).length, 1, 'no duplicate guard');
-  assert.ok(once.hooks.SessionStart.some((g) => g.hooks.some((h) => h.command.startsWith('factory cleanup --hint'))));
+  // The vendored CLI first, then one on PATH: either way the hint runs.
+  assert.ok(once.hooks.SessionStart.some((g) => g.hooks.some((h) => /\.prz-factory\/bin\/factory\.mjs" cleanup --hint .*\|\| factory cleanup --hint/.test(h.command))));
 
   const { r } = repo();
   install(r);

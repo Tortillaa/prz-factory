@@ -25,6 +25,7 @@ Also backlog (parked), qa (\`qa\` cards) and blocked (waiting for a person). \`f
 
 | Rule | Value |
 |---|---|
+| CLI | \`factory\`, or \`node .prz-factory/bin/factory.mjs\` (the factory lives in this repo: nothing to install) |
 | Base branch | \`${config.baseBranch}\` (protected: ${config.protectedBranches.join(', ')}) |
 | Proof of build | ${config.verify.length ? config.verify.map((v) => `\`${v}\``).join(', ') : '**not set: add `verify` to factory.config.json**'} |
 | Review panel | ${config.review.lenses.join(' · ')}: every lens must pass the same commit |

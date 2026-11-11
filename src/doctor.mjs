@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, execSync } from 'node:child_process';
 import { loadConfig, repoRoot } from './config.mjs';
-import { listSkills } from './install.mjs';
+import { listSkills, RUNTIME_DIR } from './install.mjs';
 import * as store from './store.mjs';
 
 // Runs a fixed command line. Goes through the shell so Windows .cmd shims (orca, factory) resolve.
@@ -43,7 +43,10 @@ export function doctor(cwd = process.cwd()) {
   add('orca', !!orca, orca ? `${orcaCmd} found${inOrca ? ', running inside Orca' : ''}` : `${orcaCmd} not found`, 'install Orca (onorca.dev); workers need it');
 
   const factoryOnPath = run(process.platform === 'win32' ? 'where' : 'which', ['factory'], cwd);
-  add('factory on PATH', !!factoryOnPath, factoryOnPath ? factoryOnPath.split(/\r?\n/)[0] : 'not found', 'run `npm link` in the prz-factory repo');
+  // The CLI either lives in the repo (vendored by `factory install`) or is on PATH (npm link).
+  const vendored = path.join(repoRoot(cwd), RUNTIME_DIR, 'bin', 'factory.mjs');
+  const cliWhere = fs.existsSync(vendored) ? `${RUNTIME_DIR}/bin/factory.mjs (in the repo)` : factoryOnPath ? factoryOnPath.split(/\r?\n/)[0] : null;
+  add('factory CLI', !!cliWhere, cliWhere || 'not in the repo and not on PATH', 'run `npx -y github:Tortillaa/prz-factory install .` in the repo');
 
   try {
     const { file, exists, config } = loadConfig(root);
@@ -91,7 +94,10 @@ export function doctor(cwd = process.cwd()) {
         trusted = JSON.parse(out).projectTrusted === true;
       } catch {}
       if (trusted === null) add('grok', false, `${grok}: could not read \`grok inspect --json\``, 'run `grok inspect` here and check it works');
-      else add('grok', trusted, trusted ? 'project trusted: Grok loads the rules, skills and guard hooks in every worktree' : 'project not trusted: Grok workers would run without the rules, skills and guard hooks', `in ${root} run \`grok --trust inspect\` once (it trusts this repo and all its worktrees)`);
+      else if (trusted) add('grok', true, 'project trusted: Grok loads the rules, skills and guard hooks in every worktree');
+      // Only a problem when a lane actually runs on Grok here.
+      else if (!usesGrok) add('grok', true, 'installed, project not trusted (no lane runs on grok here)');
+      else add('grok', false, 'project not trusted: Grok workers would run without the rules, skills and guard hooks', `in ${root} run \`grok --trust inspect\` once (it trusts this repo and all its worktrees)`);
     }
   }
 

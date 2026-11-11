@@ -14,28 +14,39 @@ Interactive, one step at a time, recommended answer first. It is safe to re-run:
 before it changes anything, and nothing outside `.claude/`, `factory.config.json` and the managed
 block is touched. Report one line per step: `✔ step · what happened`.
 
-## 1 · Checks
+## 1 · Install
+
+The factory needs nothing installed beforehand: one command fetches it from GitHub and copies it
+into the project (Node 22+ and git are all it takes; GitHub access through `gh auth login` or the
+user's git credentials, since the repo is private).
+
+```text
+npx -y github:Tortillaa/prz-factory install . --json
+```
+
+If the project already has `.prz-factory/`, use the copy it has instead (`node .prz-factory/bin/factory.mjs
+install . --json` refreshes skills, hooks and config from it); run the `npx` line only to update
+the factory to its latest version. From here on, `factory` means `node .prz-factory/bin/factory.mjs`
+when it is not on PATH.
+
+## 2 · Checks
 
 ```text
 factory doctor --json
 ```
 
 `node`, `git` and `git repo` must pass, or stop and say how to fix them. `orca` missing is fine for
-setup (only `factory-run` needs it): say so. `factory on PATH` missing: offer `npm link` in the
-prz-factory checkout.
+setup (only `factory-run` needs it): say so.
 
-## 2 · Install
+## 3 · What install did
 
-```text
-factory install . --json
-```
-
-Copies the skills and the guard hooks into `.claude/` and writes `factory.config.json` with a guess
+It copied the factory's own runtime into `.prz-factory/` (the CLI, the web board, the guard
+hook and the skills: commit it, every worker worktree needs it), the skills and the guard hooks into `.claude/`, and wrote `factory.config.json` with a guess
 for `baseBranch` and `verify` when it does not exist. A `skipped` skill means the user has their
 own skill with that name: tell them, never overwrite it. Invalid `.claude/settings.json`: show the
 error and ask them to fix it (or re-run with `--no-hooks` if they decline the hooks).
 
-## 3 · Prove the build
+## 4 · Prove the build
 
 The merge gate lands nothing without `verify`. Read `factory.config.json`, show the guessed
 commands, and run them on the base branch:
@@ -51,7 +62,7 @@ factory verify --json
   the project's own code is a finding, not something to fix here: offer to file it with `factory-collect`.
 - Slow suites: set `verifyTimeoutMinutes` to fit.
 
-## 4 · Policy
+## 5 · Policy
 
 Ask, with the defaults as the recommended answers:
 
@@ -74,7 +85,7 @@ Ask, with the defaults as the recommended answers:
 
 Write the answers to `factory.config.json` and run `factory doctor` again: `config` must pass.
 
-## 5 · Tell the agents
+## 6 · Tell the agents
 
 ```text
 factory agents-md --json
@@ -83,9 +94,9 @@ factory agents-md --json
 Writes the managed block (between `prz-factory:begin` / `prz-factory:end`) into `CLAUDE.md`, else
 `AGENTS.md`, else a new `CLAUDE.md`. Re-run it after any config change.
 
-## 6 · Commit and first card
+## 7 · Commit and first card
 
-Show `git status` and offer to commit `.claude/`, `factory.config.json` and the agents file
+Show `git status` and offer to commit `.prz-factory/`, `.claude/`, `factory.config.json` and the agents file
 (`🔧 [chore] factory: set up prz-factory`): workers in new worktrees only get the skills and
 guards if they are committed. Commit only when the user says yes.
 

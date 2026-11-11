@@ -8,18 +8,21 @@ Inspirada en [super-board](https://github.com/EricTechPro/super-board) (MIT) e i
 
 ## Requisitos
 
-Node 22 o superior, git, y Orca para lanzar workers (el tablero, el CLI y los lanes funcionan sin él).
+Node 22 o superior, git, acceso a este repo en GitHub (es privado: `gh auth login` o tus credenciales de git), y Orca para lanzar workers (el tablero, el CLI y los lanes funcionan sin él). No hace falta clonar ni instalar nada más.
 
 ## Instalar en un proyecto
 
+Abre tu agente (Claude Code, Grok…) en el repositorio y pídele:
+
+> Instala prz-factory en este repositorio: ejecuta `npx -y github:Tortillaa/prz-factory install .` y después sigue la skill factory-onboard que se acaba de instalar.
+
+O hazlo tú en la terminal del proyecto:
+
 ```sh
-git clone <este repo> prz-factory && cd prz-factory && npm link   # deja `factory` en el PATH
-cd <tu proyecto>
-factory install .      # skills y guard hooks en .claude/, factory.config.json
-factory doctor         # qué falta
+npx -y github:Tortillaa/prz-factory install .   # lo descarga de GitHub y lo copia al proyecto
 ```
 
-O, desde Claude Code en el proyecto, pide "onboard" y el skill `factory-onboard` te guía: comprueba `verify`, la política de merge y el bloque para agentes.
+La fábrica entera (CLI, tablero web, guards y skills) queda dentro del proyecto, en `.prz-factory/`, `.claude/` y `factory.config.json`: commitéalos y cada worktree la tendrá. Desde entonces el comando es `node .prz-factory/bin/factory.mjs` (o `factory`, si además lo tienes en el PATH con `npm link`). Para actualizar a la última versión, vuelve a ejecutar la línea de `npx`.
 
 ## Usar
 

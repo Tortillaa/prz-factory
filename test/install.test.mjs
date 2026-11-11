@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { install, listSkills, MARKER, FACTORY_ROOT } from '../src/install.mjs';
 import { loadConfig, DEFAULTS } from '../src/config.mjs';
 import { doctor } from '../src/doctor.mjs';
@@ -96,4 +96,58 @@ test('every skill is picked by the task: model-invocable, with a task-driven des
       assert.match(desc, /Triggers:.*"[^"]*[áéíóúñ¿]|Triggers:.*"(revisa|arranca|busca|instala|construye|redacta|prueba|mergea)/i, `${name}: give Spanish trigger phrases`);
     }
   }
+});
+
+// The project needs nothing installed: install copies the factory's runtime into it, and that
+// copy runs the CLI, re-installs itself, and is found by every worktree of the repo.
+test('install vendors the runtime: the project runs the factory with nothing installed', async () => {
+  const { RUNTIME_DIR } = await import('../src/install.mjs');
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-vendor-')));
+  const repo = path.join(dir, 'repo');
+  fs.mkdirSync(repo);
+  const git = (...a) => execFileSync('git', a, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 't@e.com');
+  git('config', 'user.name', 't');
+  fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ name: 'app', scripts: { test: 'node -e 0' } }));
+
+  const report = install(repo);
+  assert.equal(report.runtime.status, 'installed');
+  const cli = path.join(repo, RUNTIME_DIR, 'bin', 'factory.mjs');
+  for (const part of ['bin/factory.mjs', 'src/store.mjs', 'public/index.html', 'hooks/factory-guard.mjs', 'skills/factory-spec/SKILL.md', 'package.json', MARKER]) {
+    assert.ok(fs.existsSync(path.join(repo, RUNTIME_DIR, part)), part);
+  }
+  assert.ok(!fs.existsSync(path.join(repo, RUNTIME_DIR, 'test')), 'tests and evals stay out of the project');
+
+  const run = (cwd, ...args) => execFileSync(process.execPath, [cli, ...args], { cwd, encoding: 'utf8', env: { ...process.env, FACTORY_BOARD: '' } });
+  assert.match(run(repo, '--version'), /\d+\.\d+\.\d+/);
+  // The vendored copy re-installs from itself without deleting itself.
+  const again = JSON.parse(run(repo, 'install', '.', '--json'));
+  assert.equal(again.runtime.status, 'skipped');
+  assert.ok(fs.existsSync(cli));
+  // The board and the CLI work from a worker worktree once the copy is committed.
+  git('add', '-A');
+  git('commit', '-qm', 'install prz-factory');
+  const wt = path.join(dir, 'wt');
+  git('worktree', 'add', '-q', '--detach', wt, 'main');
+  const wtCli = path.join(wt, RUNTIME_DIR, 'bin', 'factory.mjs');
+  execFileSync(process.execPath, [wtCli, 'add', 'idea', '--column', 'spec'], { cwd: wt, env: { ...process.env, FACTORY_BOARD: '' } });
+  assert.match(run(repo, 'list', '--column', 'spec'), /#1 idea/, 'one board shared by the repo and its worktrees');
+  const doc = spawnSync(process.execPath, [cli, 'doctor', '--json'], { cwd: repo, encoding: 'utf8', env: { ...process.env, FACTORY_BOARD: '' } });
+  const checks = JSON.parse(doc.stdout).checks;
+  assert.equal(checks.find((c) => c.name === 'factory CLI').ok, true);
+  assert.equal(checks.find((c) => c.name === 'skills').ok, true);
+  // The session hook runs the vendored CLI, not one on PATH.
+  const settings = JSON.parse(fs.readFileSync(path.join(repo, '.claude', 'settings.json'), 'utf8'));
+  assert.match(settings.hooks.SessionStart[0].hooks[0].command, /\.prz-factory\/bin\/factory\.mjs" cleanup --hint/);
+});
+
+test('install never vendors into the factory itself, nor over a folder it does not manage', () => {
+  assert.equal(install(FACTORY_ROOT).runtime.status, 'skipped');
+  assert.ok(!fs.existsSync(path.join(FACTORY_ROOT, '.prz-factory')));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-own-'));
+  fs.mkdirSync(path.join(dir, '.prz-factory'));
+  fs.writeFileSync(path.join(dir, '.prz-factory', 'mine.txt'), 'x');
+  assert.equal(install(dir).runtime.status, 'skipped');
+  assert.ok(fs.existsSync(path.join(dir, '.prz-factory', 'mine.txt')));
 });

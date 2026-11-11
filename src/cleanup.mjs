@@ -6,9 +6,10 @@ import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { git, tryGit, worktrees, isAncestor, commonDir, samePath, revParse } from './git.mjs';
 
-const ACTIVE = ['backlog', 'ready', 'building', 'qa', 'review', 'blocked'];
-const FACTORY_WT = /^factory-(\d+)$/;
-const FACTORY_BRANCH = /^factory\/(\d+)-|^[^/]+\/factory-(\d+)$/;
+const ACTIVE = ['backlog', 'spec', 'ready', 'building', 'qa', 'review', 'merge', 'blocked'];
+// factory-<id> for the card, factory-<id>-<lens> for each reviewer of its panel.
+const FACTORY_WT = /^factory-(\d+)(?:-[a-z]+)?$/;
+const FACTORY_BRANCH = /^factory\/(\d+)-|^[^/]+\/factory-(\d+)(?:-[a-z]+)?$/;
 
 function cardIdOf(name, re) {
   const m = name.match(re);
@@ -25,7 +26,10 @@ export function findLeftovers({ cwd, board, config }) {
   const trees = worktrees(cwd);
   const main = trees[0].path;
   const active = new Set(board.cards.filter((c) => ACTIVE.includes(c.column)).map((c) => c.id));
-  const activeTrees = board.cards.filter((c) => ACTIVE.includes(c.column) && c.run.worktree).map((c) => c.run.worktree);
+  const activeTrees = board.cards
+    .filter((c) => ACTIVE.includes(c.column))
+    .flatMap((c) => [c.run.worktree, ...Object.values(c.panel?.lenses || {}).map((s) => s.worktree)])
+    .filter(Boolean);
   const here = tryGit(['rev-parse', '--show-toplevel'], cwd);
 
   const worktreesOut = [];

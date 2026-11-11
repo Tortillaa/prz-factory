@@ -5,11 +5,12 @@ import path from 'node:path';
 import * as store from './store.mjs';
 import { riskLevel } from './ticket.mjs';
 import { runVerify, verifySummary } from './verify.mjs';
-import { git, revParse, isAncestor, isClean, worktrees, commonDir, diffLines } from './git.mjs';
+import { git, revParse, isAncestor, isClean, worktrees, commonDir, diffLines, diffFiles, globToRegExp } from './git.mjs';
+import { pendingLenses } from './lanes.mjs';
 import { pushBase } from './github.mjs';
 
 // Exit codes, also used by the CLI.
-export const CODES = { merged: 0, error: 1, 'head-moved': 6, 'needs-human': 7, behind: 8, 'verify-failed': 9, 'base-dirty': 10 };
+export const CODES = { merged: 0, error: 1, 'head-moved': 6, 'needs-human': 7, behind: 8, 'verify-failed': 9, 'base-dirty': 10, 'panel-incomplete': 11 };
 
 const short = (sha) => sha.slice(0, 8);
 // Set only when the gate holds a merge for a person; the only label that allows approving one.
@@ -19,13 +20,19 @@ function result(status, message, extra = {}) {
   return { status, code: CODES[status], message, ...extra };
 }
 
+const ESCALATED = 'needs-human';
+
 // Why a person should merge this card instead of the gate. Empty when the gate may merge.
-export function humanReasons(card, lines, policy) {
+export function humanReasons(card, lines, policy, files = []) {
   const reasons = [];
   const risk = riskLevel(card.body);
   if (risk && policy.humanRisk.includes(risk)) reasons.push(`riesgo ${risk}`);
-  const labels = card.labels.filter((l) => policy.humanLabels.includes(l));
+  // needs-human is how a reviewer (or the user) escalates one card: it holds whatever the config lists.
+  const labels = card.labels.filter((l) => l === ESCALATED || policy.humanLabels.includes(l));
   if (labels.length) reasons.push(`label ${labels.join(', ')}`);
+  const globs = (policy.humanPaths || []).map(globToRegExp);
+  const touched = files.filter((f) => globs.some((g) => g.test(f)));
+  if (touched.length) reasons.push(`rutas sensibles: ${touched.slice(0, 5).join(', ')}${touched.length > 5 ? ` y ${touched.length - 5} más` : ''}`);
   if (lines > policy.maxLines) reasons.push(`diff grande: ${lines} líneas (máximo ${policy.maxLines})`);
   return reasons;
 }
@@ -88,11 +95,19 @@ export function mergeCard({ file, id, who = 'merge-gate', sha, human = false, cw
     // Only a merge the gate itself held for a person (label merge-approval) can be approved from
     // blocked. needs-you alone also marks cards that bounced or whose workers failed: never merge those.
     const awaitingHuman = human && card.column === 'blocked' && card.labels.includes(APPROVAL);
-    if (card.column !== 'review' && !awaitingHuman) {
-      return result('error', `card #${id} is in ${card.column}; only cards in review can be merged`);
-    }
     const branch = card.run.branch;
-    if (!branch && card.labels.includes('qa')) {
+    // A qa card tests the base branch: its QA worker closes it from qa (or review, on older boards).
+    const qaClose = !branch && card.labels.includes('qa') && ['qa', 'review'].includes(card.column);
+    if (card.column !== 'merge' && !awaitingHuman && !qaClose) {
+      return result('error', `card #${id} is in ${card.column}; only cards in merge (the whole review panel passed them) can be merged`);
+    }
+    // A card in the merge column that cannot land as reviewed goes back to a new review round.
+    const reReview = (status, msg, extra) => {
+      if (card.column === 'merge') sendBack(file, id, who, 'review', `[merge] ↩️ vuelve a revisión
+${msg}`);
+      return result(status, msg, extra);
+    };
+    if (qaClose) {
       // A qa card tests what is already on the base branch: nothing to merge, QA's pass closes it.
       store.update(file, (b) => {
         store.commentCard(b, id, { role: 'merge', text: '[merge] ✅ tarjeta de QA sin código propio: cerrada sin merge' });
@@ -108,7 +123,7 @@ export function mergeCard({ file, id, who = 'merge-gate', sha, human = false, cw
     const expected = sha || card.run.reviewedSha;
     if (!expected) return result('error', 'pass --sha <reviewed commit> (or record it with factory edit --reviewed-sha)');
     if (!head.startsWith(expected)) {
-      return result('head-moved', `${branch} is at ${short(head)} but the review approved ${short(expected)}: review the new commits first`, { head });
+      return reReview('head-moved', `${branch} is at ${short(head)} but the review approved ${short(expected)}: review the new commits first`, { head });
     }
 
     const base = config.baseBranch;
@@ -120,8 +135,15 @@ export function mergeCard({ file, id, who = 'merge-gate', sha, human = false, cw
       return result('behind', msg, { head, base: baseSha });
     }
 
+    // Agents merge only what the whole review panel passed, on this very head.
+    if (!human) {
+      const pending = pendingLenses(card, config);
+      if (pending.length) return reReview('panel-incomplete', `the review panel has not passed ${short(head)} yet: waiting on ${pending.join(', ')}`, { head, pending });
+      if (!card.panel.head || card.panel.head !== head) return reReview('head-moved', `the panel reviewed ${card.panel.head ? short(card.panel.head) : 'nothing'}, the branch is at ${short(head)}`, { head });
+    }
+
     const lines = diffLines(baseSha, head, cwd);
-    const reasons = human ? [] : humanReasons(card, lines, config.merge);
+    const reasons = human ? [] : humanReasons(card, lines, config.merge, diffFiles(baseSha, head, cwd));
     if (reasons.length) {
       const msg = `Merge para una persona: ${reasons.join('; ')}.\nPara aprobarlo: revisa ${branch} (${short(head)}) y ejecuta \`factory merge ${id} --sha ${short(head)} --human\`.`;
       // Pin the commit the person is asked to approve: approving later must not land newer commits.
@@ -144,7 +166,10 @@ export function mergeCard({ file, id, who = 'merge-gate', sha, human = false, cw
     if (baseTree) {
       if (!isClean(baseTree.path)) {
         const msg = `${base} is checked out in ${baseTree.path} with uncommitted changes; commit or stash them and run the merge again`;
-        release(file, id, `[merge] ⏸ ${msg}`);
+        // Only the person can clean their checkout: from merge, the card waits for them in blocked
+        // (moving it back to merge afterwards lands the same reviewed commit with no new review).
+        if (card.column === 'merge') sendBack(file, id, who, 'blocked', `[merge] ⏸ ${msg}\nCuando esté limpio, mueve la tarjeta otra vez a merge.`, ['needs-you']);
+        else release(file, id, `[merge] ⏸ ${msg}`);
         return result('base-dirty', msg, { head });
       }
       git(['merge', '--ff-only', head], baseTree.path);

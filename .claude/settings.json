@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "factory cleanup --hint 2>/dev/null || true"
+            "command": "node \"$CLAUDE_PROJECT_DIR/.prz-factory/bin/factory.mjs\" cleanup --hint 2>/dev/null || factory cleanup --hint 2>/dev/null || true"
           }
         ]
       }

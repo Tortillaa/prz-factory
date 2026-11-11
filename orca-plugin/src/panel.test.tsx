@@ -7,7 +7,7 @@ const board = (name: string, extra: Partial<BoardsSnapshot['boards'][number]> = 
   key: `/r/${name}/.git`,
   name,
   file: `/r/${name}/.git/factory/board.json`,
-  counts: { backlog: 0, ready: 0, building: 1, qa: 0, review: 0, blocked: 1, done: 0 },
+  counts: { backlog: 0, spec: 0, ready: 0, building: 1, qa: 0, review: 0, merge: 0, blocked: 1, done: 0 },
   cards: [
     { id: 3, title: 'Mail sender', column: 'building', labels: [], assignee: 'build-3', waitingOn: [] },
     { id: 4, title: 'Pay', column: 'blocked', labels: ['needs-you'], assignee: null, waitingOn: [] }

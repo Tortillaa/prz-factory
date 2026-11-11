@@ -1,10 +1,11 @@
 ---
 name: factory-lint
 description: >-
-  Turn rough ideas or vague cards into cards a worker can build without guessing: write them in the
-  card format, run `factory lint`, and resolve the judgment calls the linter cannot (ambiguity, size,
-  title/body mismatch, missing decisions) by asking the user. Use when the user says "lint the board",
-  "revisa las tarjetas", "write a card for…", "crea una tarjeta", or before moving cards to ready.
+  Write or sharpen cards together with the user: put an idea in the card format, run `factory
+  lint`, and settle what the linter cannot (ambiguity, size, title and body that disagree, missing
+  decisions) by asking the user. Use when the user wants to write or review cards themselves before
+  they reach Ready, rather than leave it to the spec writer. Triggers: "revisa las tarjetas", "lint
+  the board", "escribamos juntos la tarjeta", "write a card for…", "¿está bien esta tarjeta?".
 ---
 
 # factory-lint
@@ -28,11 +29,14 @@ Flag a card when:
 1. **Ambiguous:** a criterion could reasonably mean two different things. Name both readings.
 2. **No trigger + outcome:** "login works". Rewrite as given / when / then.
 3. **No test surface:** nothing says where it is seen (route, command, file, function).
-4. **Too big:** likely over the project's `merge.maxLines`, or touches several unrelated areas. Split it into vertical slices, each with its own ACs, linked with `--blocked-by`.
-5. **Bundled:** unrelated features in one card. Split.
-6. **Title and body disagree.** Ask which is right.
-7. **A decision is missing:** product, design, data or security choices a worker would have to invent. Ask the user; write the answer into Context.
-8. **Proven against a fake only:** an AC tested with a mock while nothing builds the real thing. Name the card that does, or file it.
+4. **Should not exist, or not all of it:** the `ponytail` question. The problem is already solved in
+   the code, or the card asks for options and flexibility nobody needs. Propose the smallest version
+   that does the core job.
+5. **Too big:** likely over the project's `merge.maxLines`, or touches several unrelated areas. Split it into vertical slices, each with its own ACs, linked with `--blocked-by`.
+6. **Bundled:** unrelated features in one card. Split.
+7. **Title and body disagree.** Ask which is right.
+8. **A decision is missing:** product, design, data or security choices a worker would have to invent. Ask the user; write the answer into Context.
+9. **Proven against a fake only:** an AC tested with a mock while nothing builds the real thing. Name the card that does, or file it.
 
 ## 3 · Fix it with the user
 
@@ -49,6 +53,10 @@ factory lint <id> --json
 Loop until `factory lint` has no errors and every judgment check is settled. Warnings (vague
 words, many ACs) need an answer too: fix them or tell the user why they stay.
 
+Writing the card yourself is optional: an idea filed in the `spec` column (`factory add "<idea>"
+--column spec`, or "Nueva idea" on the board) is written up by the spec writer (`factory-spec`) and
+sent to ready with nobody in between. Use this skill when the user wants to decide the details.
+
 ## 4 · Hand back
 
 List each card: `✔ #12 ready to move` or `❓ #13 waiting on <question>`. Moving cards to `ready` is
@@ -57,4 +65,4 @@ the user's call (on the board, or `factory move <id> ready` when they ask you to
 ## Never
 
 - Invent answers to product questions. Ask.
-- Move a card to ready with `--force`, or edit a card that is in flight (building, qa, review).
+- Move a card to ready with `--force`, or edit a card that is in flight (spec with a worker, building, qa, review).

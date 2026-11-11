@@ -1,10 +1,11 @@
 ---
 name: factory-collect
 description: >-
-  Find problems in a project, verify each one, and file the real ones as deduplicated backlog cards
-  in the card format. Sources: failing verify, test and type errors, TODO/FIXME debt, dependency
-  audits, and logs or reports the user hands over. Never edits code. Use when the user says
-  "collect", "busca problemas", "what's broken", "turn these errors into cards", or hands over logs.
+  Find problems in a project, verify each one, and file the real ones as deduplicated cards: failing
+  verify, test and type errors, TODO/FIXME debt, dependency audits, and logs or reports the user
+  hands over. Never edits code. Use whenever the user wants to know what is broken or turn errors,
+  logs or debt into cards. Triggers: "busca problemas", "qué está roto", "convierte estos errores en
+  tarjetas", "collect", "what's broken", or a pasted log or stack trace to file.
 ---
 
 # factory-collect

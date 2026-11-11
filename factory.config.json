@@ -6,5 +6,56 @@
   "verify": [
     "npm test"
   ],
-  "maxWorkers": 2
+  "maxWorkers": 4,
+  "review": {
+    "lenses": [
+      "qa",
+      "security",
+      "code",
+      "ops"
+    ]
+  },
+  "agents": {
+    "spec": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5"
+    },
+    "build": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5"
+    },
+    "merge": {
+      "agent": "claude",
+      "model": "claude-haiku-5-5"
+    },
+    "review": {
+      "agent": "grok",
+      "model": "grok-4.7",
+      "effort": "high"
+    }
+  },
+  "merge": {
+    "humanRisk": [
+      "high"
+    ],
+    "humanLabels": [
+      "auth",
+      "payments",
+      "pricing",
+      "schema",
+      "ops",
+      "money",
+      "needs-human"
+    ],
+    "humanPaths": [
+      "src/merge.mjs",
+      "src/store.mjs",
+      "src/lanes.mjs",
+      "hooks/**",
+      ".claude/hooks/**",
+      ".claude/settings.json",
+      "factory.config.json"
+    ],
+    "maxLines": 400
+  }
 }

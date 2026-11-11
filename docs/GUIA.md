@@ -1,0 +1,286 @@
+# Guía de uso de prz-factory
+
+Cómo usar la fábrica, paso a paso: desde que escribes una idea hasta que el cambio está en `main`.
+
+## El proceso de un vistazo
+
+```text
+ Tú                Spec Writer        Builder          Panel de reviewers            Merge gate
+ ──                ───────────        ───────          ──────────────────            ──────────
+ escribes   →      redacta la   →     construye   →    qa · security · code · ops →  Agente de merge
+ una idea          tarjeta            con tests        (todos a la vez)              cambio pequeño: se mergea solo
+                                                                                    toca el negocio: te pide aprobación
+
+ columna:  spec  →  ready  →  building  →  review  →  merge  →  done
+                                                         └────→  blocked (te espera a ti)
+```
+
+En cada paso, el agente carga la skill **ponytail** y trabaja como un desarrollador senior que no escribe una línea de más. Antes de añadir código recorre esta escalera y se queda con el primer peldaño que resuelve el problema entero:
+
+1. ¿Esto tiene que existir?
+2. ¿Ya está en este código?
+3. ¿Lo da la librería estándar o la plataforma?
+4. ¿Lo da una dependencia que ya está instalada?
+5. ¿Cabe en una línea que se entienda de un vistazo?
+6. Si no, el mínimo código que funcione.
+
+Nunca recorta la validación, el manejo de errores que evita perder datos, la seguridad ni nada que hayas pedido tú.
+
+Tú solo haces dos cosas: **mandar ideas** y **responder a las solicitudes** que te llegan al tablero. Todo lo demás lo hacen agentes, cada uno en su propio worktree de Orca.
+
+| Quién | Qué hace | Qué no hace nunca |
+|---|---|---|
+| **Spec Writer** (Sonnet 5.5) | Lee el código, recorta la idea a la versión más pequeña que resuelve el problema, la convierte en una tarjeta completa, decide si toca el negocio y la pasa a Ready él solo. Si la tarjeta es difícil de redactar, pide ayuda a un subagente Opus 5.5 | Escribir código, inventarse una decisión de producto |
+| **Builder** (Sonnet 5.5) | Construye la tarjeta en su rama, con los tests primero y el mínimo código; para una parte difícil llama a un subagente Opus 5.5. Al entregar dice qué ha decidido no construir (`Skipped:`) | Mergear |
+| **Reviewers** (uno por lente) | Revisan el mismo commit en paralelo, cada uno con su especialidad, y devuelven el código que no debería existir | Arreglar el código, revisar fuera de su lente |
+| **Agente de merge** | Mira si el cambio toca el negocio, te explica qué cambia y cómo deshacerlo, y lanza el merge gate | Cambiar código, quitar una etiqueta de negocio o aprobar por ti |
+| **Merge gate** | Comprobación final automática: mergea, o deja la solicitud para ti | Mergear algo que no aprobó el panel entero |
+| **Coordinador** | Lanza a los demás y te avisa | Construir, revisar o mergear |
+
+---
+
+## Parte 1 · Preparar un proyecto (una sola vez)
+
+No hay que instalar nada antes. Solo necesitas Node 22 o superior, git, Orca, y acceso a GitHub (el repo de la fábrica es privado: basta con haber hecho `gh auth login`).
+
+### Paso 1. Pídeselo a tu agente
+
+Abre el proyecto en Orca, arranca un agente (Claude Code o Grok) y escríbele:
+
+> Instala prz-factory en este repositorio: ejecuta `npx -y github:Tortillaa/prz-factory install .` y después sigue la skill factory-onboard que se acaba de instalar.
+
+El agente descarga la fábrica de GitHub, la copia dentro del proyecto y te guía por el resto: comprueba que los tests del proyecto pasan, te pregunta la política de merge y escribe las reglas para los agentes.
+
+Si prefieres hacerlo tú, en la terminal del proyecto:
+
+```sh
+npx -y github:Tortillaa/prz-factory install .
+```
+
+### Paso 2. Qué ha quedado en tu proyecto
+
+| Carpeta o archivo | Qué es |
+|---|---|
+| `.prz-factory/` | La fábrica entera: el CLI, el tablero web, los guards y las skills |
+| `.claude/skills/` | Las skills que leen los agentes (Claude Code y Grok) |
+| `.claude/settings.json` y `.claude/hooks/` | Los guards de seguridad |
+| `factory.config.json` | Tu configuración |
+
+A partir de aquí, el comando de la fábrica es `node .prz-factory/bin/factory.mjs`. En esta guía se escribe `factory` para abreviar: si quieres teclear solo `factory`, ejecuta `npm link` dentro de `.prz-factory`. Comprueba que todo está bien con `node .prz-factory/bin/factory.mjs doctor`.
+
+Para actualizar la fábrica a su última versión, repite la línea de `npx`: reemplaza `.prz-factory/` y las skills, y no toca tu configuración.
+
+### Paso 3. Ajusta `factory.config.json`
+
+Es el archivo donde decides cómo se comporta la fábrica en ese proyecto. Lo más importante:
+
+```json
+{
+  "baseBranch": "main",
+  "verify": ["npm test"],
+  "maxWorkers": 4,
+  "review": { "lenses": ["qa", "security", "code", "ops"] },
+  "merge": {
+    "humanRisk": ["high"],
+    "humanLabels": ["auth", "payments", "pricing", "schema", "ops", "money", "needs-human"],
+    "humanPaths": ["src/billing/**", "migrations/**", "**/*.sql"],
+    "maxLines": 400
+  }
+}
+```
+
+| Campo | Qué decide |
+|---|---|
+| `verify` | Los comandos que demuestran que el proyecto funciona. Sin ellos, el merge gate no mergea nada. |
+| `maxWorkers` | Cuántos agentes trabajan a la vez. Ponlo al menos igual al número de reviewers (4) para que el panel corra entero en paralelo. |
+| `review.lenses` | Qué reviewers expertos revisan cada cambio. |
+| `merge.humanLabels` | Las áreas de negocio. Una tarjeta con una de estas etiquetas nunca se mergea sola. |
+| `merge.humanPaths` | **Las rutas sensibles de tu proyecto.** Si un cambio toca un archivo de esta lista, te pide aprobación, diga lo que diga la tarjeta. Es tu red de seguridad: no depende del criterio de ningún agente. |
+| `merge.maxLines` | Un cambio con más líneas que esto también espera tu aprobación. |
+
+**Dedica un minuto a `humanPaths`.** Pon ahí las carpetas donde vive el dinero, los permisos, la base de datos y el despliegue de tu proyecto.
+
+### Paso 3b. Elige qué agente hace cada trabajo (opcional)
+
+Por defecto, todos los pasos corren en Claude. Para gastar menos cuota de Claude, puedes mandar algún paso a otro agente de Orca. Por ejemplo, los reviewers a Grok:
+
+```json
+"agents": {
+  "review": { "agent": "grok", "model": "grok-4.7", "effort": "high" }
+}
+```
+
+Para usar Grok, una sola vez:
+
+1. Instala Grok Build: en PowerShell, `irm https://x.ai/cli/install.ps1 | iex`.
+2. Ejecuta `grok` e inicia sesión.
+3. En la carpeta del proyecto, ejecuta `grok --trust inspect`. Así Grok confía en el proyecto y en todos sus worktrees, y carga sus reglas, sus skills y los guards de seguridad.
+4. Comprueba con `factory doctor`: la línea `grok` debe salir en verde.
+
+### Paso 4. Guarda la configuración
+
+```sh
+factory agents-md                 # escribe las reglas del proyecto en CLAUDE.md, para los agentes
+git add -A && git commit -m "Instala prz-factory"
+```
+
+Hay que commitear `.prz-factory/`, `.claude/` y `factory.config.json`: cada agente trabaja en un worktree nuevo y los necesita.
+
+---
+
+## Parte 2 · El día a día
+
+### Paso 1. Abre el tablero
+
+```sh
+factory serve       # abre http://localhost:4747
+```
+
+Déjalo abierto. Se actualiza solo cuando los agentes mueven tarjetas.
+
+### Paso 2. Manda una idea
+
+En el tablero, pulsa **"+ Nueva idea"** (arriba a la izquierda) y escríbela con tus palabras: qué quieres y, si lo sabes, dónde.
+
+> **Título:** el carrito pierde los productos
+> **Cuerpo:** si cierro la pestaña y vuelvo, el carrito está vacío. Quiero que se conserve.
+
+No hace falta formato ni detalle técnico. La tarjeta aparece en la columna **SPEC**.
+
+Desde la terminal es lo mismo:
+
+```sh
+factory add "el carrito pierde los productos" --body "si cierro la pestaña y vuelvo, el carrito está vacío" --column spec
+```
+
+Puedes mandar varias ideas seguidas; la fábrica las va cogiendo por orden.
+
+### Paso 3. Arranca la fábrica
+
+Abre una sesión de Claude Code **dentro de Orca**, en el proyecto, y escribe:
+
+```text
+/factory-run
+```
+
+(o "arranca la fábrica"). Esa sesión es el **coordinador**. Lanza un agente por cada trabajo pendiente, te cuenta cada paso en una línea y te avisa cuando algo te necesita. No hace falta que mires: Orca lo despierta cuando un agente termina.
+
+### Paso 4. Mira cómo avanza
+
+En el tablero verás la tarjeta moverse sola:
+
+1. **SPEC → READY.** El Spec Writer ha leído el código y ha reescrito tu idea como una tarjeta completa (problema, solución, criterios de aceptación comprobables y riesgo). Ábrela para leer lo que ha entendido. La línea **"Not doing"** dice qué ha dejado fuera a propósito: si lo querías, coméntalo y devuélvela a SPEC.
+2. **READY → BUILDING.** El Builder la construye en su rama.
+3. **BUILDING → REVIEW.** Entra el panel. En la tarjeta ves una etiqueta por reviewer:
+
+   | Etiqueta | Significa |
+   |---|---|
+   | `qa ·` | esperando reviewer |
+   | `qa …` | revisando |
+   | `qa ✓` | ha aprobado este commit |
+   | `qa ✖` | ha encontrado un bloqueo |
+
+4. **REVIEW → MERGE**, cuando los cuatro aprueban. El agente de merge lee el cambio y su comentario `[merge]` te dice qué cambia y, si te lo va a preguntar, por qué.
+5. **MERGE → DONE**, si el cambio es pequeño y no toca el negocio. Ya está en `main`. Si lo toca, pasa a **BLOCKED** con una solicitud de aprobación (paso 5).
+
+Si un reviewer encuentra un problema, la tarjeta vuelve a **BUILDING** con el hallazgo, el Builder lo arregla y el panel la revisa otra vez desde cero. A la cuarta vuelta sin converger, la fábrica para y te la manda a ti.
+
+Qué mira cada reviewer:
+
+| Reviewer | Su pregunta |
+|---|---|
+| **qa** | ¿Hace lo que dice la tarjeta, y hay un test que lo notaría si dejara de hacerlo? |
+| **security** | ¿Se puede abusar de este cambio? |
+| **code** | ¿Es el cambio correcto, y hace falta cada línea? El código que sobra (algo que nadie pidió, o que ya existía en el repo) devuelve la tarjeta al Builder |
+| **ops** | ¿Qué le hace esto al negocio y al producto en marcha? |
+
+### Paso 5. Responde a las solicitudes
+
+Cuando algo te necesita, aparece una franja amarilla arriba del tablero: **"🙋 N solicitudes esperan tu respuesta"**. El coordinador también te lo dice en el chat. Hay dos tipos.
+
+#### Solicitud de tipo "aprobar merge"
+
+El cambio está construido y **aprobado por todo el panel**, pero toca el negocio, así que no se mergea sin ti. Pasa cuando:
+
+- la tarjeta es de riesgo **High**,
+- lleva una etiqueta de negocio (`auth`, `payments`, `pricing`, `schema`, `ops`),
+- toca una ruta de `merge.humanPaths`,
+- supera `merge.maxLines` líneas, o
+- un reviewer lo ha escalado (`needs-human`).
+
+Qué haces:
+
+1. Pulsa la solicitud. Lee el último comentario `[merge]`: dice **por qué** te lo pide, la rama y el commit.
+2. Lee los comentarios de los reviewers (`review:qa`, `review:security`, `review:code`, `review:ops`).
+3. Si quieres ver el código: `git diff main...<rama>`.
+4. Para aprobar, pulsa **"Aprobar y mergear"**. El merge gate vuelve a ejecutar `verify` y lo mergea.
+   Desde la terminal: `factory merge <id> --sha <commit> --human`.
+5. Si no lo apruebas, escribe por qué en un comentario y arrastra la tarjeta a **BUILDING** (para que lo cambien) o a **BACKLOG** (para aparcarla).
+
+La aprobación queda fijada al commit que revisaste: si alguien añade commits después, el merge se niega.
+
+#### Solicitud de tipo "responder"
+
+Un agente no puede seguir sin una decisión tuya. Lo habitual es que el **Spec Writer** tenga una pregunta de producto que tu idea no contesta ("¿se crean cuentas nuevas al entrar con Google, o solo las existentes?").
+
+Qué haces:
+
+1. Pulsa la solicitud y lee la pregunta en el último comentario.
+2. Contesta con un **comentario** en la tarjeta.
+3. Arrastra la tarjeta de vuelta a la columna donde estaba: a **SPEC** si preguntaba el Spec Writer, a **BUILDING** si preguntaba el Builder.
+
+La fábrica la recoge en el siguiente ciclo, con tu respuesta.
+
+### Paso 6. Termina
+
+Cuando no queda nada por hacer, el coordinador te da el resumen: qué se ha mergeado (con sus commits), qué espera tu aprobación y qué está bloqueado.
+
+De vez en cuando, limpia los worktrees y las ramas de las tarjetas terminadas:
+
+```sh
+factory cleanup            # lista lo que se puede borrar
+factory cleanup --apply    # lo borra
+```
+
+---
+
+## Parte 3 · Situaciones concretas
+
+| Quiero… | Haz |
+|---|---|
+| Ver el estado sin abrir la web | `factory status` |
+| Parar la fábrica | Di "stop" al coordinador |
+| Escribir yo la tarjeta completa, sin Spec Writer | "+ Nueva tarjeta" en BACKLOG, o pide a Claude "escribe una tarjeta para…" (skill `factory-lint`), y muévela a READY |
+| Que una idea no se trabaje todavía | Déjala en **BACKLOG**: la fábrica nunca coge nada de ahí. Arrástrala a SPEC cuando quieras |
+| Cambiar la prioridad | Arrastra las tarjetas dentro de la columna: se trabajan de arriba abajo |
+| Que una tarjeta espere a otra | Edítala y pon el número de la otra en "Bloqueada por" |
+| Buscar problemas en el código y convertirlos en tarjetas | Pide a Claude "busca problemas" (skill `factory-collect`). Llegan a BACKLOG; mueve a SPEC las que quieras |
+| Probar algo que ya está en `main`, sin construir nada | Una tarjeta con la etiqueta `qa`: un agente la prueba y abre una idea por cada fallo |
+| Forzar que un cambio pase por mí | Añade la etiqueta `needs-human` a la tarjeta |
+| Que ponytail sea más o menos estricto | Viene incluido y los agentes lo cargan solos. Si prefieres tu propia versión, pon tu skill `ponytail` en `.claude/skills/` del proyecto: `factory install` no la pisa |
+| Añadir o quitar un reviewer | Cambia `review.lenses` en `factory.config.json` |
+| Mandar un paso a otro agente (Grok, Codex…) | `agents` en `factory.config.json` (Parte 1, paso 3b) |
+| Ver todos los comandos | `factory --help` |
+
+### Si algo va mal
+
+| Síntoma | Causa y solución |
+|---|---|
+| Una tarjeta rebota entre BUILDING y REVIEW | A la cuarta vuelta pasa sola a BLOCKED con una solicitud. Lee los hallazgos: suele faltar una decisión en la tarjeta. |
+| Una tarjeta está en BLOCKED y no sé por qué | Ábrela: el último comentario lo explica. |
+| Tu checkout de `main` tenía cambios sin commitear y la tarjeta pasó de MERGE a BLOCKED | Haz commit o stash y arrastra la tarjeta otra vez a MERGE: aterriza el mismo commit revisado. |
+| Un agente se ha quedado colgado | `factory status` marca los claims viejos con ⚠️. Di "status" al coordinador, o libérala con `factory reclaim <id>`. |
+| `factory doctor` falla | Sigue la línea `→` que acompaña a cada fallo. |
+| Un agente se para con "hit its session limit" | Se ha acabado la cuota de ese agente. El coordinador te dice a qué hora se renueva; cuando quieras seguir, díselo y reintenta el mismo trabajo (o pásalo a otro agente con `agents`). |
+| La línea `grok` de `factory doctor` sale en rojo | Ejecuta `grok --trust inspect` en la carpeta del proyecto. |
+| La fábrica no coge mis tarjetas | Comprueba que están en SPEC o READY (no en BACKLOG) y que el coordinador está en marcha. |
+
+---
+
+## Resumen en cinco líneas
+
+1. `factory serve` y abre el tablero.
+2. **"+ Nueva idea"**: escribe lo que quieres.
+3. `/factory-run` en una sesión de Claude Code dentro de Orca.
+4. Los cambios pequeños llegan solos a `main`.
+5. Los que tocan el negocio aparecen en la franja de solicitudes: léelos y pulsa **"Aprobar y mergear"**.

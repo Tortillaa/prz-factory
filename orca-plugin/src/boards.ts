@@ -6,7 +6,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import type { BoardView, CardView } from './protocol'
 
-export const COLUMNS = ['backlog', 'ready', 'building', 'qa', 'review', 'blocked', 'done']
+export const COLUMNS = ['backlog', 'spec', 'ready', 'building', 'qa', 'review', 'merge', 'blocked', 'done']
 
 export function commonDir(dir: string): string | null {
   try {
@@ -43,6 +43,7 @@ type RawCard = {
   labels?: string[]
   assignee?: string | null
   blockedBy?: number[]
+  panel?: { lenses?: Record<string, { worker?: string | null }> }
 }
 
 export function readBoard(entry: { key: string; name: string; file: string }): BoardView {
@@ -54,9 +55,17 @@ export function readBoard(entry: { key: string; name: string; file: string }): B
     title: c.title,
     column: c.column,
     labels: c.labels ?? [],
-    assignee: c.assignee ?? null,
+    // A card in review is held by its panel: one reviewer per lens, in parallel.
+    assignee: c.assignee ?? reviewers(c),
     waitingOn: (c.blockedBy ?? []).filter((d) => column.get(d) !== 'done')
   }))
   const counts = Object.fromEntries(COLUMNS.map((col) => [col, views.filter((c) => c.column === col).length]))
   return { ...entry, counts, cards: views }
+}
+
+function reviewers(card: RawCard): string | null {
+  const names = Object.values(card.panel?.lenses ?? {})
+    .map((slot) => slot.worker)
+    .filter(Boolean)
+  return names.length ? names.join(', ') : null
 }

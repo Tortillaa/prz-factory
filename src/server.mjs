@@ -7,6 +7,16 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import * as store from './store.mjs';
 import { TEMPLATE } from './ticket.mjs';
+import { loadConfig, DEFAULTS } from './config.mjs';
+
+// The review lenses shown on review cards. A broken config must not take the board down.
+function lensesOf(repoRoot) {
+  try {
+    return loadConfig(repoRoot).config.review.lenses;
+  } catch {
+    return DEFAULTS.review.lenses;
+  }
+}
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'factory.mjs');
@@ -79,7 +89,7 @@ export function createServer({ boardFile, repoRoot = process.cwd() }) {
         return send(res, 200, fs.readFileSync(path.join(PUBLIC_DIR, 'index.html')), 'text/html; charset=utf-8');
       }
       if (req.method === 'GET' && url.pathname === '/api/board') {
-        return send(res, 200, { columns: store.COLUMNS, ...store.annotate(store.load(boardFile)) });
+        return send(res, 200, { columns: store.COLUMNS, lenses: lensesOf(repoRoot), ...store.annotate(store.load(boardFile)) });
       }
       if (req.method === 'GET' && url.pathname === '/api/template') {
         return send(res, 200, { template: TEMPLATE });

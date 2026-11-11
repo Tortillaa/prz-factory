@@ -11,22 +11,29 @@ export function block(config) {
 ## prz-factory
 
 This project is worked by prz-factory: cards on a local board, one Orca worker per card and lane.
-Board: backlog · ready · building · qa · review · blocked · done (\`factory serve\` shows it).
+Pipeline: spec (an idea) → ready → building → review (a panel, one reviewer per lens) → merge → done.
+Also backlog (parked), qa (\`qa\` cards) and blocked (waiting for a person). \`factory serve\` shows it.
 
 | When | Use | Never |
 |---|---|---|
-| Write or check a card | \`factory-lint\` skill · \`factory lint\` | Move a card to ready with lint errors |
-| Drain the board | \`factory-run\` skill | Build, test or merge from the coordinator |
-| Build / QA / review one card | \`factory-build\` · \`factory-qa\` · \`factory-review\` | Work outside the card's worktree |
-| Land a card | \`factory merge\` (review lane) | \`git merge\` or push to ${config.baseBranch} by hand |
+| Ask for a change | an idea in the \`spec\` column (\`factory add "<idea>" --column spec\`) | Move a card to ready with lint errors |
+| Write a card yourself | \`factory-lint\` skill · \`factory lint\` | Invent a product decision |
+| Drain the board | \`factory-run\` skill | Write specs, build, review or merge from the coordinator |
+| Spec / build / review / merge one card | \`factory-spec\` · \`factory-build\` · \`factory-review\` (one lens) · \`factory-merge\` | Work outside your own worktree |
+| Land a card | \`factory verdict\` (the panel) → \`factory-merge\` (the merge agent) → \`factory merge\` (the gate) | \`git merge\` or push to ${config.baseBranch} by hand |
 | Turn problems into cards | \`factory-collect\` skill | File a card without verifying the problem |
 
 | Rule | Value |
 |---|---|
+| CLI | \`factory\`, or \`node .prz-factory/bin/factory.mjs\` (the factory lives in this repo: nothing to install) |
 | Base branch | \`${config.baseBranch}\` (protected: ${config.protectedBranches.join(', ')}) |
 | Proof of build | ${config.verify.length ? config.verify.map((v) => `\`${v}\``).join(', ') : '**not set: add `verify` to factory.config.json**'} |
-| Merge by a person | risk ${config.merge.humanRisk.join('/')} · labels ${config.merge.humanLabels.join(', ')} · diff > ${config.merge.maxLines} lines |
+| Review panel | ${config.review.lenses.join(' · ')}: every lens must pass the same commit |
+| Merge by a person | risk ${config.merge.humanRisk.join('/')} · labels ${config.merge.humanLabels.join(', ')}${config.merge.humanPaths.length ? ` · paths ${config.merge.humanPaths.map((p) => `\`${p}\``).join(', ')}` : ''} · diff > ${config.merge.maxLines} lines |
+| Business labels | agents may add one (or \`needs-human\`), never remove one |
+| Craft | every step loads \`ponytail\` (spec, build) or \`ponytail-review\` (reviewers): the smallest change that fully works, and no code that should not exist |
 | Writing | commits and comments: \`.claude/skills/factory-board/references/writing-standard.md\` |
+| Agents | ${Object.keys(config.agents || {}).length ? Object.entries(config.agents).map(([lane, a]) => `${lane} on ${a.agent}${a.model ? ` ${a.model}` : ''}${a.effort ? ` (${a.effort})` : ''}`).join(' · ') + ' · other lanes on claude' : 'every lane on claude'}; Claude Code and Grok read the same \`.claude/\` skills, this file and the guard hooks |
 | Secrets | never read \`.env\` or key files; never write a key literal (guard hooks block both) |
 ${END}`;
 }

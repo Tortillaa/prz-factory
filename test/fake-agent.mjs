@@ -22,5 +22,5 @@ fs.writeFileSync('test/cart-empty.test.mjs', "import { test } from 'node:test';\
 git('add', '-A');
 git('-c', 'user.email=fake@example.com', '-c', 'user.name=fake', 'commit', '-qm', '🐛 [fix] cart: empty cart average is 0');
 factory('verify');
-factory('handoff', id, 'qa', '--lane', 'build', '--as', worker, '--text', '[build] ✅ built · round 1\nAC1 AC2 AC3 test/cart-empty.test.mjs');
+factory('handoff', id, 'review', '--lane', 'build', '--as', worker, '--text', '[build] ✅ built · round 1\nAC1 AC2 AC3 test/cart-empty.test.mjs');
 console.log('done');

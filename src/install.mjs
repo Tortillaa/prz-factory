@@ -8,6 +8,15 @@ import { CONFIG_NAME, DEFAULTS, detectBaseBranch, detectVerify } from './config.
 
 export const FACTORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const MARKER = '.factory-managed';
+// The factory's own runtime, copied into every project so it needs nothing installed anywhere:
+// `node .prz-factory/bin/factory.mjs` works in the project and in each of its worktrees (it is committed).
+export const RUNTIME_DIR = '.prz-factory';
+const RUNTIME_PARTS = ['bin', 'src', 'public', 'hooks', 'skills', 'package.json'];
+
+function samePath(a, b) {
+  const norm = (p) => path.resolve(p).replace(/\\/g, '/').replace(/\/+$/, '');
+  return process.platform === 'win32' ? norm(a).toLowerCase() === norm(b).toLowerCase() : norm(a) === norm(b);
+}
 
 export function listSkills(factoryRoot = FACTORY_ROOT) {
   const dir = path.join(factoryRoot, 'skills');
@@ -29,9 +38,9 @@ export const HOOKS = {
     { matcher: 'Read|Grep|Bash|PowerShell|Edit|Write|MultiEdit|NotebookEdit', hooks: [{ type: 'command', command: guardCmd('secrets') }] },
     { matcher: 'Edit|Write|MultiEdit|NotebookEdit|Bash|PowerShell', hooks: [{ type: 'command', command: guardCmd('key-literals') }] },
   ],
-  SessionStart: [{ hooks: [{ type: 'command', command: 'factory cleanup --hint 2>/dev/null || true' }] }],
+  SessionStart: [{ hooks: [{ type: 'command', command: `node "$CLAUDE_PROJECT_DIR/${RUNTIME_DIR}/bin/factory.mjs" cleanup --hint 2>/dev/null || factory cleanup --hint 2>/dev/null || true` }] }],
 };
-const isFactoryHook = (h) => /factory-guard\.mjs|factory cleanup/.test(h.command || '');
+const isFactoryHook = (h) => /factory-guard\.mjs|factory cleanup|factory\.mjs" cleanup/.test(h.command || '');
 
 export function mergeSettings(settings) {
   const out = { ...settings, hooks: { ...(settings.hooks || {}) } };
@@ -61,10 +70,29 @@ function installHooks(target, factoryRoot) {
   return { file, guard: path.join(dir, GUARD_FILE) };
 }
 
+// Copies the runtime into <target>/.prz-factory, replacing an older copy. Skipped when installing the
+// factory into itself, or when the running factory is that very copy (it cannot replace itself).
+function vendorRuntime(target, factoryRoot) {
+  const dest = path.join(target, RUNTIME_DIR);
+  if (samePath(target, factoryRoot) || samePath(dest, factoryRoot)) return { dir: dest, status: 'skipped', reason: 'this is the factory itself' };
+  if (fs.existsSync(dest) && !fs.existsSync(path.join(dest, MARKER))) {
+    return { dir: dest, status: 'skipped', reason: 'exists and is not managed by the factory' };
+  }
+  const existed = fs.existsSync(dest);
+  fs.rmSync(dest, { recursive: true, force: true });
+  for (const part of RUNTIME_PARTS) {
+    const from = path.join(factoryRoot, part);
+    if (fs.existsSync(from)) fs.cpSync(from, path.join(dest, part), { recursive: true });
+  }
+  const { version } = JSON.parse(fs.readFileSync(path.join(factoryRoot, 'package.json'), 'utf8'));
+  fs.writeFileSync(path.join(dest, MARKER), `Managed by prz-factory ${version}: \`factory install\` replaces this folder. Commit it.\n`);
+  return { dir: dest, status: existed ? 'updated' : 'installed', version };
+}
+
 export function install(target, { factoryRoot = FACTORY_ROOT, hooks = true } = {}) {
   target = path.resolve(target);
   if (!fs.existsSync(target)) throw new Error(`target does not exist: ${target}`);
-  const report = { target, skills: [], config: null, hooks: null };
+  const report = { target, skills: [], config: null, hooks: null, runtime: vendorRuntime(target, factoryRoot) };
   if (hooks) report.hooks = installHooks(target, factoryRoot);
 
   for (const name of listSkills(factoryRoot)) {

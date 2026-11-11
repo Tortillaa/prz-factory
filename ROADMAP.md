@@ -1,6 +1,6 @@
 # Roadmap de prz-factory
 
-Objetivo final: añades tarjetas al tablero, las mueves a **Ready**, y la fábrica las devuelve como cambios probados, revisados y mergeados, ejecutando los agentes en Orca.
+Objetivo final: mandas una idea al tablero y la fábrica la devuelve como un cambio redactado, construido, revisado por un panel de expertos y mergeado (o esperando tu aprobación si toca el negocio), ejecutando los agentes en Orca.
 
 Cada fase indica de qué parte de [super-board](https://github.com/EricTechPro/super-board) (MIT) sale (la "ingeniería inversa") y qué cambia aquí. Las diferencias de fondo son tres:
 
@@ -85,8 +85,58 @@ Un único script autocontenido (`hooks/factory-guard.mjs`, sin imports de `src/`
 - [x] Aprobar desde la web los merges que esperan a una persona, fijados al commit revisado (pendiente de la Fase 2).
 - [x] Revisión: la aprobación exige la etiqueta `merge-approval`, que solo pone el gate. `needs-you` también marca tarjetas que rebotaron, y esas nunca deben poder mergearse.
 
+## Fase 7 · De la idea al merge: Spec Writer, panel de reviewers y solicitudes ✅
+
+El proceso que pidió el usuario: manda una tarjeta con sus palabras, un Spec Writer la redacta, un Builder la construye, varios reviewers expertos la revisan en paralelo, y se mergea sola si es un cambio pequeño o le llega una solicitud si afecta al negocio. Sustituye a la cadena build → QA → review de la Fase 2.
+
+- [x] Columna `spec` y lane `spec` (skill `factory-spec`): la idea entra en texto libre (`factory add --column spec`, botón "+ Nueva idea"), el Spec Writer lee el código, redacta la tarjeta, clasifica su impacto en el negocio y la pasa a Ready él solo. Si falta una decisión, la manda a blocked con las preguntas. Puede dividirla en tarjetas que nacen ya en Ready.
+- [x] Panel de revisión en paralelo: un reviewer por lente (`review.lenses`: qa, security, code, ops), cada uno en su worktree y sobre el mismo commit. Claims por lente, `factory verdict` (pass, fail, escalar a una persona) y un checklist por lente en `skills/factory-review/references/lenses.md`. Un fallo devuelve la tarjeta a building y cierra la ronda; el veredicto que completa el panel ejecuta el merge gate.
+- [x] Negocio: labels `auth`, `payments`, `pricing`, `schema`, `ops` (y `needs-human`), `merge.humanPaths` (rutas sensibles que el gate comprueba en el diff, diga lo que diga la tarjeta) y la lente `ops`, que escala lo que el Spec Writer no marcó. Los agentes pueden subir una tarjeta a revisión humana, nunca bajarla.
+- [x] El merge gate exige el panel completo sobre el head (exit 11 si falta alguna lente).
+- [x] Solicitudes: franja en la web con los merges que esperan aprobación y las tarjetas que esperan respuesta; `factory status` las separa (`approvals`, `needsYou`) y el coordinador avisa de cada una en cuanto aparece. Un handoff a blocked pone `needs-you`, y salir de blocked la quita.
+- [x] El lane `qa` queda solo para las tarjetas `qa` (prueban la base y se cierran por el gate); en las tarjetas construidas, QA es una lente del panel.
+- [x] Coordinador: `plan` despacha una acción por lente y las ideas de spec; `status`, `reclaim`, `stop` y `dispatched` entienden los claims por lente. `cleanup` reconoce los worktrees `factory-<id>-<lens>`.
+- [x] Evals nuevas: `spec-empty-cart`, `spec-pricing-is-business`, `review-qa-missing-test`, `review-code-merge`, `review-ops-escalates-pricing`.
+- [x] Probado de extremo a extremo con el CLI real en un repo temporal: una tarjeta pequeña se mergea sola al aprobar la cuarta lente, y una de precios queda en blocked esperando la aprobación. Web comprobada en el navegador de Orca.
+- [x] Guía de uso paso a paso: `docs/GUIA.md`.
+- [x] Cada paso consulta ponytail ([DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail), MIT), incluido en `skills/` para que todos los workers lo tengan: el Spec Writer recorta el alcance con su escalera ("¿tiene que existir?"), el Builder la aplica a cada línea y deja una línea `Skipped:`, y cada reviewer carga `ponytail-review`. En la lente `code`, el código que no debería existir es un Blocker.
+
+## Fase 8 · Grok y otros agentes ✅
+
+Para no gastar cuota de Claude en todo, cada lane puede correr en otro agente de Orca. El usuario pidió los reviewers en Grok 4.7 con esfuerzo alto.
+
+- [x] `agents` en `factory.config.json`: agente, modelo y esfuerzo por lane; `plan` los devuelve en `launch` y `factory-run` los usa. Este repo: reviewers en Grok 4.7 alto.
+- [x] Los guard hooks entienden los eventos de Grok (`toolName`/`toolInput` y sus nombres de herramienta), además de los de Claude Code.
+- [x] El spec de cada worker no depende de que su agente cargue solo las reglas y las skills: dice que lea `CLAUDE.md` y da la ruta absoluta de cada skill.
+- [x] `factory doctor` comprueba que Grok esté instalado y que el repo sea de confianza para Grok (la confianza del checkout principal cubre todos sus worktrees).
+- [x] El coordinador sabe reintentar un worker que se quedó sin cuota (`usageLimitReached`) en vez de liberar la tarjeta.
+- [x] Probado de verdad: la tarjeta #6 recorrió spec (Claude) → build (Claude) → panel de cuatro reviewers en Grok 4.7 en paralelo → merge gate, que la retuvo para una persona por tocar `src/store.mjs`.
+
+## Fase 9 · Modelos por paso y agente de merge ✅
+
+- [x] Builder en Claude Sonnet 5.5 (`agents.build`). Para lo que le supera, lanza un subagente de Claude Opus 5.5; el skill `factory-build` fija cuándo (razonamiento difícil, un bug sin explicar, un cambio entre módulos, una tarjeta devuelta con un Blocker) y cómo (encargo acotado, sin CLI `factory`; el builder revisa, commitea y lo cita).
+- [x] Agente de merge: columna y lane `merge` entre review y done (skill `factory-merge`). El veredicto que completa el panel ya no mergea: pasa la tarjeta a `merge`. El agente mira el impacto en el negocio (solo puede subir el listón), escribe para la persona qué cambia, por qué se le pregunta y cómo deshacerlo, y ejecuta el merge gate, que mergea solo o deja la solicitud en el tablero.
+- [x] El gate acepta solo tarjetas en `merge`. Un head movido o un panel incompleto vuelven a `review`; un checkout de la base sucio pasa a blocked con `needs-you`.
+- [x] Modelo del agente de merge: Claude Haiku 5.5 (`agents.merge`). Lee, decide y ejecuta un comando, sin escribir código; la red de seguridad son las reglas fijas del gate y la lente `ops`.
+- [x] Evals: `merge-lands`, `merge-escalates-pricing`; `review-code-merge` pasa a `review-code-pass` (termina en `merge`).
+
+## Fase 10 · Skills automáticas y Spec Writer en Sonnet ✅
+
+- [x] Las descripciones de todas las skills de la fábrica describen la tarea (con frases de ejemplo en español e inglés), no solo su nombre, para que el agente las coja solo. Ninguna es de uso manual. Un test lo vigila.
+- [x] Probado con Claude Sonnet 5.5: con peticiones en lenguaje natural que no nombran la skill, eligió la correcta en 8 de 9. La novena (qué hay en el tablero) la resolvió directamente con `factory list`, sin skill.
+- [x] Spec Writer en Claude Sonnet 5.5 (`agents.spec`), con un subagente Opus 5.5 para las tarjetas difíciles de redactar (`factory-spec` fija cuándo).
+
+## Fase 11 · Instalar sin instalar nada ✅
+
+- [x] `install` copia el runtime de la fábrica al proyecto (`.prz-factory/`): el proyecto ya no depende de un clon de este repo ni de `npm link`, y cada worktree tiene el CLI porque la carpeta se commitea.
+- [x] Un solo comando desde cualquier repo: `npx -y github:Tortillaa/prz-factory install .`, o un prompt para el agente: «Instala prz-factory en este repositorio: ejecuta `npx -y github:Tortillaa/prz-factory install .` y después sigue la skill factory-onboard que se acaba de instalar.».
+- [x] Skills, spec de los workers, hook de SessionStart y `doctor` usan `node .prz-factory/bin/factory.mjs` cuando `factory` no está en el PATH. `doctor` solo marca Grok como fallo si alguna lane corre en Grok.
+- [x] Probado: un repo vacío queda listo con `npm exec` sobre este repo local, `doctor` en verde, y el tablero se usa desde un worktree.
+- [ ] Subir `main` a GitHub: hasta entonces, `npx github:` descarga la versión antigua.
+
 ## Pendiente fuera del código
 
+- [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.
 - [ ] Ejecutar las evals con un agente real (`factory eval`): lanzan Claude Code headless con Bash en repos temporales y requieren tu permiso.
 - [ ] Instalar el plugin en Orca (`orca-plugin/README.md`): es `trusted-worker` y requiere tu aprobación.
 - [ ] Subir el repo a GitHub para que corra el CI.

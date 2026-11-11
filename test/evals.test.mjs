@@ -10,12 +10,13 @@ const FAKE = `"${process.execPath}" "${path.join(import.meta.dirname, 'fake-agen
 
 test('every case loads and every setup builds', () => {
   const names = listCases();
-  assert.deepEqual(names, ['build-empty-cart', 'qa-missing-test', 'review-merge']);
+  assert.deepEqual(names, ['build-empty-cart', 'merge-escalates-pricing', 'merge-lands', 'review-code-pass', 'review-ops-escalates-pricing', 'review-qa-missing-test', 'spec-empty-cart', 'spec-pricing-is-business']);
   for (const name of names) {
     const c = loadCase(name);
     const world = prepare(c);
     const card = store.getCard(store.load(world.file), 1);
-    assert.equal(card.assignee, `${c.lane}-1`, `${name}: claimed for its worker`);
+    const worker = c.lens ? `${c.lane}-${c.lens}-1` : `${c.lane}-1`;
+    assert.deepEqual(store.holding(card, worker), { lens: c.lens ?? null }, `${name}: claimed for its worker`);
     // Before any agent runs, the case must not already pass.
     assert.ok(grade(c, world).some((g) => !g.ok), `${name} passes without an agent`);
     fs.rmSync(world.root, { recursive: true, force: true });

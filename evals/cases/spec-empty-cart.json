@@ -1,0 +1,19 @@
+{
+  "description": "The spec writer turns a rough idea into a card that passes lint and sends it to ready by itself, without touching code.",
+  "fixture": "shop",
+  "lane": "spec",
+  "setup": [
+    { "card": { "title": "el promedio sale NaN", "body": "cuando el carrito está vacío el precio medio sale NaN, debería salir 0", "column": "spec" } },
+    { "worktree": {} },
+    { "claim": { "id": 1, "as": "spec-1" } }
+  ],
+  "prompt": "spec:1",
+  "graders": [
+    { "card": { "id": 1, "column": "ready" } },
+    { "released": { "id": 1 } },
+    { "comment": { "id": 1, "role": "spec" } },
+    { "spec": { "id": 1, "matches": "average" } },
+    { "risk": { "id": 1, "level": "low" } },
+    { "labels": { "id": 1, "excludes": ["auth", "payments", "pricing", "schema", "ops", "needs-human"] } }
+  ]
+}

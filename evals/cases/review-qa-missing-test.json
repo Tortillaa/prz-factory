@@ -1,23 +1,24 @@
 {
-  "description": "The QA lane sends a card back to building when an Acceptance Criterion has no test, even though the code is right.",
+  "description": "The qa reviewer fails a card when an Acceptance Criterion has no test, even though the code is right: the card goes back to building.",
   "fixture": "shop",
-  "lane": "qa",
+  "lane": "review",
+  "lens": "qa",
   "setup": [
-    { "card": { "title": "Average of an empty cart is 0", "bodyFile": "card-empty-cart.md", "labels": ["bug"], "column": "qa" } },
+    { "card": { "title": "Average of an empty cart is 0", "bodyFile": "card-empty-cart.md", "labels": ["bug"], "column": "review" } },
     { "worktree": {} },
     { "sh": "git switch -q -c factory/1-average-of-an-empty-cart-is-0", "cwd": "worktree" },
     { "write": { "path": "src/cart.mjs", "content": "// Average price of the items in a cart.\nexport function average(prices) {\n  if (prices.length === 0) return 0;\n  return prices.reduce((sum, p) => sum + p, 0) / prices.length;\n}\n", "cwd": "worktree" } },
     { "sh": "git commit -qam \"🐛 [fix] cart: average of an empty cart is 0\"", "cwd": "worktree" },
     { "sh": "git switch -q --detach", "cwd": "worktree" },
-    { "run": { "id": 1, "branch": "factory/1-average-of-an-empty-cart-is-0", "worktree": "${worktree}" } },
-    { "comment": { "id": 1, "role": "build", "text": "[build] ✅ built · round 1\nDid: empty-cart guard in average\n✅ Done: AC1 AC2 AC3\nNext: qa" } },
-    { "claim": { "id": 1, "as": "qa-1" } }
+    { "run": { "id": 1, "branch": "factory/1-average-of-an-empty-cart-is-0" } },
+    { "comment": { "id": 1, "role": "build", "text": "[build] ✅ built · round 1\nDid: empty-cart guard in average\n✅ Done: AC1 AC2 AC3\nNext: review" } },
+    { "claim": { "id": 1, "lens": "qa", "as": "review-qa-1" } }
   ],
   "prompt": "spec:1",
   "graders": [
     { "card": { "id": 1, "column": "building" } },
     { "released": { "id": 1 } },
-    { "comment": { "id": 1, "role": "qa", "matches": "AC ?3|test" } },
+    { "comment": { "id": 1, "role": "review:qa", "matches": "AC ?3|test" } },
     { "noCommits": { "id": 1, "since": "branch" } }
   ]
 }

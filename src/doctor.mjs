@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, execSync } from 'node:child_process';
 import { loadConfig, repoRoot } from './config.mjs';
-import { listSkills, MARKER } from './install.mjs';
+import { listSkills, RUNTIME_DIR } from './install.mjs';
 import * as store from './store.mjs';
 
 // Runs a fixed command line. Goes through the shell so Windows .cmd shims (orca, factory) resolve.
@@ -43,7 +43,10 @@ export function doctor(cwd = process.cwd()) {
   add('orca', !!orca, orca ? `${orcaCmd} found${inOrca ? ', running inside Orca' : ''}` : `${orcaCmd} not found`, 'install Orca (onorca.dev); workers need it');
 
   const factoryOnPath = run(process.platform === 'win32' ? 'where' : 'which', ['factory'], cwd);
-  add('factory on PATH', !!factoryOnPath, factoryOnPath ? factoryOnPath.split(/\r?\n/)[0] : 'not found', 'run `npm link` in the prz-factory repo');
+  // The CLI either lives in the repo (vendored by `factory install`) or is on PATH (npm link).
+  const vendored = path.join(repoRoot(cwd), RUNTIME_DIR, 'bin', 'factory.mjs');
+  const cliWhere = fs.existsSync(vendored) ? `${RUNTIME_DIR}/bin/factory.mjs (in the repo)` : factoryOnPath ? factoryOnPath.split(/\r?\n/)[0] : null;
+  add('factory CLI', !!cliWhere, cliWhere || 'not in the repo and not on PATH', 'run `npx -y github:Tortillaa/prz-factory install .` in the repo');
 
   try {
     const { file, exists, config } = loadConfig(root);
@@ -62,7 +65,8 @@ export function doctor(cwd = process.cwd()) {
     add('board', false, `${boardFile}: ${err.message}`, 'repair or remove the board file');
   }
 
-  const missing = listSkills().filter((name) => !fs.existsSync(path.join(root, '.claude', 'skills', name, MARKER)));
+  // A skill the project already has under the same name (its own ponytail, say) counts: install leaves it alone.
+  const missing = listSkills().filter((name) => !fs.existsSync(path.join(root, '.claude', 'skills', name, 'SKILL.md')));
   add('skills', missing.length === 0, missing.length ? `not installed: ${missing.join(', ')}` : 'all installed', 'run `factory install`');
 
   let guards = [];
@@ -73,5 +77,38 @@ export function doctor(cwd = process.cwd()) {
   const guardFile = fs.existsSync(path.join(root, '.claude', 'hooks', 'factory-guard.mjs'));
   add('guard hooks', guards.length >= 4 && guardFile, guardFile ? `${guards.length} guards wired` : 'factory-guard.mjs not installed', 'run `factory install` (without --no-hooks)');
 
+  // Grok reads the same .claude/ skills, CLAUDE.md and guard hooks, but only in a folder it trusts,
+  // and trusting the main checkout covers every worktree of the repo. Checked only when Grok is
+  // installed or a lane runs on it: otherwise it is not this project's concern.
+  let usesGrok = false;
+  try {
+    usesGrok = Object.values(loadConfig(root).config.agents || {}).some((a) => a.agent === 'grok');
+  } catch {}
+  const grok = findGrok();
+  if (grok || usesGrok) {
+    if (!grok) add('grok', false, 'a lane runs on grok but the Grok CLI is not installed', 'install Grok Build (https://docs.x.ai/build/overview.md) and sign in with `grok`');
+    else {
+      const out = run(grok, ['inspect', '--json'], root);
+      let trusted = null;
+      try {
+        trusted = JSON.parse(out).projectTrusted === true;
+      } catch {}
+      if (trusted === null) add('grok', false, `${grok}: could not read \`grok inspect --json\``, 'run `grok inspect` here and check it works');
+      else if (trusted) add('grok', true, 'project trusted: Grok loads the rules, skills and guard hooks in every worktree');
+      // Only a problem when a lane actually runs on Grok here.
+      else if (!usesGrok) add('grok', true, 'installed, project not trusted (no lane runs on grok here)');
+      else add('grok', false, 'project not trusted: Grok workers would run without the rules, skills and guard hooks', `in ${root} run \`grok --trust inspect\` once (it trusts this repo and all its worktrees)`);
+    }
+  }
+
   return { ok: checks.every((c) => c.ok), checks };
+}
+
+// The Grok CLI: on PATH, or where its installer puts it (~/.grok/bin).
+function findGrok() {
+  const onPath = run(process.platform === 'win32' ? 'where' : 'which', ['grok'], process.cwd());
+  if (onPath) return onPath.split(/\r?\n/)[0];
+  const home = process.env.GROK_HOME || path.join(process.env.USERPROFILE || process.env.HOME || '', '.grok');
+  const bin = path.join(home, 'bin', process.platform === 'win32' ? 'grok.exe' : 'grok');
+  return fs.existsSync(bin) ? bin : null;
 }

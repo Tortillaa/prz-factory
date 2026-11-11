@@ -1,18 +1,29 @@
 ---
 name: factory-run
 description: >-
-  Coordinator of prz-factory: drain the board by dispatching one Orca worker per card and lane
-  (build, qa, review), reconciling the board when Orca wakes you, until nothing is left to do.
-  It never builds, tests, reviews or fixes anything itself. Use when the user says "factory run",
-  "drain the board", "arranca la fábrica", "/factory-run", or asks for the factory status or to stop it.
+  Coordinator of prz-factory: drain the board by dispatching one Orca worker per card and lane (spec
+  writer, builder, one reviewer per lens in parallel, merge agent), reconcile the board when Orca
+  wakes you, and bring the user every approval request. Never writes specs, builds, reviews or
+  merges itself. Use whenever the user wants the factory to work through the board, wants its
+  status, or wants it stopped. Triggers: "arranca la fábrica", "procesa el tablero", "factory run",
+  "drain the board", "¿cómo va la fábrica?", "para la fábrica", "/factory-run".
 ---
 
 # factory-run
 
 **You are the coordinator, not a worker.** Your only jobs: check preconditions, dispatch workers,
-reconcile the board when Orca wakes you, and report one short line per event. You MUST NOT build,
-test, review, fix, or edit the factory's code or skills during a run, even when you see a problem.
-If something looks wrong, say "I saw X. Want me to dig in or stop the run?" and wait.
+reconcile the board when Orca wakes you, report one short line per event, and bring the user every
+request that needs them. You MUST NOT write specs, build, test, review, fix, or edit the factory's
+code or skills during a run, even when you see a problem. If something looks wrong, say "I saw X.
+Want me to dig in or stop the run?" and wait.
+
+The pipeline a card goes through:
+
+```text
+spec (idea) → ready → building → review (panel: one reviewer per lens, in parallel) → merge → done
+                                                                                  └→ blocked + merge-approval
+                                                                                     when it touches the business
+```
 
 State lives on the board (`factory status`) and in Orca, never in your memory: after any wake,
 re-read it.
@@ -31,10 +42,11 @@ orca orchestration run-current --json
 
 - `doctor` must pass `config` (a non-empty `verify`: the merge gate needs it) and `orca`. Anything
   else failing: report it and stop.
-- `status.inFlight` not empty at start: cards claimed by an earlier run. For each, check its
+- `status.inFlight` not empty at start: claims left by an earlier run. For each, check its
   `dispatch` with `orca orchestration worker-show --dispatch <id> --json`. A live worker is still
-  yours: leave it. A settled or unknown one never handed off: `factory reclaim <id> --reason "<what worker-show says>"`.
-- `status.needsYou`: list them for the user once; they wait for a person and you never touch them.
+  yours: leave it. A settled or unknown one never finished:
+  `factory reclaim <id> --worker <worker> --reason "<what worker-show says>"`.
+- `status.approvals` and `status.needsYou`: tell the user once (see §4); you never touch those cards.
 
 ## 2 · Dispatch
 
@@ -42,63 +54,105 @@ orca orchestration run-current --json
 factory plan --json
 ```
 
-Each action is `{ id, title, lane, worker, placement }`, already limited to the free slots
-(`maxWorkers` in `factory.config.json`). For each, in order:
+Each action is `{ id, title, lane, lens, worker, placement, launch }`, already limited to the free
+slots (`maxWorkers` in `factory.config.json`). `lane` is `spec`, `build`, `qa`, `review` or `merge`; `lens` is
+set only for `review` (one action per lens: a card in review gets several workers at once).
+`launch` is `{ agent, model?, effort? }`: the Orca agent that runs this lane (`agents` in
+`factory.config.json`; `claude` when the lane has no entry). For each action, in order:
 
-1. Reserve the card: `factory claim <id> --as <worker> --json`. If the claim fails, skip it.
+1. Reserve it: `factory claim <id> --as <worker> [--lens <lens>] --json`. If the claim fails, skip it.
 2. Start the worker with the generated spec:
 
    ```text
-   factory spec <id> --lane <lane> --as <worker> | orca orchestration worker-start --spec-file - \
-     --agent claude --task-title "#<id> <lane>: <title>" --worktree <placement.worktree> \
+   factory spec <id> --lane <lane> [--lens <lens>] --as <worker> | orca orchestration worker-start --spec-file - \
+     --agent <launch.agent> [--model <launch.model> [--effort <launch.effort>]] \
+     --task-title "#<id> <lane>[:<lens>]: <title>" --worktree <placement.worktree> \
      [--repo <placement.repo> --name <placement.name> --base-branch <baseBranch>] --json
    ```
 
-   `--repo`, `--name` and `--base-branch` only when `placement.worktree` is `new-top-level`
-   (`baseBranch` from `factory.config.json`). Add `--model` only if the user named one.
+   `--model` and `--effort` only when `launch` has them; a model the user names for this run
+   replaces `launch.model`. `--repo`, `--name` and `--base-branch` only when `placement.worktree`
+   is `new-top-level` (`baseBranch` from `factory.config.json`).
 3. Record the dispatch: `factory dispatched <id> --as <worker> --dispatch <dispatchId from the receipt> --json`.
-   `recorded: false` means the worker already handed off: fine, nothing to do.
-4. If `worker-start` fails, do not rerun it: `factory release <id>`, report the `failedStage`, and
-   load Orca's `references/recovery-and-cleanup.md` before any retry.
+   `recorded: false` means the worker already finished: fine, nothing to do.
+4. If `worker-start` fails, do not rerun it: `factory release <id> [--lens <lens>]`, report the
+   `failedStage`, and load Orca's `references/recovery-and-cleanup.md` before any retry.
 
-Then report one line (`🚀 #12 build → build-12`) per dispatch and **end your turn**. Orca wakes you.
-Never poll, sleep, or watch a terminal.
+Then report one line per dispatch (`🚀 #12 spec → spec-12`, `🚀 #12 review:security → review-security-12`)
+and **end your turn**. Orca wakes you. Never poll, sleep, or watch a terminal.
 
 ## 3 · When Orca wakes you
 
 For each `worker_done` or `escalation`:
 
 1. `factory show <id> --json` for the card that worker had.
-2. If the card is no longer claimed by that worker, the worker handed off: report one line with
-   the card's new column (`✅ #12 build → qa`, `↩️ #12 review → building`, `🎉 #12 merged abc1234`,
-   `🙋 #12 needs you: <reason>`).
-3. If it is still claimed by that worker, it ended without a handoff:
-   `factory reclaim <id> --worker <worker> --reason "<the worker's report or stopReason>" --json`.
-   The second time, the card goes to blocked with `needs-you` by itself.
-4. Release the worker's terminal: `orca orchestration worker-release --dispatch <dispatchId> --json`.
-   Each lane gets a fresh terminal in the card's worktree, so a settled worker's chat is not needed
-   (workers in new worktrees are kept open by default and would pile up otherwise). If the user
-   said they want to watch or talk to workers, skip this.
+2. Does that worker still hold a claim? It does if `assignee` is its name, or if
+   `panel.lenses.<lens>.worker` is.
+   - **No** → it finished its job. Report one line with what the card shows now:
+     `📝 #12 spec → ready`, `✅ #12 build → review`, `✅ #12 review:qa pass (2/4)`,
+     `↩️ #12 review:code → building`, `🔀 #12 review → merge`, `🎉 #12 merged abc1234`,
+     `🙋 #12 needs your approval: <reasons>`.
+   - **Yes** → it ended without finishing:
+     `factory reclaim <id> --worker <worker> --reason "<the worker's report or stopReason>" --json`.
+     The second time, the card goes to blocked with `needs-you` by itself.
+3. Release the worker's terminal: `orca orchestration worker-release --dispatch <dispatchId> --json`.
+   Each dispatch gets a fresh terminal, so a settled worker's chat is not needed (workers in new
+   worktrees are kept open by default and would pile up otherwise). If the user said they want to
+   watch or talk to workers, skip this.
 
-A `question` from a worker: answer only from the card and the user's instructions; otherwise
-ask the user. Then go back to §2: dispatch the next plan. A card handed to the next lane is
-dispatched again on the next plan, in the same worktree (its placement says so).
+**An escalation with `failureKind: usageLimitReached`** (the agent ran out of quota) is not the
+worker's fault: do not reclaim, so the card keeps its claim and its failure count. Tell the user when
+the quota resets (the `detail` says), and when they say to go on, stop the dead attempt and retry the
+same Task, on the agent they choose: `orca orchestration worker-stop --dispatch <old>`, then
+`orca orchestration worker-start --task <taskId> --retry-of <old> --worktree <placement> --agent … --json`,
+then `factory dispatched <id> --as <worker> --dispatch <new>`. A worktree that no longer exists
+needs `new-top-level` again; delete first an Orca branch `<user>/<name>` with nothing on it
+(`git branch -d`), or the new worktree cannot take that name.
 
-## 4 · Done
+A reviewer that reports "the round is over" lost a race with another lens that failed the card:
+that is normal, not a failure. A `question` from a worker: answer only from the card and the user's
+instructions; otherwise ask the user.
 
-When `factory status --json` says `idle` (nothing in flight, nothing to dispatch), report:
-cards merged this run (with SHAs), cards that need the user (`needsYou`), cards waiting on
-blockers, and stop.
+Then go back to §2 and dispatch the next plan. A card that moved to the next lane is dispatched
+again there: the builder in the card's worktree, each reviewer in its own.
+
+## 4 · Requests for the user
+
+After every reconcile, read `factory status --json` and tell the user, once per card, right away
+(do not wait for the end of the run):
+
+- **`approvals`** — the merge gate held a change that touches the business (high risk, a business
+  label, a sensitive path, a big diff, or a reviewer escalated it). Say it plainly:
+
+  ```text
+  🙋 #12 «<title>» needs your approval to merge
+  Why: <the reasons in the card's last [merge] comment>
+  Reviewed: <branch> @ <sha> — the whole panel passed it
+  Approve: open the card on the board and press "Aprobar y mergear", or run
+           factory merge 12 --sha <sha> --human
+  ```
+
+- **`needsYou`** — something is stuck: a spec that needs a decision, a card that bounced three
+  times, a worker that failed twice. Quote the question or the reason from the last comment and
+  say what unblocks it (answer in a comment and move the card back to `spec`, `ready` or `building`).
+
+Never approve, answer or move those cards yourself. Keep dispatching everything else meanwhile.
+
+## 5 · Done
+
+When `factory status --json` says `idle` (nothing in flight, nothing to dispatch), report: cards
+merged this run (with SHAs), merges waiting for the user's approval, cards that need the user,
+and cards waiting on blockers. Then stop.
 
 ## Status and stop
 
 - "status": `factory status` and report it. Read-only.
-- "stop": `factory stop --json` releases every in-flight card and lists their dispatches; for each
+- "stop": `factory stop --json` releases every in-flight claim and lists their dispatches; for each
   dispatch, `orca orchestration worker-stop --dispatch <id> --json`. Report what stopped and anything
   `stop_unknown` (do not retry it).
 
 ## Never
 
-- Edit code, run tests, review diffs, or merge. Workers do that, through their skills.
-- Move cards with `factory move`, pass `--force`, or touch `needs-you` cards.
+- Write specs, edit code, run tests, review diffs, or merge. Workers do that, through their skills.
+- Move cards with `factory move`, pass `--force` or `--human`, or touch `needs-you` cards.
 - Patch the factory (scripts, skills) mid-run. Report the symptom and wait for the user.

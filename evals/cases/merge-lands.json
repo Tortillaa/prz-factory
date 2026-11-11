@@ -1,0 +1,100 @@
+{
+  "description": "The merge agent lands a small change the whole panel passed: nothing touches the business, so the gate merges it by itself.",
+  "fixture": "shop",
+  "lane": "merge",
+  "setup": [
+    {
+      "card": {
+        "title": "Average of an empty cart is 0",
+        "bodyFile": "card-empty-cart.md",
+        "labels": [
+          "bug"
+        ],
+        "column": "merge"
+      }
+    },
+    {
+      "worktree": {}
+    },
+    {
+      "sh": "git switch -q -c factory/1-average-of-an-empty-cart-is-0",
+      "cwd": "worktree"
+    },
+    {
+      "write": {
+        "path": "src/cart.mjs",
+        "content": "// Average price of the items in a cart.\nexport function average(prices) {\n  if (prices.length === 0) return 0;\n  return prices.reduce((sum, p) => sum + p, 0) / prices.length;\n}\n",
+        "cwd": "worktree"
+      }
+    },
+    {
+      "write": {
+        "path": "test/cart-empty.test.mjs",
+        "content": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { average } from '../src/cart.mjs';\n\ntest('average of an empty cart is 0', () => {\n  assert.equal(average([]), 0);\n});\n",
+        "cwd": "worktree"
+      }
+    },
+    {
+      "sh": "git add -A && git commit -qm \"🐛 [fix] cart: average of an empty cart is 0\"",
+      "cwd": "worktree"
+    },
+    {
+      "sh": "git switch -q --detach",
+      "cwd": "worktree"
+    },
+    {
+      "run": {
+        "id": 1,
+        "branch": "factory/1-average-of-an-empty-cart-is-0"
+      }
+    },
+    {
+      "comment": {
+        "id": 1,
+        "role": "build",
+        "text": "[build] ✅ built · round 1\nDid: empty-cart guard in average, test for the empty case\n✅ Done: AC1 test/cart-empty.test.mjs:5 · AC2 test/cart.test.mjs:6 · AC3 test/cart-empty.test.mjs\nNext: review"
+      }
+    },
+    {
+      "panel": {
+        "id": 1
+      }
+    },
+    {
+      "claim": {
+        "id": 1,
+        "as": "merge-1"
+      }
+    }
+  ],
+  "prompt": "spec:1",
+  "graders": [
+    {
+      "card": {
+        "id": 1,
+        "column": "done"
+      }
+    },
+    {
+      "onBase": {
+        "id": 1
+      }
+    },
+    {
+      "comment": {
+        "id": 1,
+        "role": "merge"
+      }
+    },
+    {
+      "labels": {
+        "id": 1,
+        "excludes": [
+          "needs-human",
+          "pricing",
+          "payments"
+        ]
+      }
+    }
+  ]
+}

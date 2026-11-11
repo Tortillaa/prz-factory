@@ -20,9 +20,9 @@ import {
 } from 'orca'
 import type { BoardsSnapshot, CardView } from './protocol'
 
-const COLUMNS = ['backlog', 'ready', 'building', 'qa', 'review', 'blocked', 'done']
+const COLUMNS = ['backlog', 'spec', 'ready', 'building', 'qa', 'review', 'merge', 'blocked', 'done']
 /** Columns opened by default: where work is happening or waiting for a person. */
-const OPEN = new Set(['building', 'qa', 'review', 'blocked'])
+const OPEN = new Set(['spec', 'building', 'qa', 'review', 'merge', 'blocked'])
 
 const snapshot = atom<BoardsSnapshot | null>(null)
 const chosen = atom('board', '', { persist: 'plugin' })

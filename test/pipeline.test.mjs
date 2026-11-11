@@ -201,3 +201,45 @@ test('every step of the chain is told to load its ponytail skill, and the skills
   assert.equal(fs.readFileSync(path.join(dir, '.claude', 'skills', 'ponytail', 'SKILL.md'), 'utf8'), 'mine');
   assert.ok(fs.existsSync(path.join(dir, '.claude', 'skills', 'ponytail-review', 'LICENSE')));
 });
+
+test('agents: each lane can run on its own Orca agent, model and effort; plan says which', async () => {
+  const { launchFor } = await import('../src/config.mjs');
+  const run = await import('../src/run.mjs');
+  const dir = tmp('factory-agents-');
+  const write = (c) => fs.writeFileSync(path.join(dir, 'factory.config.json'), JSON.stringify(c));
+  write({ verify: ['x'], agents: { review: { agent: 'grok', model: 'grok-4.7', effort: 'high' }, build: { agent: 'codex' } } });
+  const { config } = loadConfig(dir);
+  assert.deepEqual(launchFor('review', config), { agent: 'grok', model: 'grok-4.7', effort: 'high' });
+  assert.deepEqual(launchFor('build', config), { agent: 'codex' });
+  assert.deepEqual(launchFor('spec', config), { agent: 'claude' }, 'a lane with no entry runs on Claude');
+  assert.deepEqual(DEFAULTS.agents, {});
+
+  for (const [bad, msg] of [
+    [{ agents: { deploy: { agent: 'grok' } } }, /unknown lane/],
+    [{ agents: { review: {} } }, /must name an Orca agent/],
+    [{ agents: { review: { agent: 'grok', effort: 'high' } } }, /needs "agents\.review\.model"/],
+    [{ agents: [] }, /"agents" must be an object/],
+  ]) {
+    write(bad);
+    assert.throws(() => loadConfig(dir), msg);
+  }
+
+  const b = empty();
+  store.addCard(b, { title: 'idea', column: 'spec' });
+  store.addCard(b, { title: 'built', body: GOOD_BODY });
+  store.moveCard(b, 2, 'review', null, { force: true });
+  b.cards[1].run.branch = 'factory/2-built';
+  const plan = run.plan(b, { ...config, maxWorkers: 9, review: { lenses: ['qa', 'code'] } }, path.resolve('/repo'));
+  assert.deepEqual(plan.map((a) => [a.lane, a.lens, a.launch.agent, a.launch.model ?? null]), [
+    ['review', 'qa', 'grok', 'grok-4.7'],
+    ['review', 'code', 'grok', 'grok-4.7'],
+    ['spec', null, 'claude', null],
+  ]);
+});
+
+test('the worker spec works for agents that do not load project rules or skills on their own', async () => {
+  const run = await import('../src/run.mjs');
+  const text = run.spec({ id: 3, title: 'x' }, 'build', 'build-3', path.resolve('/repo'));
+  assert.match(text, /read the `CLAUDE\.md` or `AGENTS\.md` at the root of this worktree first/);
+  assert.match(text, /If your agent does not list it[\s\S]*read [^\n]*skills[\\/]factory-build[\\/]SKILL\.md/);
+});

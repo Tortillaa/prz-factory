@@ -74,5 +74,35 @@ export function doctor(cwd = process.cwd()) {
   const guardFile = fs.existsSync(path.join(root, '.claude', 'hooks', 'factory-guard.mjs'));
   add('guard hooks', guards.length >= 4 && guardFile, guardFile ? `${guards.length} guards wired` : 'factory-guard.mjs not installed', 'run `factory install` (without --no-hooks)');
 
+  // Grok reads the same .claude/ skills, CLAUDE.md and guard hooks, but only in a folder it trusts,
+  // and trusting the main checkout covers every worktree of the repo. Checked only when Grok is
+  // installed or a lane runs on it: otherwise it is not this project's concern.
+  let usesGrok = false;
+  try {
+    usesGrok = Object.values(loadConfig(root).config.agents || {}).some((a) => a.agent === 'grok');
+  } catch {}
+  const grok = findGrok();
+  if (grok || usesGrok) {
+    if (!grok) add('grok', false, 'a lane runs on grok but the Grok CLI is not installed', 'install Grok Build (https://docs.x.ai/build/overview.md) and sign in with `grok`');
+    else {
+      const out = run(grok, ['inspect', '--json'], root);
+      let trusted = null;
+      try {
+        trusted = JSON.parse(out).projectTrusted === true;
+      } catch {}
+      if (trusted === null) add('grok', false, `${grok}: could not read \`grok inspect --json\``, 'run `grok inspect` here and check it works');
+      else add('grok', trusted, trusted ? 'project trusted: Grok loads the rules, skills and guard hooks in every worktree' : 'project not trusted: Grok workers would run without the rules, skills and guard hooks', `in ${root} run \`grok --trust inspect\` once (it trusts this repo and all its worktrees)`);
+    }
+  }
+
   return { ok: checks.every((c) => c.ok), checks };
+}
+
+// The Grok CLI: on PATH, or where its installer puts it (~/.grok/bin).
+function findGrok() {
+  const onPath = run(process.platform === 'win32' ? 'where' : 'which', ['grok'], process.cwd());
+  if (onPath) return onPath.split(/\r?\n/)[0];
+  const home = process.env.GROK_HOME || path.join(process.env.USERPROFILE || process.env.HOME || '', '.grok');
+  const bin = path.join(home, 'bin', process.platform === 'win32' ? 'grok.exe' : 'grok');
+  return fs.existsSync(bin) ? bin : null;
 }

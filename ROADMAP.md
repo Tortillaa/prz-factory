@@ -101,9 +101,20 @@ El proceso que pidió el usuario: manda una tarjeta con sus palabras, un Spec Wr
 - [x] Guía de uso paso a paso: `docs/GUIA.md`.
 - [x] Cada paso consulta ponytail ([DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail), MIT), incluido en `skills/` para que todos los workers lo tengan: el Spec Writer recorta el alcance con su escalera ("¿tiene que existir?"), el Builder la aplica a cada línea y deja una línea `Skipped:`, y cada reviewer carga `ponytail-review`. En la lente `code`, el código que no debería existir es un Blocker.
 
+## Fase 8 · Grok y otros agentes ✅
+
+Para no gastar cuota de Claude en todo, cada lane puede correr en otro agente de Orca. El usuario pidió los reviewers en Grok 4.7 con esfuerzo alto.
+
+- [x] `agents` en `factory.config.json`: agente, modelo y esfuerzo por lane; `plan` los devuelve en `launch` y `factory-run` los usa. Este repo: reviewers en Grok 4.7 alto.
+- [x] Los guard hooks entienden los eventos de Grok (`toolName`/`toolInput` y sus nombres de herramienta), además de los de Claude Code.
+- [x] El spec de cada worker no depende de que su agente cargue solo las reglas y las skills: dice que lea `CLAUDE.md` y da la ruta absoluta de cada skill.
+- [x] `factory doctor` comprueba que Grok esté instalado y que el repo sea de confianza para Grok (la confianza del checkout principal cubre todos sus worktrees).
+- [x] El coordinador sabe reintentar un worker que se quedó sin cuota (`usageLimitReached`) en vez de liberar la tarjeta.
+- [x] Probado de verdad: la tarjeta #6 recorrió spec (Claude) → build (Claude) → panel de cuatro reviewers en Grok 4.7 en paralelo → merge gate, que la retuvo para una persona por tocar `src/store.mjs`.
+
 ## Pendiente fuera del código
 
-- [ ] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): los skills nuevos solo se han probado con el CLI, no con agentes.
+- [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.
 - [ ] Ejecutar las evals con un agente real (`factory eval`): lanzan Claude Code headless con Bash en repos temporales y requieren tu permiso.
 - [ ] Instalar el plugin en Orca (`orca-plugin/README.md`): es `trusted-worker` y requiere tu aprobación.
 - [ ] Subir el repo a GitHub para que corra el CI.

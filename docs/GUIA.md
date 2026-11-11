@@ -89,6 +89,23 @@ Es el archivo donde decides cómo se comporta la fábrica en ese proyecto. Lo m�
 
 **Dedica un minuto a `humanPaths`.** Pon ahí las carpetas donde vive el dinero, los permisos, la base de datos y el despliegue de tu proyecto.
 
+### Paso 3b. Elige qué agente hace cada trabajo (opcional)
+
+Por defecto, todos los pasos corren en Claude. Para gastar menos cuota de Claude, puedes mandar algún paso a otro agente de Orca. Por ejemplo, los reviewers a Grok:
+
+```json
+"agents": {
+  "review": { "agent": "grok", "model": "grok-4.7", "effort": "high" }
+}
+```
+
+Para usar Grok, una sola vez:
+
+1. Instala Grok Build: en PowerShell, `irm https://x.ai/cli/install.ps1 | iex`.
+2. Ejecuta `grok` e inicia sesión.
+3. En la carpeta del proyecto, ejecuta `grok --trust inspect`. Así Grok confía en el proyecto y en todos sus worktrees, y carga sus reglas, sus skills y los guards de seguridad.
+4. Comprueba con `factory doctor`: la línea `grok` debe salir en verde.
+
 ### Paso 4. Guarda la configuración
 
 ```sh
@@ -230,6 +247,7 @@ factory cleanup --apply    # lo borra
 | Forzar que un cambio pase por mí | Añade la etiqueta `needs-human` a la tarjeta |
 | Que ponytail sea más o menos estricto | Viene incluido y los agentes lo cargan solos. Si prefieres tu propia versión, pon tu skill `ponytail` en `.claude/skills/` del proyecto: `factory install` no la pisa |
 | Añadir o quitar un reviewer | Cambia `review.lenses` en `factory.config.json` |
+| Mandar un paso a otro agente (Grok, Codex…) | `agents` en `factory.config.json` (Parte 1, paso 3b) |
 | Ver todos los comandos | `factory --help` |
 
 ### Si algo va mal
@@ -241,6 +259,8 @@ factory cleanup --apply    # lo borra
 | Una tarjeta está en BLOCKED y no sé por qué | Ábrela: el último comentario lo explica. |
 | Un agente se ha quedado colgado | `factory status` marca los claims viejos con ⚠️. Di "status" al coordinador, o libérala con `factory reclaim <id>`. |
 | `factory doctor` falla | Sigue la línea `→` que acompaña a cada fallo. |
+| Un agente se para con "hit its session limit" | Se ha acabado la cuota de ese agente. El coordinador te dice a qué hora se renueva; cuando quieras seguir, díselo y reintenta el mismo trabajo (o pásalo a otro agente con `agents`). |
+| La línea `grok` de `factory doctor` sale en rojo | Ejecuta `grok --trust inspect` en la carpeta del proyecto. |
 | La fábrica no coge mis tarjetas | Comprueba que están en SPEC o READY (no en BACKLOG) y que el coordinador está en marcha. |
 
 ---

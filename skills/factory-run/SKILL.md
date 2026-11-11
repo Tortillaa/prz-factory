@@ -52,22 +52,25 @@ orca orchestration run-current --json
 factory plan --json
 ```
 
-Each action is `{ id, title, lane, lens, worker, placement }`, already limited to the free slots
-(`maxWorkers` in `factory.config.json`). `lane` is `spec`, `build`, `qa` or `review`; `lens` is set
-only for `review` (one action per lens: a card in review gets several workers at once). For each
-action, in order:
+Each action is `{ id, title, lane, lens, worker, placement, launch }`, already limited to the free
+slots (`maxWorkers` in `factory.config.json`). `lane` is `spec`, `build`, `qa` or `review`; `lens` is
+set only for `review` (one action per lens: a card in review gets several workers at once).
+`launch` is `{ agent, model?, effort? }`: the Orca agent that runs this lane (`agents` in
+`factory.config.json`; `claude` when the lane has no entry). For each action, in order:
 
 1. Reserve it: `factory claim <id> --as <worker> [--lens <lens>] --json`. If the claim fails, skip it.
 2. Start the worker with the generated spec:
 
    ```text
    factory spec <id> --lane <lane> [--lens <lens>] --as <worker> | orca orchestration worker-start --spec-file - \
-     --agent claude --task-title "#<id> <lane>[:<lens>]: <title>" --worktree <placement.worktree> \
+     --agent <launch.agent> [--model <launch.model> [--effort <launch.effort>]] \
+     --task-title "#<id> <lane>[:<lens>]: <title>" --worktree <placement.worktree> \
      [--repo <placement.repo> --name <placement.name> --base-branch <baseBranch>] --json
    ```
 
-   `--repo`, `--name` and `--base-branch` only when `placement.worktree` is `new-top-level`
-   (`baseBranch` from `factory.config.json`). Add `--model` only if the user named one.
+   `--model` and `--effort` only when `launch` has them; a model the user names for this run
+   replaces `launch.model`. `--repo`, `--name` and `--base-branch` only when `placement.worktree`
+   is `new-top-level` (`baseBranch` from `factory.config.json`).
 3. Record the dispatch: `factory dispatched <id> --as <worker> --dispatch <dispatchId from the receipt> --json`.
    `recorded: false` means the worker already finished: fine, nothing to do.
 4. If `worker-start` fails, do not rerun it: `factory release <id> [--lens <lens>]`, report the
@@ -93,6 +96,15 @@ For each `worker_done` or `escalation`:
    Each dispatch gets a fresh terminal, so a settled worker's chat is not needed (workers in new
    worktrees are kept open by default and would pile up otherwise). If the user said they want to
    watch or talk to workers, skip this.
+
+**An escalation with `failureKind: usageLimitReached`** (the agent ran out of quota) is not the
+worker's fault: do not reclaim, so the card keeps its claim and its failure count. Tell the user when
+the quota resets (the `detail` says), and when they say to go on, stop the dead attempt and retry the
+same Task, on the agent they choose: `orca orchestration worker-stop --dispatch <old>`, then
+`orca orchestration worker-start --task <taskId> --retry-of <old> --worktree <placement> --agent … --json`,
+then `factory dispatched <id> --as <worker> --dispatch <new>`. A worktree that no longer exists
+needs `new-top-level` again; delete first an Orca branch `<user>/<name>` with nothing on it
+(`git branch -d`), or the new worktree cannot take that name.
 
 A reviewer that reports "the round is over" lost a race with another lens that failed the card:
 that is normal, not a failure. A `question` from a worker: answer only from the card and the user's

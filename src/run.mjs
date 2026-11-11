@@ -6,6 +6,7 @@ import path from 'node:path';
 import * as store from './store.mjs';
 import { FACTORY_ROOT } from './install.mjs';
 import { APPROVAL } from './merge.mjs';
+import { launchFor } from './config.mjs';
 
 // Columns with one lane per card. Review is a panel: one worker per lens, handled apart.
 const LANE_OF = { qa: 'qa', building: 'build', spec: 'spec' };
@@ -53,6 +54,7 @@ export function plan(board, config, repoRoot) {
     lens,
     worker: workerName(card.id, lane, lens),
     placement: placement(card, repoRoot, lens),
+    launch: launchFor(lane, config),
   }));
 }
 
@@ -92,8 +94,10 @@ export function spec(card, lane, worker, repoRoot, lens = null) {
 Card #${card.id}: ${card.title}
 Repository: ${repoRoot}
 
-1. Load the \`factory-${lane}\` skill and follow it for card #${card.id}. If it is not installed in this
-   worktree, read ${skill} and follow that file.${lensLine}${craftLine}
+0. If your agent has not loaded this project's rules on its own (Grok does only in a folder it
+   trusts), read the \`CLAUDE.md\` or \`AGENTS.md\` at the root of this worktree first.
+1. Load the \`factory-${lane}\` skill and follow it for card #${card.id}. If your agent does not list it
+   (Claude Code and Grok find it in \`.claude/skills/\`), read ${skill} and follow that file.${lensLine}${craftLine}
 2. The card is already claimed as ${worker}: use \`--as ${worker}\` in every factory command, starting with
    \`factory start ${card.id} --lane ${lane}${lensFlag} --as ${worker} --json\`. If \`factory\` is not on PATH, run
    \`node ${cli}\` instead.

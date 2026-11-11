@@ -15,6 +15,13 @@
       "ops"
     ]
   },
+  "agents": {
+    "review": {
+      "agent": "grok",
+      "model": "grok-4.7",
+      "effort": "high"
+    }
+  },
   "merge": {
     "humanRisk": [
       "high"

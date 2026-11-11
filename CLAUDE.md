@@ -52,9 +52,17 @@ El flujo es **spec → ready → building → review (panel en paralelo) → don
 
 ## Guard hooks (Fase 4)
 
+- **También para Grok.** Grok lee el mismo `.claude/settings.json` (compatibilidad con Claude) y pone `CLAUDE_PROJECT_DIR`, pero entrega el evento en otra forma (`toolName`/`toolInput`, herramientas `run_terminal_command`, `read_file`, `search_replace`…, ficheros en `target_file` o `path`). `normalize()` lo traduce a la forma de Claude al empezar cada guard; los tests de `test/guard.test.mjs` cubren los dos formatos.
+
 - `hooks/factory-guard.mjs <guard>` es un hook PreToolUse autocontenido: se copia tal cual a cada proyecto, así que **no puede importar nada de `src/`**. Exporta cada guard como función pura (`guardSecrets`, `guardKeyLiterals`, `guardProtectedPush`, `guardDeleteOutside`), que es lo que prueban los tests; `protectedPush` y `deleteOutside` aceptan un `ctx` para no depender de git en los tests. Un guard desconocido o un JSON roto nunca bloquean (exit 0).
 - Los guards están activos en esta sesión. Si uno bloquea algo legítimo, arregla el guard y su test; no lo esquives.
 - `src/cleanup.mjs` solo toca lo que creó la fábrica (`factory-<id>`, `factory/*`, `*/factory-<id>`) de tarjetas que no están activas, y vuelve a comprobar cada rama justo antes de borrarla.
+
+## Agentes por lane (Grok y otros)
+
+- `config.agents` (`{ <lane>: { agent, model?, effort? } }`, validado en `src/config.mjs`; `effort` exige `model`, como Orca) decide qué agente de Orca ejecuta cada lane. `launchFor(lane, config)` lo resuelve (Claude si la lane no tiene entrada) y `plan` lo devuelve en `launch`; el skill `factory-run` lo pasa a `worker-start`. Este repo ejecuta los reviewers en Grok 4.7 con esfuerzo alto.
+- **Grok** encuentra las skills de `.claude/skills/`, lee `CLAUDE.md` y ejecuta los hooks de `.claude/settings.json`, pero **solo en carpetas de confianza** (`~/.grok/trusted_folders.toml`). Confiar en el checkout principal (`grok --trust inspect` una vez) cubre todos los worktrees del repo. `factory doctor` lo comprueba cuando Grok está instalado o alguna lane lo usa. Sin confianza, el spec de `run.spec` basta: dice que lea `CLAUDE.md` y da la ruta absoluta de cada skill, aunque entonces faltarían los guards.
+- Orca lanza Grok como `grok agent --always-approve … stdio` (modo ACP), sin `--trust`.
 
 ## Entrada de trabajo (Fase 5)
 
@@ -125,5 +133,6 @@ Also backlog (parked), qa (`qa` cards) and blocked (waiting for a person). `fact
 | Business labels | agents may add one (or `needs-human`), never remove one |
 | Craft | every step loads `ponytail` (spec, build) or `ponytail-review` (reviewers): the smallest change that fully works, and no code that should not exist |
 | Writing | commits and comments: `.claude/skills/factory-board/references/writing-standard.md` |
+| Agents | review on grok grok-4.7 (high) · other lanes on claude; Claude Code and Grok read the same `.claude/` skills, this file and the guard hooks |
 | Secrets | never read `.env` or key files; never write a key literal (guard hooks block both) |
 <!-- prz-factory:end -->

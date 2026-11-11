@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// prz-factory guard hooks for Claude Code (PreToolUse). Self-contained on purpose: `factory install`
-// copies this file into <project>/.claude/hooks/ and settings.json runs it as
+// prz-factory guard hooks (PreToolUse) for Claude Code and Grok. Self-contained on purpose:
+// `factory install` copies this file into <project>/.claude/hooks/ and settings.json runs it as
 //   node "$CLAUDE_PROJECT_DIR/.claude/hooks/factory-guard.mjs" <guard>
+// Grok reads the same .claude/settings.json (Claude compatibility) and sets CLAUDE_PROJECT_DIR too.
 // It reads the hook event as JSON on stdin. Exit 0 allows the tool call; exit 2 blocks it and the
-// reason on stderr goes back to the agent.
+// reason on stderr goes back to the agent (both agents treat exit 2 as a deny).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -66,10 +67,33 @@ export function isSecretPath(p) {
   return SECRET_FILE.some((re) => re.test(s));
 }
 
+// ---------- event shape ----------
+
+// Grok sends { toolName, toolInput } with its own tool names and input keys; Claude Code sends
+// { tool_name, tool_input }. Every guard works on the Claude shape, so translate Grok's first.
+const TOOL_ALIASES = {
+  run_terminal_command: 'Bash', Shell: 'Bash',
+  read_file: 'Read',
+  search_replace: 'Edit', hashline_edit: 'Edit', StrReplace: 'Edit',
+  write: 'Write', EditNotebook: 'NotebookEdit',
+  grep: 'Grep', list_dir: 'LS',
+};
+export function normalize(input = {}) {
+  const name = input.tool_name ?? input.toolName;
+  const raw = input.tool_input ?? input.toolInput ?? {};
+  const t = { ...raw };
+  // Grok names the file target_file (read_file), path (StrReplace, Write) or target_notebook.
+  if (name !== 'grep' && name !== 'Grep') t.file_path ??= raw.target_file ?? raw.path ?? raw.target_notebook;
+  // ...and the text it writes contents (Write) or code_edit.
+  t.content ??= raw.contents ?? raw.code_edit;
+  return { ...input, tool_name: TOOL_ALIASES[name] ?? name, tool_input: t };
+}
+
 // Commands that print or ship a file's content.
 const READERS = new Set(['cat', 'less', 'more', 'head', 'tail', 'type', 'bat', 'grep', 'rg', 'egrep', 'sed', 'awk', 'source', '.', 'cp', 'scp', 'base64', 'xxd', 'od', 'strings', 'get-content', 'gc', 'select-string', 'curl', 'nl', 'sort', 'uniq', 'jq']);
 
 export function guardSecrets(input) {
+  input = normalize(input);
   const t = input.tool_input || {};
   const tool = input.tool_name;
   if (['Read', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit'].includes(tool) && isSecretPath(t.file_path || t.notebook_path)) {
@@ -104,8 +128,9 @@ export function findKey(text) {
 }
 
 export function guardKeyLiterals(input) {
+  input = normalize(input);
   const t = input.tool_input || {};
-  const texts = [t.content, t.new_string, t.new_source, ...(t.edits || []).map((e) => e.new_string)];
+  const texts = [t.content, t.new_string, t.new_source, ...(t.edits || []).map((e) => e.new_string ?? e.new_text ?? e.text)];
   if (input.tool_name === 'Bash' || input.tool_name === 'PowerShell') texts.push(t.command);
   for (const text of texts) {
     const kind = findKey(text);
@@ -127,6 +152,7 @@ function protectedBranches(root) {
 
 // ctx: { cwd, protectedBranches, linkedWorktree, currentBranch } (computed from git when not given).
 export function guardProtectedPush(input, ctx = {}) {
+  input = normalize(input);
   if (input.tool_name !== 'Bash' && input.tool_name !== 'PowerShell') return null;
   const cwd = ctx.cwd ?? input.cwd ?? process.cwd();
   const segs = segments(input.tool_input?.command || '').filter((s) => path.basename(s[0]).toLowerCase() === 'git');
@@ -176,6 +202,7 @@ export function guardProtectedPush(input, ctx = {}) {
 // ---------- guard: recursive deletes outside the project ----------
 
 export function guardDeleteOutside(input, ctx = {}) {
+  input = normalize(input);
   if (input.tool_name !== 'Bash' && input.tool_name !== 'PowerShell') return null;
   const cwd = ctx.cwd ?? input.cwd ?? process.cwd();
   const root = ctx.root ?? git(['rev-parse', '--show-toplevel'], cwd) ?? cwd;

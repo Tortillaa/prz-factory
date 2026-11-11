@@ -63,7 +63,13 @@ Ask, with the defaults as the recommended answers:
    money, the permissions, the schema and the deploy live in this repo, and list those paths.
 5. `review.lenses` (default qa, security, code, ops): the experts of the review panel. Set
    `maxWorkers` to at least that many so a panel runs fully in parallel.
-4. `maxWorkers` (default 2): parallel Orca workers. More workers, more machine and usage.
+6. `maxWorkers` (default 2): parallel Orca workers. More workers, more machine and usage.
+7. `agents` (default: every lane on Claude): which Orca agent, model and effort runs each lane,
+   e.g. `"review": { "agent": "grok", "model": "grok-4.7", "effort": "high" }` to spare Claude's
+   quota. A lane on Grok needs the Grok CLI installed and signed in (`grok`), and the project
+   trusted by Grok once: `grok --trust inspect` in the main checkout. Trust covers every worktree
+   of the repo; without it, Grok workers run without the rules, the skills and the guard hooks.
+   `factory doctor` checks both.
 
 Write the answers to `factory.config.json` and run `factory doctor` again: `config` must pass.
 

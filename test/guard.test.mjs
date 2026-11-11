@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { guardSecrets, guardKeyLiterals, guardProtectedPush, guardDeleteOutside, isSecretPath, segments } from '../hooks/factory-guard.mjs';
+import { guardSecrets, guardKeyLiterals, guardProtectedPush, guardDeleteOutside, isSecretPath, segments, normalize } from '../hooks/factory-guard.mjs';
 
 const bash = (command) => ({ tool_name: 'Bash', tool_input: { command } });
 const GUARD = path.join(import.meta.dirname, '..', 'hooks', 'factory-guard.mjs');
@@ -82,4 +82,43 @@ test('the script blocks with exit 2 and allows with exit 0', () => {
   assert.equal(run('secrets', { tool_name: 'Read', tool_input: { file_path: 'a.js' } }).status, 0);
   assert.equal(run('nope', {}).status, 0, 'unknown guard never blocks');
   assert.equal(spawnSync(process.execPath, [GUARD, 'secrets'], { input: 'not json' }).status, 0);
+});
+
+// Grok reads the same .claude/settings.json hooks but sends its own event shape and tool names.
+const grok = (toolName, toolInput) => ({ hookEventName: 'pre_tool_use', hook_event_name: 'PreToolUse', cwd: os.tmpdir(), toolName, toolInput, toolInputTruncated: false });
+
+test('grok events: every guard reads Grok tool names and input keys', () => {
+  assert.deepEqual(normalize(grok('read_file', { target_file: '/p/a.txt' })).tool_name, 'Read');
+  assert.equal(normalize(grok('read_file', { target_file: '/p/a.txt' })).tool_input.file_path, '/p/a.txt');
+  assert.equal(normalize(bash('ls')).tool_name, 'Bash', 'a Claude event passes through unchanged');
+
+  assert.ok(guardSecrets(grok('read_file', { target_file: 'C:\\app\\.env' })));
+  assert.equal(guardSecrets(grok('read_file', { target_file: 'C:\\app\\.env.example' })), null);
+  assert.ok(guardSecrets(grok('run_terminal_command', { command: 'cat .env' })));
+  assert.ok(guardSecrets(grok('StrReplace', { path: 'certs/server.pem', old_string: 'a', new_string: 'b' })));
+  assert.ok(guardSecrets(grok('grep', { pattern: 'KEY', path: '.env.local' })));
+  assert.equal(guardSecrets(grok('grep', { pattern: 'KEY', path: 'src' })), null);
+
+  const key = 'sk-ant-' + 'a'.repeat(30);
+  assert.ok(guardKeyLiterals(grok('write', { file_path: 'src/x.js', content: `const k = "${key}"` })));
+  assert.ok(guardKeyLiterals(grok('Write', { path: 'src/x.js', contents: `const k = "${key}"` })));
+  assert.ok(guardKeyLiterals(grok('search_replace', { file_path: 'src/x.js', old_string: 'a', new_string: key })));
+  assert.ok(guardKeyLiterals(grok('run_terminal_command', { command: `export K=${key}` })));
+  assert.equal(guardKeyLiterals(grok('write', { file_path: 'src/x.js', content: 'process.env.KEY' })), null);
+
+  const worker = { protectedBranches: ['main'], linkedWorktree: true, currentBranch: 'factory/1-x', cwd: os.tmpdir() };
+  assert.ok(guardProtectedPush(grok('run_terminal_command', { command: 'git push origin main' }), worker));
+  assert.equal(guardProtectedPush(grok('run_terminal_command', { command: 'git push origin factory/1-x' }), worker), null);
+
+  const root = path.join(os.tmpdir(), 'proj');
+  assert.ok(guardDeleteOutside(grok('run_terminal_command', { command: 'rm -rf /' }), { cwd: root, root }));
+  assert.equal(guardDeleteOutside(grok('run_terminal_command', { command: 'rm -rf build' }), { cwd: root, root }), null);
+});
+
+test('grok events: the script blocks with exit 2 and allows with exit 0', () => {
+  const run = (guard, event) => spawnSync(process.execPath, [GUARD, guard], { input: JSON.stringify(event), encoding: 'utf8' });
+  const blocked = run('secrets', grok('read_file', { target_file: '/p/.env' }));
+  assert.equal(blocked.status, 2);
+  assert.match(blocked.stderr, /factory guard \(secrets\)/);
+  assert.equal(run('secrets', grok('read_file', { target_file: '/p/README.md' })).status, 0);
 });

@@ -1,10 +1,12 @@
 ---
 name: factory-spec
 description: >-
-  Spec writer lane of prz-factory: take one rough idea from the `spec` column, read the code it
-  touches, write it as a card a builder can build without guessing, classify its business impact,
-  and send it to Ready by itself. Never writes code. Use when told to spec card #N, when dispatched
-  as a factory spec worker, or when the user says "factory-spec" / "redacta la tarjeta".
+  Spec writer of prz-factory: turn a rough idea (a card in the `spec` column) into a complete card a
+  builder can build without guessing: read the code it touches, cut it to the smallest version,
+  write Problem, Context, Fix, testable Acceptance Criteria and Risk, classify its business impact,
+  and send it to Ready by itself. Never writes code. Use whenever an idea, request or vague card has
+  to become a buildable card, or when dispatched as a factory spec worker. Triggers: "redacta la
+  tarjeta", "escribe el spec", "convierte esta idea en tarjeta", "write the spec for #N", "spec card #N".
 ---
 
 # factory-spec
@@ -32,6 +34,33 @@ Before writing a word, find where the idea lands: the route, command, file and f
 that already cover that area, and the project rules in `CLAUDE.md` / `AGENTS.md`. Name real paths
 and symbols in the card. If the idea is already true in the code, say so in the handoff to
 `blocked` instead of writing a card for nothing.
+
+### When the card is hard to write: an Opus subagent
+
+You run on a mid-size model (the project's `agents.spec` in `factory.config.json`). Most ideas fit
+it. Now that you know where the idea lands, decide whether this one is hard to write. Call in a
+**Claude Opus 5.5 subagent** when one of these is true:
+
+- **It spans several modules or layers** and you are not sure where the change belongs or how to
+  split it into slices.
+- **It touches the business or the data:** auth, payments, pricing, schema or migrations, or
+  anything that runs in production. The Risk, the labels and the edge cases must be exactly right.
+- **The idea is ambiguous** in a way the code does not settle, and you cannot tell a real product
+  decision (ask the user) from one the code already answers.
+- **The card came back from `blocked`** with the user's answers and they change the scope.
+
+Not for a clear, local idea (one function, one command, one page): write it yourself. Opus costs
+several times more; if you are unsure, write it yourself first.
+
+How: start a subagent with your agent's subagent tool (in Claude Code, the Agent tool with
+`model: "opus"`), in this same worktree. Give it a self-contained brief: the idea as the user wrote
+it, the comments, the files and symbols you found, the project's `merge` policy, and what you want
+back (a draft of the card body with its Risk and labels, or the slices). It must not run `factory`
+commands or change files. You stay the spec writer: check its draft against the code and every rule
+below, fix it, file it yourself, and say it in your handoff comment: `Opus: <why this card needed it>`.
+
+If your agent has no subagent tool, write the card yourself and, when in doubt about the business
+classification, take the stricter one.
 
 ## 3 · Write the card
 

@@ -1,9 +1,11 @@
 ---
 name: factory-board
 description: >-
-  Read and update the prz-factory kanban board through the `factory` CLI. Use when you create,
-  pick up, edit, move, comment on, claim or release a card, when the user mentions "the board",
-  "tablero", "tarjeta" or a card number like #12, or when you are a factory lane worker (spec, build, qa, review).
+  Read and change the prz-factory kanban board (cards, columns, labels, comments, claims) through
+  the `factory` CLI, never by editing board.json. Use whenever a task involves the board or a card:
+  creating, showing, editing, moving, commenting on, claiming or releasing one, checking what is
+  ready or in flight, or answering about a card number like #12. Triggers: "the board", "tablero",
+  "tarjeta", "card", "mueve la tarjeta", "qué hay en el tablero", "estado de la #12".
 ---
 
 # factory-board

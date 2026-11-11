@@ -1,10 +1,11 @@
 ---
 name: factory-lint
 description: >-
-  Turn rough ideas or vague cards into cards a worker can build without guessing: write them in the
-  card format, run `factory lint`, and resolve the judgment calls the linter cannot (ambiguity, size,
-  title/body mismatch, missing decisions) by asking the user. Use when the user says "lint the board",
-  "revisa las tarjetas", "write a card for…", "crea una tarjeta", or before moving cards to ready.
+  Write or sharpen cards together with the user: put an idea in the card format, run `factory
+  lint`, and settle what the linter cannot (ambiguity, size, title and body that disagree, missing
+  decisions) by asking the user. Use when the user wants to write or review cards themselves before
+  they reach Ready, rather than leave it to the spec writer. Triggers: "revisa las tarjetas", "lint
+  the board", "escribamos juntos la tarjeta", "write a card for…", "¿está bien esta tarjeta?".
 ---
 
 # factory-lint

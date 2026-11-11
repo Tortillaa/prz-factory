@@ -1,10 +1,11 @@
 ---
 name: factory-build
 description: >-
-  Builder lane of prz-factory: take one card from Ready (or one sent back to Building), make the
-  smallest safe change that meets its Acceptance Criteria test-first, commit on the card's branch
-  and hand it to the review panel. Never merges. Use when told to build card #N, when dispatched as a factory
-  build worker, or when the user says "factory-build" / "construye la tarjeta".
+  Builder of prz-factory: implement one card from Ready (or one sent back to Building) on its own
+  branch: the smallest change that meets its Acceptance Criteria, tests first, verify green, then hand
+  it to the review panel. Never merges. Use whenever a card has to be built, fixed after a review
+  finding or a failed verify, or rebased, or when dispatched as a factory build worker. Triggers:
+  "construye la tarjeta", "implementa la #N", "arregla lo que pidió el review", "build card #N".
 ---
 
 # factory-build

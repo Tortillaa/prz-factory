@@ -30,7 +30,7 @@ Tú solo haces dos cosas: **mandar ideas** y **responder a las solicitudes** que
 
 | Quién | Qué hace | Qué no hace nunca |
 |---|---|---|
-| **Spec Writer** | Lee el código, recorta la idea a la versión más pequeña que resuelve el problema, la convierte en una tarjeta completa, decide si toca el negocio y la pasa a Ready él solo | Escribir código, inventarse una decisión de producto |
+| **Spec Writer** (Sonnet 5.5) | Lee el código, recorta la idea a la versión más pequeña que resuelve el problema, la convierte en una tarjeta completa, decide si toca el negocio y la pasa a Ready él solo. Si la tarjeta es difícil de redactar, pide ayuda a un subagente Opus 5.5 | Escribir código, inventarse una decisión de producto |
 | **Builder** (Sonnet 5.5) | Construye la tarjeta en su rama, con los tests primero y el mínimo código; para una parte difícil llama a un subagente Opus 5.5. Al entregar dice qué ha decidido no construir (`Skipped:`) | Mergear |
 | **Reviewers** (uno por lente) | Revisan el mismo commit en paralelo, cada uno con su especialidad, y devuelven el código que no debería existir | Arreglar el código, revisar fuera de su lente |
 | **Agente de merge** | Mira si el cambio toca el negocio, te explica qué cambia y cómo deshacerlo, y lanza el merge gate | Cambiar código, quitar una etiqueta de negocio o aprobar por ti |

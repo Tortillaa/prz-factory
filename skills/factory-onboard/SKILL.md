@@ -1,10 +1,11 @@
 ---
 name: factory-onboard
 description: >-
-  Set up prz-factory in a project, or repair a setup: install skills and guard hooks, find and
-  prove the verify commands, choose the merge policy, write the managed block in CLAUDE.md/AGENTS.md,
-  and leave the board ready for a first card. Use when the user says "onboard", "instala la fábrica",
-  "set up prz-factory here", or `factory doctor` fails in a project.
+  Set up prz-factory in a project, or repair a broken setup: install the skills and guard hooks,
+  find and prove the verify commands, choose the merge policy and the agent of each lane, write the
+  managed block in CLAUDE.md/AGENTS.md, and leave the board ready for a first card. Use whenever the
+  factory has to be installed, configured or fixed in a repo, or `factory doctor` fails. Triggers:
+  "instala la fábrica", "onboard", "configura prz-factory aquí", "set up prz-factory", "doctor falla".
 ---
 
 # factory-onboard

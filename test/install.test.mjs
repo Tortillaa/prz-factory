@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { install, listSkills, MARKER } from '../src/install.mjs';
+import { install, listSkills, MARKER, FACTORY_ROOT } from '../src/install.mjs';
 import { loadConfig, DEFAULTS } from '../src/config.mjs';
 import { doctor } from '../src/doctor.mjs';
 
@@ -77,5 +77,23 @@ test('doctor flags a project that is not set up, then passes the setup checks af
   } finally {
     if (env === undefined) delete process.env.FACTORY_BOARD;
     else process.env.FACTORY_BOARD = env;
+  }
+});
+
+// Agents pick a skill by its description, with no slash command: every factory skill must be
+// model-invocable and say, in the task's own words, when it applies.
+test('every skill is picked by the task: model-invocable, with a task-driven description', () => {
+  for (const name of listSkills()) {
+    const text = fs.readFileSync(path.join(FACTORY_ROOT, 'skills', name, 'SKILL.md'), 'utf8');
+    const fm = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    assert.ok(fm, `${name}: no frontmatter`);
+    assert.match(fm[1], new RegExp(`^name: ${name}$`, 'm'), `${name}: name must match the folder`);
+    assert.doesNotMatch(fm[1], /disable-model-invocation:\s*true/, `${name}: must not be manual-only`);
+    const desc = fm[1].split(/\r?\n/).slice(fm[1].split(/\r?\n/).findIndex((l) => l.startsWith('description:')) + 1).filter((l) => /^\s/.test(l)).join(' ').replace(/\s+/g, ' ').trim();
+    assert.ok(desc.length > 80 && desc.length <= 1024, `${name}: description is ${desc.length} chars (Claude Code reads up to 1024)`);
+    if (name.startsWith('factory-')) {
+      assert.match(desc, /Use (whenever|when)/, `${name}: say when it applies`);
+      assert.match(desc, /Triggers:.*"[^"]*[áéíóúñ¿]|Triggers:.*"(revisa|arranca|busca|instala|construye|redacta|prueba|mergea)/i, `${name}: give Spanish trigger phrases`);
+    }
   }
 });

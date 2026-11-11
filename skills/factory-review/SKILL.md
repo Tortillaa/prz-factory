@@ -1,10 +1,12 @@
 ---
 name: factory-review
 description: >-
-  Reviewer lane of prz-factory: one expert of a parallel review panel (lenses qa, security, code,
-  ops). Review a built card's diff through your lens only and record a verdict with `factory
-  verdict`; when the whole panel has passed it, the card moves on to the merge agent. Use when told to review
-  card #N, when dispatched as a factory review worker, or when the user says "factory-review".
+  Reviewer of prz-factory: one expert of a parallel review panel (lenses qa, security, code, ops).
+  Review a built card's diff through your lens only, against its Acceptance Criteria, and record a
+  pass or fail with `factory verdict`. Use whenever a card in the review column has to be reviewed,
+  tested against its criteria, checked for security, correctness or business impact, or when
+  dispatched as a factory review worker. Triggers: "revisa la tarjeta", "review card #N", "haz el
+  review de seguridad de la #N", "pasa el QA de la #N".
 ---
 
 # factory-review

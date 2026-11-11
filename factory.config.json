@@ -16,6 +16,10 @@
     ]
   },
   "agents": {
+    "spec": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5"
+    },
     "build": {
       "agent": "claude",
       "model": "claude-sonnet-5-5"

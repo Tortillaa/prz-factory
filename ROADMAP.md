@@ -120,6 +120,12 @@ Para no gastar cuota de Claude en todo, cada lane puede correr en otro agente de
 - [x] Modelo del agente de merge: Claude Haiku 5.5 (`agents.merge`). Lee, decide y ejecuta un comando, sin escribir código; la red de seguridad son las reglas fijas del gate y la lente `ops`.
 - [x] Evals: `merge-lands`, `merge-escalates-pricing`; `review-code-merge` pasa a `review-code-pass` (termina en `merge`).
 
+## Fase 10 · Skills automáticas y Spec Writer en Sonnet ✅
+
+- [x] Las descripciones de todas las skills de la fábrica describen la tarea (con frases de ejemplo en español e inglés), no solo su nombre, para que el agente las coja solo. Ninguna es de uso manual. Un test lo vigila.
+- [x] Probado con Claude Sonnet 5.5: con peticiones en lenguaje natural que no nombran la skill, eligió la correcta en 8 de 9. La novena (qué hay en el tablero) la resolvió directamente con `factory list`, sin skill.
+- [x] Spec Writer en Claude Sonnet 5.5 (`agents.spec`), con un subagente Opus 5.5 para las tarjetas difíciles de redactar (`factory-spec` fija cuándo).
+
 ## Pendiente fuera del código
 
 - [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.

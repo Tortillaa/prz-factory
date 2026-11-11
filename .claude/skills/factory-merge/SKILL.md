@@ -2,10 +2,11 @@
 name: factory-merge
 description: >-
   Merge agent of prz-factory: take a card the whole review panel passed (column `merge`), decide
-  whether it touches the business, and either land it through the `factory merge` gate or hand it
-  to the user with a clear approval request. Never changes code and never lowers the bar. Use when
-  told to merge card #N, when dispatched as a factory merge worker, or when the user says
-  "factory-merge".
+  whether it touches the business, explain the change to the user, and land it through the
+  `factory merge` gate, which merges small safe changes by itself and holds business changes for the
+  user. Never changes code and never lowers the bar. Use whenever a card in the merge column has to
+  be landed, or when dispatched as a factory merge worker. Triggers: "mergea la tarjeta", "aterriza
+  la #N", "merge card #N", "¿se puede mergear la #N?".
 ---
 
 # factory-merge

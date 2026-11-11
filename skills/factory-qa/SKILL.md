@@ -1,11 +1,11 @@
 ---
 name: factory-qa
 description: >-
-  QA lane of prz-factory for `qa`-labelled cards: test what is already on the base branch against
-  the card's Acceptance Criteria, file what you find as new cards, and close the card through the
-  merge gate. Nothing is built. (Built cards are tested by the `qa` reviewer of the review panel:
-  see `factory-review`.) Use when told to QA card #N, when dispatched as a factory qa worker, or
-  when the user says "factory-qa".
+  QA of prz-factory for `qa`-labelled cards: test what is already on the base branch against the
+  card's Acceptance Criteria, file each problem found as a new idea card, and close the card through
+  the gate. Nothing is built. (A built card is tested by the qa reviewer of the panel: that is
+  factory-review.) Use whenever a qa card has to be tested or the user wants the product as it is
+  checked against criteria. Triggers: "prueba que funciona X", "test the current main", "QA card #N".
 ---
 
 # factory-qa

@@ -2,16 +2,16 @@
 name: factory-review
 description: >-
   Reviewer lane of prz-factory: one expert of a parallel review panel (lenses qa, security, code,
-  ops). Review a built card's diff through your lens only, record a verdict with `factory verdict`,
-  and let the merge gate land the card when the whole panel has passed it. Use when told to review
+  ops). Review a built card's diff through your lens only and record a verdict with `factory
+  verdict`; when the whole panel has passed it, the card moves on to the merge agent. Use when told to review
   card #N, when dispatched as a factory review worker, or when the user says "factory-review".
 ---
 
 # factory-review
 
 A built card is reviewed by a panel: one reviewer per lens, all at the same time, each in its own
-worktree, all on the same commit. You are one of them. The card lands only when **every** lens
-passes that commit; one fail sends it back to the builder and ends the round for everyone.
+worktree, all on the same commit. You are one of them. The card moves on to `merge` only when
+**every** lens passes that commit; one fail sends it back to the builder and ends the round for everyone.
 
 Your lens is in your task (`--lens <qa|security|code|ops>`). Read its section in
 [references/lenses.md](references/lenses.md) and review through it only: the other reviewers
@@ -90,17 +90,8 @@ of merging. You may raise that bar; you may never lower it.
 Read the result:
 
 - `complete: false` → other lenses are still reviewing. You are done.
-- `merge` present → your verdict completed the panel and the merge gate ran:
-
-| Exit | `merge.status` | What happened |
-|---|---|---|
-| 0 | merged | The card is Done. Report the merged SHA. |
-| 7 | needs-human | The gate moved it to blocked with `needs-you` + `merge-approval`: the user approves it on the board. Report the reasons. |
-| 8 | behind | The branch is behind the base: back to building for a rebase. |
-| 9 | verify-failed | Verify failed on that commit: back to building with the output. |
-| 10 | base-dirty | The base checkout has uncommitted changes. The card stays in review, fully passed. Tell the user; do not touch their checkout. |
-| 6 · 1 | head-moved · error | Report the message. |
-
+- `complete: true` → your verdict completed the panel: the card moved to `merge`, where the merge
+  agent decides who lands it (the gate by itself, or the user). You are done.
 - An error saying the round is over means another lens failed the card first. Stop: there is
   nothing left to record.
 - After 3 round trips the board turns a fourth send-back into `blocked` with `needs-you` by itself.
@@ -108,6 +99,6 @@ Read the result:
 ## Never
 
 - Review outside your lens, or pass a commit you did not read.
-- Merge with `git merge`, push to the base branch, or run `factory merge` yourself: the verdict does it.
+- Merge with `git merge`, push to the base branch, or run `factory merge`: that is the merge agent's job.
 - Pass `--human` to anything: that flag means a person approved it.
 - Fix the code yourself. Findings go back to build.

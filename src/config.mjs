@@ -30,7 +30,7 @@ export const DEFAULTS = Object.freeze({
   github: { remote: 'origin', pushBase: false, draft: true },
 });
 
-export const LANE_NAMES = ['spec', 'build', 'qa', 'review'];
+export const LANE_NAMES = ['spec', 'build', 'qa', 'review', 'merge'];
 export const DEFAULT_AGENT = Object.freeze({ agent: 'claude' });
 
 // How the coordinator starts a worker for `lane`: the flags it passes to `orca orchestration worker-start`.

@@ -98,9 +98,15 @@ export function mergeCard({ file, id, who = 'merge-gate', sha, human = false, cw
     const branch = card.run.branch;
     // A qa card tests the base branch: its QA worker closes it from qa (or review, on older boards).
     const qaClose = !branch && card.labels.includes('qa') && ['qa', 'review'].includes(card.column);
-    if (card.column !== 'review' && !awaitingHuman && !qaClose) {
-      return result('error', `card #${id} is in ${card.column}; only cards in review can be merged`);
+    if (card.column !== 'merge' && !awaitingHuman && !qaClose) {
+      return result('error', `card #${id} is in ${card.column}; only cards in merge (the whole review panel passed them) can be merged`);
     }
+    // A card in the merge column that cannot land as reviewed goes back to a new review round.
+    const reReview = (status, msg, extra) => {
+      if (card.column === 'merge') sendBack(file, id, who, 'review', `[merge] ↩️ vuelve a revisión
+${msg}`);
+      return result(status, msg, extra);
+    };
     if (qaClose) {
       // A qa card tests what is already on the base branch: nothing to merge, QA's pass closes it.
       store.update(file, (b) => {
@@ -117,7 +123,7 @@ export function mergeCard({ file, id, who = 'merge-gate', sha, human = false, cw
     const expected = sha || card.run.reviewedSha;
     if (!expected) return result('error', 'pass --sha <reviewed commit> (or record it with factory edit --reviewed-sha)');
     if (!head.startsWith(expected)) {
-      return result('head-moved', `${branch} is at ${short(head)} but the review approved ${short(expected)}: review the new commits first`, { head });
+      return reReview('head-moved', `${branch} is at ${short(head)} but the review approved ${short(expected)}: review the new commits first`, { head });
     }
 
     const base = config.baseBranch;
@@ -132,8 +138,8 @@ export function mergeCard({ file, id, who = 'merge-gate', sha, human = false, cw
     // Agents merge only what the whole review panel passed, on this very head.
     if (!human) {
       const pending = pendingLenses(card, config);
-      if (pending.length) return result('panel-incomplete', `the review panel has not passed ${short(head)} yet: waiting on ${pending.join(', ')}`, { head, pending });
-      if (!card.panel.head || card.panel.head !== head) return result('head-moved', `the panel reviewed ${card.panel.head ? short(card.panel.head) : 'nothing'}, the branch is at ${short(head)}`, { head });
+      if (pending.length) return reReview('panel-incomplete', `the review panel has not passed ${short(head)} yet: waiting on ${pending.join(', ')}`, { head, pending });
+      if (!card.panel.head || card.panel.head !== head) return reReview('head-moved', `the panel reviewed ${card.panel.head ? short(card.panel.head) : 'nothing'}, the branch is at ${short(head)}`, { head });
     }
 
     const lines = diffLines(baseSha, head, cwd);
@@ -160,7 +166,10 @@ export function mergeCard({ file, id, who = 'merge-gate', sha, human = false, cw
     if (baseTree) {
       if (!isClean(baseTree.path)) {
         const msg = `${base} is checked out in ${baseTree.path} with uncommitted changes; commit or stash them and run the merge again`;
-        release(file, id, `[merge] ⏸ ${msg}`);
+        // Only the person can clean their checkout: from merge, the card waits for them in blocked
+        // (moving it back to merge afterwards lands the same reviewed commit with no new review).
+        if (card.column === 'merge') sendBack(file, id, who, 'blocked', `[merge] ⏸ ${msg}\nCuando esté limpio, mueve la tarjeta otra vez a merge.`, ['needs-you']);
+        else release(file, id, `[merge] ⏸ ${msg}`);
         return result('base-dirty', msg, { head });
       }
       git(['merge', '--ff-only', head], baseTree.path);

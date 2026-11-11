@@ -7,11 +7,12 @@ Cómo usar la fábrica, paso a paso: desde que escribes una idea hasta que el ca
 ```text
  Tú                Spec Writer        Builder          Panel de reviewers            Merge gate
  ──                ───────────        ───────          ──────────────────            ──────────
- escribes   →      redacta la   →     construye   →    qa · security · code · ops →  cambio pequeño: se mergea solo
- una idea          tarjeta            con tests        (todos a la vez)              toca el negocio: te pide aprobación
+ escribes   →      redacta la   →     construye   →    qa · security · code · ops →  Agente de merge
+ una idea          tarjeta            con tests        (todos a la vez)              cambio pequeño: se mergea solo
+                                                                                    toca el negocio: te pide aprobación
 
- columna:  spec  →  ready  →  building  →  review  →  done
-                                              └────→  blocked (te espera a ti)
+ columna:  spec  →  ready  →  building  →  review  →  merge  →  done
+                                                         └────→  blocked (te espera a ti)
 ```
 
 En cada paso, el agente carga la skill **ponytail** y trabaja como un desarrollador senior que no escribe una línea de más. Antes de añadir código recorre esta escalera y se queda con el primer peldaño que resuelve el problema entero:
@@ -30,9 +31,10 @@ Tú solo haces dos cosas: **mandar ideas** y **responder a las solicitudes** que
 | Quién | Qué hace | Qué no hace nunca |
 |---|---|---|
 | **Spec Writer** | Lee el código, recorta la idea a la versión más pequeña que resuelve el problema, la convierte en una tarjeta completa, decide si toca el negocio y la pasa a Ready él solo | Escribir código, inventarse una decisión de producto |
-| **Builder** | Construye la tarjeta en su rama, con los tests primero y el mínimo código; al entregar dice qué ha decidido no construir (`Skipped:`) | Mergear |
+| **Builder** (Sonnet 5.5) | Construye la tarjeta en su rama, con los tests primero y el mínimo código; para una parte difícil llama a un subagente Opus 5.5. Al entregar dice qué ha decidido no construir (`Skipped:`) | Mergear |
 | **Reviewers** (uno por lente) | Revisan el mismo commit en paralelo, cada uno con su especialidad, y devuelven el código que no debería existir | Arreglar el código, revisar fuera de su lente |
-| **Merge gate** | Comprueba todo y mergea, o te pide aprobación | Mergear algo que no aprobó el panel entero |
+| **Agente de merge** | Mira si el cambio toca el negocio, te explica qué cambia y cómo deshacerlo, y lanza el merge gate | Cambiar código, quitar una etiqueta de negocio o aprobar por ti |
+| **Merge gate** | Comprobación final automática: mergea, o deja la solicitud para ti | Mergear algo que no aprobó el panel entero |
 | **Coordinador** | Lanza a los demás y te avisa | Construir, revisar o mergear |
 
 ---
@@ -169,7 +171,8 @@ En el tablero verás la tarjeta moverse sola:
    | `qa ✓` | ha aprobado este commit |
    | `qa ✖` | ha encontrado un bloqueo |
 
-4. **REVIEW → DONE**, si los cuatro aprueban y el cambio es pequeño. Ya está en `main`.
+4. **REVIEW → MERGE**, cuando los cuatro aprueban. El agente de merge lee el cambio y su comentario `[merge]` te dice qué cambia y, si te lo va a preguntar, por qué.
+5. **MERGE → DONE**, si el cambio es pequeño y no toca el negocio. Ya está en `main`. Si lo toca, pasa a **BLOCKED** con una solicitud de aprobación (paso 5).
 
 Si un reviewer encuentra un problema, la tarjeta vuelve a **BUILDING** con el hallazgo, el Builder lo arregla y el panel la revisa otra vez desde cero. A la cuarta vuelta sin converger, la fábrica para y te la manda a ti.
 
@@ -254,9 +257,9 @@ factory cleanup --apply    # lo borra
 
 | Síntoma | Causa y solución |
 |---|---|
-| El panel ha aprobado, pero la tarjeta sigue en REVIEW | Tu checkout de `main` tiene cambios sin commitear y el merge gate no lo toca. Haz commit o stash y ejecuta `factory merge <id>`. |
 | Una tarjeta rebota entre BUILDING y REVIEW | A la cuarta vuelta pasa sola a BLOCKED con una solicitud. Lee los hallazgos: suele faltar una decisión en la tarjeta. |
 | Una tarjeta está en BLOCKED y no sé por qué | Ábrela: el último comentario lo explica. |
+| Tu checkout de `main` tenía cambios sin commitear y la tarjeta pasó de MERGE a BLOCKED | Haz commit o stash y arrastra la tarjeta otra vez a MERGE: aterriza el mismo commit revisado. |
 | Un agente se ha quedado colgado | `factory status` marca los claims viejos con ⚠️. Di "status" al coordinador, o libérala con `factory reclaim <id>`. |
 | `factory doctor` falla | Sigue la línea `→` que acompaña a cada fallo. |
 | Un agente se para con "hit its session limit" | Se ha acabado la cuota de ese agente. El coordinador te dice a qué hora se renueva; cuando quieras seguir, díselo y reintenta el mismo trabajo (o pásalo a otro agente con `agents`). |

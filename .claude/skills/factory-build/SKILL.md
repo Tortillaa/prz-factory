@@ -51,6 +51,32 @@ never cuts what the task asks for.
 5. **Follow the repo's own rules** in `CLAUDE.md` / `AGENTS.md`.
 6. Commit as you go, in the commit format, with `Card: #<id>` in each body.
 
+### When a part needs more capacity: an Opus subagent
+
+You run on a mid-size model (the project's `agents.build` in `factory.config.json`). Most cards fit
+it. Call in a **Claude Opus 5.5 subagent** for one bounded part, only when one of these is true:
+
+- **Hard reasoning:** concurrency, locking or ordering of writes; a security-sensitive check
+  (auth, permissions, input that crosses a trust boundary); money or date/time arithmetic; a parser.
+- **A bug you cannot explain** after reproducing it and two honest attempts at the root cause.
+- **A change across several modules** whose design you are not sure of: the subagent proposes it,
+  you build it.
+- **The card came back** from the panel or the gate with a Blocker you could not fix the first time.
+
+Not for routine work: a clear AC, a small fix, a test you know how to write. Opus costs several
+times more; if you are unsure, try it yourself first.
+
+How: start a subagent with your agent's subagent tool (in Claude Code, the Agent tool with
+`model: "opus"`), working in this same worktree. Give it a self-contained brief: the card id and
+its Acceptance Criteria, the exact files and functions, what you tried and what failed, and the
+one deliverable you want back (a diagnosis, a design, or the change with its test). It must not
+run `factory` commands, commit, or touch other cards: you stay the builder. Check what it returns
+as you would a colleague's work (read the diff, run the tests), commit it under your name, and say
+it in your handoff comment: `Opus: <the part and why>`.
+
+If your agent has no subagent tool, hand the card to `blocked` with the part you could not solve
+and why, instead of guessing.
+
 ## 3 · Prove it
 
 ```text

@@ -16,6 +16,14 @@
     ]
   },
   "agents": {
+    "build": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5"
+    },
+    "merge": {
+      "agent": "claude",
+      "model": "claude-haiku-5-5"
+    },
     "review": {
       "agent": "grok",
       "model": "grok-4.7",

@@ -47,20 +47,20 @@ Board
   path                                   Print the board file location
 
 Lanes (run inside the worker's own worktree)
-  start <id> --lane <spec|build|qa|review> [--lens l] --as <who> [--allow-main]
+  start <id> --lane <spec|build|qa|review|merge> [--lens l] --as <who> [--allow-main]
                                          Claim, leave Ready if needed, check out the card's code
                                          (spec: base, detached; build: branch factory/<id>-<slug>;
-                                         qa/review: the branch, detached). review needs --lens
+                                         qa/review/merge: the branch, detached). review needs --lens
   handoff <id> <column> --lane <l> --as <who> (--text t | --text-file f)
-                                         Comment + move + release in one write (spec, build, qa)
+                                         Comment + move + release in one write (spec, build, qa, merge)
   verdict <id> --lens <l> --as <who> --sha <head> (--pass [--escalate why] | --fail [--to building|blocked])
           (--text t | --text-file f)     A reviewer's verdict on the head the panel reviews. The verdict
-                                         that completes the panel runs the merge gate (same exit codes)
+                                         that completes the panel moves the card to merge
   verify                                 Run the config's verify commands here (exit 1 on failure)
-  merge <id> --sha <reviewed> [--as who] [--human]
-                                         Merge gate. Exit 0 merged · 6 head moved · 7 needs a person
-                                         · 8 behind base · 9 verify failed · 10 base checkout dirty
-                                         · 11 review panel incomplete
+  merge <id> [--sha <reviewed>] [--as who] [--human]
+                                         Merge gate, for cards in merge. Exit 0 merged · 6 head moved
+                                         (back to review) · 7 needs a person · 8 behind base · 9 verify
+                                         failed · 10 base checkout dirty · 11 review panel incomplete
 
 Run (the coordinator; it dispatches, never builds)
   plan                                   Next dispatches for the free worker slots, with placement
@@ -336,12 +336,10 @@ try {
       const id = Number(need(args[0], 'id'));
       const who = need(opts.as, '--as');
       const v = verdict({ file, id, who, lens: need(opts.lens, '--lens'), sha: need(opts.sha, '--sha'), pass: !!opts.pass, to: opts.to, escalate: opts.escalate, text, config });
-      const out = { verdict: v.verdict, complete: v.complete, column: v.card.column, merge: null };
-      // The verdict that completes the panel lands the card through the gate, so it never sits approved.
-      if (v.complete) out.merge = mergeCard({ file, id, who, sha: v.card.run.reviewedSha, cwd: process.cwd(), config });
-      const tail = out.merge ? `\n${out.merge.status === 'merged' ? '✅' : '✖'} ${out.merge.status}: ${out.merge.message}` : v.verdict === 'pass' ? '\npanel still waiting on other lenses' : '';
+      const out = { verdict: v.verdict, complete: v.complete, column: v.card.column };
+      // The verdict that completes the panel moves the card to merge, where the merge agent lands it.
+      const tail = v.complete ? '\npanel complete: the merge agent takes it from here' : v.verdict === 'pass' ? '\npanel still waiting on other lenses' : '';
       print(out, `${v.verdict} recorded on ${line(v.card)} → ${v.card.column}${tail}`);
-      if (out.merge) process.exitCode = out.merge.code;
       break;
     }
     case 'verify': {

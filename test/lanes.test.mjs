@@ -173,17 +173,17 @@ test('the panel reviews in parallel: one claim per lens, one head, and the gate 
 
   pass(env, id, 'qa', head);
   assert.throws(() => startReview(env, id, 'qa'), /already has a verdict/);
-  const early = mergeCard({ file, id, cwd: env.repo, config });
-  assert.equal(early.status, 'error', 'no reviewed commit yet');
-  assert.match(early.message, /pass --sha/);
-  const pinned = mergeCard({ file, id, sha: head, cwd: env.repo, config });
-  assert.equal(pinned.status, 'panel-incomplete');
-  assert.equal(pinned.code, 11);
-  assert.deepEqual(pinned.pending, ['code']);
+  const early = mergeCard({ file, id, sha: head, cwd: env.repo, config });
+  assert.equal(early.status, 'error', 'a card still in review cannot be merged');
+  assert.match(early.message, /only cards in merge/);
   assert.equal(card(env, id).column, 'review');
   assert.notEqual(sh(env.repo, 'rev-parse', 'main'), head);
 
-  assert.equal(pass(env, id, 'code', head).complete, true);
+  const done = pass(env, id, 'code', head);
+  assert.equal(done.complete, true);
+  assert.equal(done.card.column, 'merge', 'the verdict that completes the panel hands the card to the merge agent');
+  assert.equal(card(env, id).run.reviewedSha, head);
+  assert.deepEqual(store.claimsOf(card(env, id)), []);
   assert.equal(mergeCard({ file, id, cwd: env.repo, config }).status, 'merged');
 });
 
@@ -249,7 +249,7 @@ test('a reviewer can raise a card to a person, and block it for a decision', () 
   assert.throws(() => fail(env, id2, 'code', head2, { to: 'done' }), /round is over|building or blocked/);
 });
 
-test('the verdict that completes the panel lands the card (CLI)', () => {
+test('CLI: the last verdict moves the card to merge, and the merge lane lands it', () => {
   const env = setup();
   const id = addReadyCard(env);
   const head = build(env, id);
@@ -259,14 +259,69 @@ test('the verdict that completes the panel lands the card (CLI)', () => {
 
   const first = cli(env.wt.qa, 'verdict', String(id), '--lens', 'qa', '--as', 'review-qa', '--sha', head, '--pass', '--text', 'qa ok');
   assert.equal(first.status, 0, first.stdout + first.stderr);
-  assert.deepEqual([JSON.parse(first.stdout).complete, JSON.parse(first.stdout).merge], [false, null]);
+  assert.deepEqual([JSON.parse(first.stdout).complete, JSON.parse(first.stdout).column], [false, 'review']);
   assert.equal(cli(env.wt.code, 'verdict', String(id), '--lens', 'code', '--as', 'review-code', '--sha', head, '--text', 'x').status, 1, 'needs --pass or --fail');
 
   const last = cli(env.wt.code, 'verdict', String(id), '--lens', 'code', '--as', 'review-code', '--sha', head, '--pass', '--text', 'code ok');
   assert.equal(last.status, 0, last.stdout + last.stderr);
-  assert.equal(JSON.parse(last.stdout).merge.status, 'merged');
+  assert.deepEqual([JSON.parse(last.stdout).complete, JSON.parse(last.stdout).column], [true, 'merge']);
+  assert.notEqual(sh(env.repo, 'rev-parse', 'main'), head, 'a verdict never merges by itself');
+
+  // The merge agent: claims the card in merge, checks out the reviewed head, runs the gate.
+  const start = cli(env.wt.code, 'start', String(id), '--lane', 'merge', '--as', 'merge-1');
+  assert.equal(start.status, 0, start.stdout + start.stderr);
+  assert.equal(JSON.parse(start.stdout).head, head);
+  const landed = cli(env.wt.code, 'merge', String(id), '--sha', head, '--as', 'merge-1');
+  assert.equal(landed.status, 0, landed.stdout + landed.stderr);
+  assert.equal(JSON.parse(landed.stdout).status, 'merged');
   assert.equal(card(env, id).column, 'done');
+  assert.equal(card(env, id).assignee, null);
   assert.equal(sh(env.repo, 'rev-parse', 'main'), head);
+});
+
+test('merge lane: a head that moved or a panel that is not complete goes back to review', () => {
+  const env = setup();
+  const { file, config } = env;
+  const id = addReadyCard(env);
+  toReviewed(env, id);
+  assert.equal(card(env, id).column, 'merge');
+  const late = commitIn(env.wt.build, 'late.txt'); // someone committed after the panel
+  const moved = mergeCard({ file, id, cwd: env.repo, config });
+  assert.equal(moved.status, 'head-moved');
+  assert.equal(card(env, id).column, 'review', 'a new review round');
+  assert.equal(card(env, id).panel.head, null);
+  assert.match(card(env, id).comments.at(-1).text, /vuelve a revisión/);
+  assert.notEqual(sh(env.repo, 'rev-parse', 'main'), late);
+
+  // A card forced into merge with a lens still pending (or a lens added to the config) also goes back.
+  const id2 = addReadyCard(env);
+  sh(env.wt.build, 'switch', '-q', '--detach', 'main');
+  const head2 = build(env, id2, ['b.txt']);
+  startReview(env, id2, 'qa');
+  pass(env, id2, 'qa', head2);
+  store.update(file, (b) => store.moveCard(b, id2, 'merge', 'user', { force: true }));
+  const pending = mergeCard({ file, id: id2, sha: head2, cwd: env.repo, config });
+  assert.equal(pending.code, 11);
+  assert.deepEqual(pending.pending, ['code']);
+  assert.equal(card(env, id2).column, 'review');
+});
+
+test('merge lane: hands only to blocked, and the merge agent can raise a card to a person', () => {
+  const env = setup();
+  const { file, wt, config } = env;
+  const id = addReadyCard(env);
+  const head = toReviewed(env, id);
+  startLane({ file, id, who: 'merge-1', lane: 'merge', cwd: wt.qa, config });
+  assert.equal(card(env, id).assignee, 'merge-1');
+  assert.throws(() => handoff({ file, id, who: 'merge-1', lane: 'merge', to: 'done', text: 'x' }), /hands cards to blocked/);
+  // The agent saw a business area the card did not admit: it adds the label, the gate holds the merge.
+  store.update(file, (b) => store.editCard(b, id, { labels: [...card(env, id).labels, 'pricing'] }));
+  const held = mergeCard({ file, id, sha: head, who: 'merge-1', cwd: env.repo, config });
+  assert.equal(held.code, 7);
+  assert.deepEqual(held.reasons, ['label pricing']);
+  assert.equal(card(env, id).column, 'blocked');
+  assert.ok(card(env, id).labels.includes('merge-approval'));
+  assert.equal(card(env, id).assignee, null);
 });
 
 test('merge refuses a head that moved after review', () => {
@@ -351,10 +406,14 @@ test('a dirty base checkout stops the merge without touching the card', () => {
   fs.appendFileSync(path.join(env.repo, 'check.js'), '// local edit\n');
   const r = mergeCard({ file: env.file, id, sha: head, cwd: env.wt.code, config: env.config });
   assert.equal(r.code, 10);
-  assert.equal(card(env, id).column, 'review');
+  assert.equal(card(env, id).column, 'blocked', 'only the person can clean their checkout');
+  assert.ok(card(env, id).labels.includes('needs-you'));
+  assert.ok(!card(env, id).labels.includes('merge-approval'), 'not a merge request: the merge itself was fine');
   assert.deepEqual(store.claimsOf(card(env, id)), [], 'nobody holds it');
-  // Once the person cleans their checkout, the same reviewed commit lands with no new review.
+  // Once the person cleans their checkout and moves the card back to merge, the same reviewed commit lands.
   sh(env.repo, 'checkout', '--', 'check.js');
+  store.update(env.file, (b) => store.moveCard(b, id, 'merge', 'user'));
+  assert.ok(!card(env, id).labels.includes('needs-you'), 'leaving blocked clears the request');
   assert.equal(mergeCard({ file: env.file, id, cwd: env.repo, config: env.config }).status, 'merged');
 });
 
@@ -380,7 +439,7 @@ test('lanes refuse the wrong place, column, claimer or destination', () => {
   assert.throws(() => handoff({ file, id, who: 'b', lane: 'review', to: 'done', text: 'x' }), /factory verdict/);
   const early = mergeCard({ file, id, sha: 'abc', cwd: repo, config });
   assert.equal(early.status, 'error');
-  assert.match(early.message, /only cards in review/);
+  assert.match(early.message, /only cards in merge/);
   assert.equal(card(env, id).column, 'building');
 });
 

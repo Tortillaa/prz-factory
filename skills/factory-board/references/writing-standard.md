@@ -46,7 +46,7 @@ Next: <build | review | merge | user | none>
 Head: <commit SHA this comment is about>
 ```
 
-- Roles: `spec` · `build` · `qa` · `review:<lens>` (`review:qa`, `review:security`, `review:code`, `review:ops`). Status emoji: ✅ pass · ❌ fail · 🛑 blocked · 🙋 needs you · ↩️ sent back · ⚠️ warning.
+- Roles: `spec` · `build` · `qa` · `review:<lens>` · `merge` (`review:qa`, `review:security`, `review:code`, `review:ops`). Status emoji: ✅ pass · ❌ fail · 🛑 blocked · 🙋 needs you · ↩️ sent back · ⚠️ warning.
 - ≤ 8 lines of prose. Machine lines (`Head:`, `Verify:`) go last and do not count.
 - One AC per line when you report on Acceptance Criteria: `AC1 ✅ test/login.test.mjs:12`.
 

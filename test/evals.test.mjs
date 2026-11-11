@@ -10,7 +10,7 @@ const FAKE = `"${process.execPath}" "${path.join(import.meta.dirname, 'fake-agen
 
 test('every case loads and every setup builds', () => {
   const names = listCases();
-  assert.deepEqual(names, ['build-empty-cart', 'review-code-merge', 'review-ops-escalates-pricing', 'review-qa-missing-test', 'spec-empty-cart', 'spec-pricing-is-business']);
+  assert.deepEqual(names, ['build-empty-cart', 'merge-escalates-pricing', 'merge-lands', 'review-code-pass', 'review-ops-escalates-pricing', 'review-qa-missing-test', 'spec-empty-cart', 'spec-pricing-is-business']);
   for (const name of names) {
     const c = loadCase(name);
     const world = prepare(c);

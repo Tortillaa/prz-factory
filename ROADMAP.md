@@ -112,6 +112,14 @@ Para no gastar cuota de Claude en todo, cada lane puede correr en otro agente de
 - [x] El coordinador sabe reintentar un worker que se quedó sin cuota (`usageLimitReached`) en vez de liberar la tarjeta.
 - [x] Probado de verdad: la tarjeta #6 recorrió spec (Claude) → build (Claude) → panel de cuatro reviewers en Grok 4.7 en paralelo → merge gate, que la retuvo para una persona por tocar `src/store.mjs`.
 
+## Fase 9 · Modelos por paso y agente de merge ✅
+
+- [x] Builder en Claude Sonnet 5.5 (`agents.build`). Para lo que le supera, lanza un subagente de Claude Opus 5.5; el skill `factory-build` fija cuándo (razonamiento difícil, un bug sin explicar, un cambio entre módulos, una tarjeta devuelta con un Blocker) y cómo (encargo acotado, sin CLI `factory`; el builder revisa, commitea y lo cita).
+- [x] Agente de merge: columna y lane `merge` entre review y done (skill `factory-merge`). El veredicto que completa el panel ya no mergea: pasa la tarjeta a `merge`. El agente mira el impacto en el negocio (solo puede subir el listón), escribe para la persona qué cambia, por qué se le pregunta y cómo deshacerlo, y ejecuta el merge gate, que mergea solo o deja la solicitud en el tablero.
+- [x] El gate acepta solo tarjetas en `merge`. Un head movido o un panel incompleto vuelven a `review`; un checkout de la base sucio pasa a blocked con `needs-you`.
+- [x] Modelo del agente de merge: Claude Haiku 5.5 (`agents.merge`). Lee, decide y ejecuta un comando, sin escribir código; la red de seguridad son las reglas fijas del gate y la lente `ops`.
+- [x] Evals: `merge-lands`, `merge-escalates-pricing`; `review-code-merge` pasa a `review-code-pass` (termina en `merge`).
+
 ## Pendiente fuera del código
 
 - [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.

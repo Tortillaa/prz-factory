@@ -9,7 +9,7 @@
     --bg: #f6f7f9; --col: #eceef2; --card: #fff; --text: #1d2129; --muted: #69707d;
     --border: #d9dde4; --accent: #3b6ef5; --drop: #dfe7fd; --err: #c93c3c; --warn: #b7791f; --ok: #2f9e5b; --ask: #fff4d6;
     --c-backlog: #8a919e; --c-spec: #c2569b; --c-ready: #3b6ef5; --c-building: #d98a1c; --c-qa: #8b5cf6;
-    --c-review: #0ea5a4; --c-blocked: #dc4a4a; --c-done: #2f9e5b;
+    --c-review: #0ea5a4; --c-merge: #14866d; --c-blocked: #dc4a4a; --c-done: #2f9e5b;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -22,7 +22,7 @@
   header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
   header h1 { font-size: 16px; margin: 0; }
   header .status { margin-left: auto; color: var(--muted); font-size: 12px; }
-  .board { display: grid; grid-template-columns: repeat(8, minmax(210px, 1fr)); gap: 12px; padding: 16px 20px; overflow-x: auto; min-height: calc(100vh - 54px); }
+  .board { display: grid; grid-template-columns: repeat(9, minmax(200px, 1fr)); gap: 12px; padding: 16px 20px; overflow-x: auto; min-height: calc(100vh - 54px); }
   .column { background: var(--col); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 200px; }
   .column.drop { background: var(--drop); }
   .column h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; margin: 2px 4px 4px; display: flex; gap: 8px; align-items: center; }
@@ -102,7 +102,7 @@
 </dialog>
 
 <script>
-const COLORS = { backlog: '--c-backlog', spec: '--c-spec', ready: '--c-ready', building: '--c-building', qa: '--c-qa', review: '--c-review', blocked: '--c-blocked', done: '--c-done' };
+const COLORS = { backlog: '--c-backlog', spec: '--c-spec', ready: '--c-ready', building: '--c-building', qa: '--c-qa', review: '--c-review', merge: '--c-merge', blocked: '--c-blocked', done: '--c-done' };
 let state = { columns: [], lenses: [], cards: [] };
 let newColumn = 'backlog'; // where the card being created will be filed
 let openId = null;   // card shown in the dialog; 'new' while creating one

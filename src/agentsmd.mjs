@@ -11,7 +11,7 @@ export function block(config) {
 ## prz-factory
 
 This project is worked by prz-factory: cards on a local board, one Orca worker per card and lane.
-Pipeline: spec (an idea) → ready → building → review (a panel, one reviewer per lens) → done.
+Pipeline: spec (an idea) → ready → building → review (a panel, one reviewer per lens) → merge → done.
 Also backlog (parked), qa (\`qa\` cards) and blocked (waiting for a person). \`factory serve\` shows it.
 
 | When | Use | Never |
@@ -19,8 +19,8 @@ Also backlog (parked), qa (\`qa\` cards) and blocked (waiting for a person). \`f
 | Ask for a change | an idea in the \`spec\` column (\`factory add "<idea>" --column spec\`) | Move a card to ready with lint errors |
 | Write a card yourself | \`factory-lint\` skill · \`factory lint\` | Invent a product decision |
 | Drain the board | \`factory-run\` skill | Write specs, build, review or merge from the coordinator |
-| Spec / build / review one card | \`factory-spec\` · \`factory-build\` · \`factory-review\` (one lens) | Work outside your own worktree |
-| Land a card | \`factory verdict\` (the panel) → the merge gate | \`git merge\` or push to ${config.baseBranch} by hand |
+| Spec / build / review / merge one card | \`factory-spec\` · \`factory-build\` · \`factory-review\` (one lens) · \`factory-merge\` | Work outside your own worktree |
+| Land a card | \`factory verdict\` (the panel) → \`factory-merge\` (the merge agent) → \`factory merge\` (the gate) | \`git merge\` or push to ${config.baseBranch} by hand |
 | Turn problems into cards | \`factory-collect\` skill | File a card without verifying the problem |
 
 | Rule | Value |

@@ -18,7 +18,7 @@ const tmp = (prefix) => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), pr
 const empty = () => ({ version: 1, nextId: 1, cards: [] });
 
 test('spec is a column between backlog and ready, and old boards gain an empty panel', () => {
-  assert.deepEqual(store.COLUMNS, ['backlog', 'spec', 'ready', 'building', 'qa', 'review', 'blocked', 'done']);
+  assert.deepEqual(store.COLUMNS, ['backlog', 'spec', 'ready', 'building', 'qa', 'review', 'merge', 'blocked', 'done']);
   const file = path.join(tmp('factory-board-'), 'board.json');
   fs.writeFileSync(file, JSON.stringify({ version: 1, nextId: 2, cards: [{ id: 1, title: 'old', column: 'review', labels: [] }] }));
   assert.deepEqual(store.load(file).cards[0].panel, { head: null, lenses: {} });

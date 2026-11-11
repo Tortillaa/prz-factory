@@ -6,14 +6,14 @@ import { execFileSync } from 'node:child_process';
 import { TEMPLATE, lintCard, hasErrors, dependencyProblems } from './ticket.mjs';
 
 // spec: rough ideas waiting for the spec writer, who turns them into cards that pass lint.
-export const COLUMNS = ['backlog', 'spec', 'ready', 'building', 'qa', 'review', 'blocked', 'done'];
+export const COLUMNS = ['backlog', 'spec', 'ready', 'building', 'qa', 'review', 'merge', 'blocked', 'done'];
 // Columns a new card may be filed in. Ready still requires a card that passes lint.
 const ENTRY_COLUMNS = ['backlog', 'spec', 'ready'];
 // Labels that mean "this card waits for the user" while it sits in blocked: needs-you for any
 // request, merge-approval for a merge the gate held (the only one that can be approved).
 export const REQUEST_LABELS = ['needs-you', 'merge-approval'];
 // Columns a card reaches by being worked on. Leaving Ready for one of these needs its blockers done.
-const WORK_COLUMNS = ['building', 'qa', 'review', 'done'];
+const WORK_COLUMNS = ['building', 'qa', 'review', 'merge', 'done'];
 // Execution fields a worker or the orchestrator records on a card.
 export const RUN_FIELDS = ['branch', 'worktree', 'worker', 'reviewedSha', 'mergedSha', 'dispatch', 'pr'];
 
@@ -357,7 +357,7 @@ export const MAX_BOUNCES = 3;
 
 // Times a card was sent back to building from qa, review or the merge gate.
 export function bounces(card) {
-  return card.history.filter((h) => h.to === 'building' && ['qa', 'review'].includes(h.from)).length;
+  return card.history.filter((h) => h.to === 'building' && ['qa', 'review', 'merge'].includes(h.from)).length;
 }
 
 // Sends a card back to building, unless it has already bounced MAX_BOUNCES times: then the

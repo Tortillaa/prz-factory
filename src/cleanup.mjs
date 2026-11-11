@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { git, tryGit, worktrees, isAncestor, commonDir, samePath, revParse } from './git.mjs';
 
-const ACTIVE = ['backlog', 'spec', 'ready', 'building', 'qa', 'review', 'blocked'];
+const ACTIVE = ['backlog', 'spec', 'ready', 'building', 'qa', 'review', 'merge', 'blocked'];
 // factory-<id> for the card, factory-<id>-<lens> for each reviewer of its panel.
 const FACTORY_WT = /^factory-(\d+)(?:-[a-z]+)?$/;
 const FACTORY_BRANCH = /^factory\/(\d+)-|^[^/]+\/factory-(\d+)(?:-[a-z]+)?$/;

@@ -15,7 +15,7 @@ If `factory` is not on PATH, run `node <prz-factory>/bin/factory.mjs` instead.
 
 ## Columns and rules
 
-`spec → ready → building → review → done`, plus `backlog` (parked), `qa` (cards labelled `qa`)
+`spec → ready → building → review → merge → done`, plus `backlog` (parked), `qa` (cards labelled `qa`)
 and `blocked` (waiting for a person) from any lane.
 
 - **`spec`** holds rough ideas in the user's words. The spec writer turns each into a full card and
@@ -26,9 +26,11 @@ and `blocked` (waiting for a person) from any lane.
   lists the cards that may start now, in priority order, with `next`: `building`, or `qa` for cards labelled `qa`.
 - **`review`** is a panel: one reviewer per lens (`review.lenses` in `factory.config.json`), in
   parallel, on the same commit. Every lens must pass it; one fail sends the card back to `building`.
-- A card reaches `done` only through the merge gate. It merges by itself when the change is small
-  and safe, and waits for the user in `blocked` (labels `needs-you` + `merge-approval`) when it
-  touches the business: high risk, a business label, a sensitive path or a big diff.
+  The verdict that completes the panel moves the card to `merge`.
+- **`merge`** belongs to the merge agent: it decides who lands the card and runs the merge gate.
+  A card reaches `done` only through the gate. It merges by itself when the change is small and
+  safe, and waits for the user in `blocked` (labels `needs-you` + `merge-approval`) when it touches
+  the business: high risk, a business label, a sensitive path, a big diff, or an escalation.
 - Workers move cards forward, or to `blocked` with a comment saying why (the board adds
   `needs-you`). Never back to `backlog`, and never with `--force`: that flag is for the user.
 
@@ -62,21 +64,22 @@ factory status --json                            # in flight, review panels, app
 
 ## Lanes
 
-Lane workers follow their own skill (`factory-spec`, `factory-build`, `factory-review`, `factory-qa`), which uses:
+Lane workers follow their own skill (`factory-spec`, `factory-build`, `factory-review`, `factory-merge`, `factory-qa`), which uses:
 
 ```text
-factory start <id> --lane <spec|build|qa|review> [--lens <lens>] --as <name> --json   # claim + checkout, in your own worktree
+factory start <id> --lane <spec|build|qa|review|merge> [--lens <lens>] --as <name> --json   # claim + checkout, in your own worktree
 factory verify --json                                                       # the project's verify commands, here
-factory handoff <id> <column> --lane <spec|build|qa> --as <name> --text-file f --json   # comment + move + release
+factory handoff <id> <column> --lane <spec|build|qa|merge> --as <name> --text-file f --json   # comment + move + release
 factory verdict <id> --lens <lens> --as <name> --sha <head> (--pass [--escalate why] | --fail [--to blocked]) --text-file f --json
-factory merge <id> --sha <reviewed-head> [--human] --json                   # the merge gate; --human is the user approving
+factory merge <id> --sha <reviewed-head> [--human] --json                   # the merge gate (merge lane); --human is the user approving
 ```
 
 | Lane | Works in | Ends with |
 |---|---|---|
 | spec | `spec` | `handoff` to `ready` (or `blocked` with questions) |
 | build | `building` | `handoff` to `review` (or `blocked`) |
-| review, one per lens | `review` | `verdict`; the one that completes the panel runs the merge gate |
+| review, one per lens | `review` | `verdict`; the one that completes the panel moves the card to `merge` |
+| merge | `merge` | `merge` (the gate lands it or holds it for the user), or `handoff` to `blocked` |
 | qa (`qa` cards only) | `qa` | `merge` (closes the card, nothing to merge) |
 
 Comments and commits follow `references/writing-standard.md`. A card reaches `done` only through

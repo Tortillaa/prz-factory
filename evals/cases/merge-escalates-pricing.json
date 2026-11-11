@@ -1,0 +1,93 @@
+{
+  "description": "The merge agent sees that the diff changes what customers pay although the card admits no business area: it adds the label and the gate holds the merge for the user.",
+  "fixture": "shop",
+  "lane": "merge",
+  "setup": [
+    {
+      "card": {
+        "title": "Carts over 100 get a 10% discount",
+        "body": "## Problem\nShoppers with large carts pay full price; the campaign promises 10% off above 100.\n\n## Context\n- **Where:** `src/cart.mjs`, new function `total`\n- **Who:** every shopper\n\n## Fix\nAdd `total(prices)`: the sum, with 10% off when the sum is over 100.\n\n## Acceptance Criteria\n- [ ] `total([60, 60])` returns `108`\n- [ ] `total([50, 50])` returns `100`\n- [ ] A test in `test/` asserts both cases\n\n## Risk\n🟢 **Low** · one pure function\n",
+        "labels": [
+          "feature"
+        ],
+        "column": "merge"
+      }
+    },
+    {
+      "worktree": {}
+    },
+    {
+      "sh": "git switch -q -c factory/1-carts-over-100-get-a-10-discount",
+      "cwd": "worktree"
+    },
+    {
+      "write": {
+        "path": "src/cart.mjs",
+        "content": "// Average price of the items in a cart.\nexport function average(prices) {\n  return prices.reduce((sum, p) => sum + p, 0) / prices.length;\n}\n\n// What the shopper pays: 10% off carts over 100.\nexport function total(prices) {\n  const sum = prices.reduce((s, p) => s + p, 0);\n  return sum > 100 ? sum * 0.9 : sum;\n}\n",
+        "cwd": "worktree"
+      }
+    },
+    {
+      "write": {
+        "path": "test/cart-total.test.mjs",
+        "content": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { total } from '../src/cart.mjs';\n\ntest('carts over 100 get 10% off', () => {\n  assert.equal(total([60, 60]), 108);\n});\n\ntest('carts of exactly 100 pay full price', () => {\n  assert.equal(total([50, 50]), 100);\n});\n",
+        "cwd": "worktree"
+      }
+    },
+    {
+      "sh": "git add -A && git commit -qm \"✨ [feat] cart: 10% off carts over 100\"",
+      "cwd": "worktree"
+    },
+    {
+      "sh": "git switch -q --detach",
+      "cwd": "worktree"
+    },
+    {
+      "run": {
+        "id": 1,
+        "branch": "factory/1-carts-over-100-get-a-10-discount"
+      }
+    },
+    {
+      "panel": {
+        "id": 1
+      }
+    },
+    {
+      "claim": {
+        "id": 1,
+        "as": "merge-1"
+      }
+    }
+  ],
+  "prompt": "spec:1",
+  "graders": [
+    {
+      "card": {
+        "id": 1,
+        "column": "blocked"
+      }
+    },
+    {
+      "labels": {
+        "id": 1,
+        "includes": [
+          "merge-approval"
+        ]
+      }
+    },
+    {
+      "comment": {
+        "id": 1,
+        "role": "merge",
+        "matches": "pric|precio|descuento|discount"
+      }
+    },
+    {
+      "noCommits": {
+        "id": 1,
+        "since": "branch"
+      }
+    }
+  ]
+}

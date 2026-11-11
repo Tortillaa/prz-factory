@@ -176,3 +176,14 @@ test('recordDispatch writes only while the worker still holds the card or its le
   assert.equal(b.cards[2].run.dispatch, undefined, 'a lens dispatch is not the card dispatch');
   assert.equal(run.recordDispatch(b, 3, { worker: 'review-code-3', dispatch: 'd9' }).recorded, false);
 });
+
+test('plan dispatches the merge agent first, in the card worktree, on its own model', () => {
+  const wt = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-wt-'));
+  const b = board([{ column: 'ready' }, { column: 'merge', run: { branch: 'factory/2-x', worktree: wt } }]);
+  const cfg = { ...config, agents: { merge: { agent: 'claude', model: 'claude-haiku-5-5' }, build: { agent: 'claude', model: 'claude-sonnet-5-5' } } };
+  const actions = run.plan(b, cfg, ROOT);
+  assert.deepEqual(actions.map((a) => [a.id, a.lane, a.worker, a.launch.model]), [[2, 'merge', 'merge-2', 'claude-haiku-5-5'], [1, 'build', 'build-1', 'claude-sonnet-5-5']]);
+  assert.deepEqual(actions[0].placement, { worktree: `path:${wt}` });
+  assert.match(run.spec(b.cards[1], 'merge', 'merge-2', ROOT), /factory-merge[\s\S]*factory start 2 --lane merge --as merge-2[\s\S]*`factory merge`/);
+  assert.doesNotMatch(run.spec(b.cards[1], 'merge', 'merge-2', ROOT), /ponytail/, 'the merge agent writes no code');
+});

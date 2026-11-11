@@ -6,7 +6,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import type { BoardView, CardView } from './protocol'
 
-export const COLUMNS = ['backlog', 'spec', 'ready', 'building', 'qa', 'review', 'blocked', 'done']
+export const COLUMNS = ['backlog', 'spec', 'ready', 'building', 'qa', 'review', 'merge', 'blocked', 'done']
 
 export function commonDir(dir: string): string | null {
   try {

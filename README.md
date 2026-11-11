@@ -1,6 +1,6 @@
 # prz-factory
 
-Una fábrica de software para agentes de código que corre en [Orca](https://www.onorca.dev/). Mandas una idea con tus palabras y la fábrica la devuelve construida, revisada y mergeada: un **Spec Writer** la convierte en una tarjeta completa, un **Builder** la construye, y un **panel de reviewers** expertos (QA, seguridad, código y operaciones) la revisa en paralelo. Los cambios pequeños se mergean solos; los que tocan el negocio esperan tu aprobación en el tablero. Cada agente es un worker de Orca en su propio worktree, y un merge gate solo deja entrar en la rama base el commit exacto que se revisó y verificó.
+Una fábrica de software para agentes de código que corre en [Orca](https://www.onorca.dev/). Mandas una idea con tus palabras y la fábrica la devuelve construida, revisada y mergeada: un **Spec Writer** la convierte en una tarjeta completa, un **Builder** la construye (Sonnet, con un subagente Opus para lo difícil), un **panel de reviewers** expertos (QA, seguridad, código y operaciones) la revisa en paralelo, y un **agente de merge** decide quién la aterriza: los cambios pequeños se mergean solos; los que tocan el negocio esperan tu aprobación en el tablero, con una explicación de qué cambia y cómo deshacerlo. Cada agente es un worker de Orca en su propio worktree, y un merge gate solo deja entrar en la rama base el commit exacto que se revisó y verificó.
 
 La guía paso a paso está en [docs/GUIA.md](docs/GUIA.md).
 

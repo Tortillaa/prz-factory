@@ -1,4 +1,4 @@
-// Lane bookkeeping shared by the spec, build, qa and review skills: start a card in this worktree,
+// Lane bookkeeping shared by the spec, build, qa, review and merge skills: start a card in this worktree,
 // hand it to the next lane, and record a reviewer's verdict. The judgment work happens in the
 // skills; this is the plumbing.
 import * as store from './store.mjs';
@@ -10,8 +10,11 @@ export const LANES = {
   build: { column: 'building', to: ['review', 'blocked'] },
   // qa works only on qa-labelled cards (tests of the base branch): it closes them through `factory merge`.
   qa: { column: 'qa', to: ['blocked'] },
-  // The review panel records verdicts with `factory verdict`; Done only through `factory merge`.
+  // The review panel records verdicts with `factory verdict`; the one that completes it moves the card to merge.
   review: { column: 'review', to: [] },
+  // The merge agent lands what the panel passed through `factory merge` (the only way to Done), or
+  // hands it to a person in blocked when it cannot land.
+  merge: { column: 'merge', to: ['blocked'] },
 };
 
 function checkLane(lane) {
@@ -170,7 +173,11 @@ export function verdict({ file, id, who, lens, sha, pass, to = 'building', escal
     }
     store.commentCard(b, id, { role, text: text + note });
     const complete = pendingLenses(card, config).length === 0;
-    if (complete) store.editCard(b, id, { run: { reviewedSha: head } });
+    if (complete) {
+      // The whole panel passed this head: pin it and hand the card to the merge agent.
+      store.editCard(b, id, { run: { reviewedSha: head } });
+      store.moveCard(b, id, 'merge', who);
+    }
     return { card, verdict: 'pass', complete };
   });
 }

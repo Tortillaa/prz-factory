@@ -2,7 +2,7 @@
 name: factory-run
 description: >-
   Coordinator of prz-factory: drain the board by dispatching one Orca worker per card and lane
-  (spec writer, builder, and one reviewer per lens in parallel), reconciling the board when Orca
+  (spec writer, builder, one reviewer per lens in parallel, and the merge agent), reconciling the board when Orca
   wakes you, and telling the user when a merge needs their approval, until nothing is left to do.
   It never writes specs, builds, reviews or fixes anything itself. Use when the user says "factory
   run", "drain the board", "arranca la fábrica", "/factory-run", or asks for the factory status or to stop it.
@@ -19,8 +19,9 @@ Want me to dig in or stop the run?" and wait.
 The pipeline a card goes through:
 
 ```text
-spec (idea) → ready → building → review (panel: one reviewer per lens, in parallel) → done
-                                      └→ blocked + merge-approval when the change touches the business
+spec (idea) → ready → building → review (panel: one reviewer per lens, in parallel) → merge → done
+                                                                                  └→ blocked + merge-approval
+                                                                                     when it touches the business
 ```
 
 State lives on the board (`factory status`) and in Orca, never in your memory: after any wake,
@@ -53,7 +54,7 @@ factory plan --json
 ```
 
 Each action is `{ id, title, lane, lens, worker, placement, launch }`, already limited to the free
-slots (`maxWorkers` in `factory.config.json`). `lane` is `spec`, `build`, `qa` or `review`; `lens` is
+slots (`maxWorkers` in `factory.config.json`). `lane` is `spec`, `build`, `qa`, `review` or `merge`; `lens` is
 set only for `review` (one action per lens: a card in review gets several workers at once).
 `launch` is `{ agent, model?, effort? }`: the Orca agent that runs this lane (`agents` in
 `factory.config.json`; `claude` when the lane has no entry). For each action, in order:
@@ -88,7 +89,8 @@ For each `worker_done` or `escalation`:
    `panel.lenses.<lens>.worker` is.
    - **No** → it finished its job. Report one line with what the card shows now:
      `📝 #12 spec → ready`, `✅ #12 build → review`, `✅ #12 review:qa pass (2/4)`,
-     `↩️ #12 review:code → building`, `🎉 #12 merged abc1234`, `🙋 #12 needs your approval: <reasons>`.
+     `↩️ #12 review:code → building`, `🔀 #12 review → merge`, `🎉 #12 merged abc1234`,
+     `🙋 #12 needs your approval: <reasons>`.
    - **Yes** → it ended without finishing:
      `factory reclaim <id> --worker <worker> --reason "<the worker's report or stopReason>" --json`.
      The second time, the card goes to blocked with `needs-you` by itself.
@@ -139,9 +141,7 @@ Never approve, answer or move those cards yourself. Keep dispatching everything 
 
 When `factory status --json` says `idle` (nothing in flight, nothing to dispatch), report: cards
 merged this run (with SHAs), merges waiting for the user's approval, cards that need the user,
-cards waiting on blockers, and any card in review whose panel passed but did not land (`panels`
-all `pass`: usually the base checkout had uncommitted changes; the user cleans it and runs
-`factory merge <id>`). Then stop.
+and cards waiting on blockers. Then stop.
 
 ## Status and stop
 

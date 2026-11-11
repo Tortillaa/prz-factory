@@ -78,6 +78,16 @@ export function prepare(c, { dir = EVALS_DIR } = {}) {
       store.update(file, (b) => store.commentCard(b, step.comment.id, step.comment));
     } else if (step.claim) {
       store.update(file, (b) => (step.claim.lens ? store.claimLens(b, step.claim.id, step.claim.lens, step.claim.as) : store.claimCard(b, step.claim.id, step.claim.as)));
+    } else if (step.panel) {
+      // The whole panel passed the branch head: what a card in merge looks like.
+      const card = store.getCard(store.load(file), step.panel.id);
+      const head = revParse(`refs/heads/${card.run.branch}`, repo);
+      const lenses = loadConfig(repo).config.review.lenses;
+      store.update(file, (b) => {
+        const c = store.getCard(b, step.panel.id);
+        c.panel = { head, lenses: Object.fromEntries(lenses.map((l) => [l, { verdict: 'pass', sha: head }])) };
+        store.editCard(b, c.id, { run: { reviewedSha: head } });
+      });
     } else {
       throw new Error(`${c.name}: unknown setup step ${JSON.stringify(step)}`);
     }

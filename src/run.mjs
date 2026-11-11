@@ -9,8 +9,8 @@ import { APPROVAL } from './merge.mjs';
 import { launchFor } from './config.mjs';
 
 // Columns with one lane per card. Review is a panel: one worker per lens, handled apart.
-const LANE_OF = { qa: 'qa', building: 'build', spec: 'spec' };
-const ACTIVE = ['spec', 'ready', 'building', 'qa', 'review'];
+const LANE_OF = { merge: 'merge', qa: 'qa', building: 'build', spec: 'spec' };
+const ACTIVE = ['spec', 'ready', 'building', 'qa', 'review', 'merge'];
 export const MAX_FAILED_DISPATCHES = 2;
 const STALE_CLAIM_MS = 3 * 60 * 60_000;
 
@@ -31,10 +31,11 @@ export function inFlight(board) {
 }
 
 // Next dispatches, up to the free worker slots. Each: { id, title, lane, lens, worker, placement }.
-// Finishing work beats starting more: review lenses, qa, building, ready, then specs to write.
+// Finishing work beats starting more: merges, review lenses, qa, building, ready, then specs to write.
 export function plan(board, config, repoRoot) {
   const slots = Math.max(0, config.maxWorkers - inFlight(board).length);
   const waiting = [];
+  for (const c of board.cards) if (c.column === 'merge' && !c.assignee) waiting.push({ card: c, lane: 'merge' });
   for (const c of board.cards) {
     if (c.column !== 'review' || !c.run.branch) continue;
     for (const lens of config.review.lenses) {
@@ -62,7 +63,8 @@ const FINISH = {
   spec: 'exactly one `factory handoff` (to ready, or to blocked with the questions)',
   build: 'exactly one `factory handoff`',
   qa: '`factory merge` (or a `factory handoff` to blocked)',
-  review: 'exactly one `factory verdict` (it runs the merge gate itself when yours completes the panel)',
+  review: 'exactly one `factory verdict` (the one that completes the panel moves the card to merge)',
+  merge: '`factory merge` (or a `factory handoff` to blocked)',
 };
 
 // The ponytail skill each step of the chain consults, and what it applies it to. Vendored in

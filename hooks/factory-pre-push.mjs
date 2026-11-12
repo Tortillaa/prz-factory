@@ -23,14 +23,19 @@ export function checkPush(lines, { protectedBranches, isAncestor }) {
   return out;
 }
 
-function protectedFromConfig() {
+// baseBranch is always protected: a mistaken edit of protectedBranches must not unprotect it.
+export function protectedFromConfig(cfg) {
+  const list = Array.isArray(cfg?.protectedBranches) ? cfg.protectedBranches : [];
+  return [...new Set([...list, cfg?.baseBranch || 'main'])];
+}
+
+function readConfig() {
   try {
     const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
-    const cfg = JSON.parse(fs.readFileSync(path.join(root, 'factory.config.json'), 'utf8'));
-    if (Array.isArray(cfg.protectedBranches) && cfg.protectedBranches.length) return cfg.protectedBranches;
-    if (cfg.baseBranch) return [cfg.baseBranch];
-  } catch {}
-  return ['main', 'master'];
+    return JSON.parse(fs.readFileSync(path.join(root, 'factory.config.json'), 'utf8'));
+  } catch {
+    return { protectedBranches: ['main', 'master'] };
+  }
 }
 
 const isAncestor = (a, b) => {
@@ -45,7 +50,7 @@ const isAncestor = (a, b) => {
 // The sh wrapper sets FACTORY_PRE_PUSH so a path-spelling mismatch (drive case, symlink) cannot make the check a no-op.
 if (process.env.FACTORY_PRE_PUSH || (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url))) {
   const lines = fs.readFileSync(0, 'utf8').split('\n').filter((l) => l.trim());
-  const refused = checkPush(lines, { protectedBranches: protectedFromConfig(), isAncestor });
+  const refused = checkPush(lines, { protectedBranches: protectedFromConfig(readConfig()), isAncestor });
   if (refused.length) {
     console.error(`prz-factory pre-push: refused: ${refused.join('; ')}. Protected branches only move forward; land code with \`factory merge\`.`);
     process.exit(1);

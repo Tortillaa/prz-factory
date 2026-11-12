@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { checkPush } from '../hooks/factory-pre-push.mjs';
+import { checkPush, protectedFromConfig } from '../hooks/factory-pre-push.mjs';
 import { guardProtectedPush } from '../hooks/factory-guard.mjs';
 import { install } from '../src/install.mjs';
 import { doctor } from '../src/doctor.mjs';
@@ -117,4 +117,40 @@ test('guardProtectedPush refuses ways of skipping the pre-push hook', () => {
     assert.match(run(c), /pre-push hook cannot be skipped/, c);
   }
   for (const c of ['git push origin feature/x', 'git -c user.name=a commit -m x']) assert.equal(run(c), null, c);
+});
+
+test('baseBranch stays protected when protectedBranches is edited to [] or to another list', () => {
+  assert.deepEqual(protectedFromConfig({ baseBranch: 'main', protectedBranches: [] }), ['main']);
+  assert.deepEqual(protectedFromConfig({ baseBranch: 'main', protectedBranches: ['dev'] }), ['dev', 'main']);
+  assert.deepEqual(protectedFromConfig({ protectedBranches: ['main', 'main'] }), ['main']);
+
+  const { remote, repo } = repoWithRemote();
+  install(repo);
+  fs.writeFileSync(path.join(repo, 'factory.config.json'), JSON.stringify({ baseBranch: 'main', protectedBranches: [] }));
+  const before = git(remote, 'rev-parse', 'main');
+  git(repo, 'commit', '-q', '--amend', '--allow-empty', '-am', 'rewritten');
+  for (const args of [['push', '--force', 'origin', 'HEAD:main'], ['push', 'origin', ':main']]) {
+    const r = tryGit(repo, ...args);
+    assert.notEqual(r.status, 0, args.join(' '));
+    assert.match(r.stderr, /pre-push/);
+    assert.equal(git(remote, 'rev-parse', 'main'), before);
+  }
+});
+
+test('a remote tip unknown to the local repo is refused', () => {
+  const { root, remote, repo } = repoWithRemote();
+  install(repo);
+  const other = path.join(root, 'other');
+  git(root, 'clone', '-q', remote, other);
+  for (const [k, v] of [['user.name', 't'], ['user.email', 't@t']]) git(other, 'config', k, v);
+  fs.writeFileSync(path.join(other, 'b.txt'), '2');
+  git(other, 'add', '.');
+  git(other, 'commit', '-qm', 'elsewhere');
+  git(other, 'push', '-q', 'origin', 'main'); // remote tip the first repo has never fetched
+  const before = git(remote, 'rev-parse', 'main');
+  git(repo, 'commit', '-q', '--allow-empty', '-m', 'local');
+  const r = tryGit(repo, 'push', '--force', 'origin', 'HEAD:main');
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /pre-push/);
+  assert.equal(git(remote, 'rev-parse', 'main'), before);
 });

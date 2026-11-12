@@ -100,6 +100,10 @@ Then check it against what the linter cannot see:
 3. **Too big:** over the project's `merge.maxLines`, or several unrelated areas. Split it (step 5).
 4. **Decision missing:** a product, design, data or security choice the idea does not make and the
    code does not settle. Do not invent it: block (step 6).
+5. **A check that blocks or validates something** (a guard, a permission, input from users or the
+   network, a filter): the Fix must say **deny by default, allow only what can be proven safe**,
+   never "also block X". A block-list misses the next spelling of X and the card bounces round after
+   round. Add an AC that a case outside the allow-list is refused, and the ones that must still pass.
 
 ## 4 · Classify the business impact
 

@@ -28,7 +28,7 @@ Also backlog (parked), qa (\`qa\` cards) and blocked (waiting for a person). \`f
 | CLI | \`factory\`, or \`node .prz-factory/bin/factory.mjs\` (the factory lives in this repo: nothing to install) |
 | Base branch | \`${config.baseBranch}\` (protected: ${config.protectedBranches.join(', ')}) |
 | Proof of build | ${config.verify.length ? config.verify.map((v) => `\`${v}\``).join(', ') : '**not set: add `verify` to factory.config.json**'} |
-| Review panel | ${config.review.lenses.join(' · ')}: every lens must pass the same commit |
+| Review panel | ${config.review.lenses.join(' · ')}${config.review.light?.length ? ` (Low risk with no business label: ${config.review.light.filter((l) => config.review.lenses.includes(l)).join(' · ')})` : ''}: every lens must pass the same commit |
 | Merge by a person | risk ${config.merge.humanRisk.join('/')} · labels ${config.merge.humanLabels.join(', ')}${config.merge.humanPaths.length ? ` · paths ${config.merge.humanPaths.map((p) => `\`${p}\``).join(', ')}` : ''} · diff > ${config.merge.maxLines} lines |
 | Business labels | agents may add one (or \`needs-human\`), never remove one |
 | Craft | every step loads \`ponytail\` (spec, build) or \`ponytail-review\` (reviewers): the smallest change that fully works, and no code that should not exist |

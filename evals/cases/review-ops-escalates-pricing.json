@@ -1,5 +1,5 @@
 {
-  "description": "The ops reviewer sees a change to pricing that the card did not flag as business-critical and escalates it: the merge gate holds it for a person.",
+  "description": "The ops reviewer sees a change to pricing that the card did not flag as business-critical and escalates it: its pass carries needs-human, so the merge agent and the gate will hold the merge for a person.",
   "fixture": "shop",
   "lane": "review",
   "lens": "ops",
@@ -18,8 +18,8 @@
   ],
   "prompt": "spec:1",
   "graders": [
-    { "card": { "id": 1, "column": "blocked" } },
-    { "labels": { "id": 1, "includes": ["needs-human", "merge-approval"] } },
+    { "card": { "id": 1, "column": "merge" } },
+    { "labels": { "id": 1, "includes": ["needs-human"] } },
     { "comment": { "id": 1, "role": "review:ops", "matches": "pric|precio" } },
     { "noCommits": { "id": 1, "since": "branch" } }
   ]

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as store from '../src/store.mjs';
 import * as run from '../src/run.mjs';
-import { DEFAULTS } from '../src/config.mjs';
+import { DEFAULTS, loadConfig } from '../src/config.mjs';
 import { GOOD_BODY } from './fixtures.mjs';
 
 const ROOT = path.resolve('/repo');
@@ -177,6 +177,27 @@ test('recordDispatch writes only while the worker still holds the card or its le
   assert.equal(run.recordDispatch(b, 3, { worker: 'review-code-3', dispatch: 'd9' }).recorded, false);
 });
 
+test('a relaunch with a new dispatch restarts the worker age; the first or a repeated one does not', () => {
+  const T0 = '2026-01-01T00:00:00.000Z';
+  const b = board([{ column: 'building', assignee: 'build-1' }, { column: 'review', run: { branch: 'b' }, lenses: { qa: 'review-qa-2' } }]);
+  b.cards[0].claimedAt = T0;
+  b.cards[1].panel.lenses.qa.claimedAt = T0;
+
+  run.recordDispatch(b, 1, { worker: 'build-1', dispatch: 'd1' });
+  assert.equal(b.cards[0].claimedAt, T0, 'first dispatch keeps the claim time');
+  run.recordDispatch(b, 1, { worker: 'build-1', dispatch: 'd1' });
+  assert.equal(b.cards[0].claimedAt, T0, 'same dispatch again changes nothing');
+  run.recordDispatch(b, 1, { worker: 'build-1', dispatch: 'd2' });
+  assert.ok(b.cards[0].claimedAt > T0);
+
+  run.recordDispatch(b, 2, { worker: 'review-qa-2', dispatch: 'd1' });
+  run.recordDispatch(b, 2, { worker: 'review-qa-2', dispatch: 'd2' });
+  assert.ok(b.cards[1].panel.lenses.qa.claimedAt > T0);
+
+  const flying = run.status(b, config, ROOT).inFlight;
+  assert.deepEqual(flying.map((f) => [f.ageMinutes, f.stale]), [[0, false], [0, false]]);
+});
+
 test('plan dispatches the merge agent first, in the card worktree, on its own model', () => {
   const wt = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-wt-'));
   const b = board([{ column: 'ready' }, { column: 'merge', run: { branch: 'factory/2-x', worktree: wt } }]);
@@ -186,4 +207,182 @@ test('plan dispatches the merge agent first, in the card worktree, on its own mo
   assert.deepEqual(actions[0].placement, { worktree: `path:${wt}` });
   assert.match(run.spec(b.cards[1], 'merge', 'merge-2', ROOT), /factory-merge[\s\S]*factory start 2 --lane merge --as merge-2[\s\S]*`factory merge`/);
   assert.doesNotMatch(run.spec(b.cards[1], 'merge', 'merge-2', ROOT), /ponytail/, 'the merge agent writes no code');
+});
+
+test('worker names carry the round after the first: a leftover worker cannot act under the new claim', () => {
+  assert.equal(run.workerName(8, 'review', 'qa'), 'review-qa-8');
+  assert.equal(run.workerName(8, 'review', 'qa', 3), 'review-qa-8-r3');
+  assert.equal(run.workerName(8, 'build', null, 2), 'build-8-r2');
+
+  const b = board([{ column: 'ready' }]);
+  assert.equal(run.plan(b, config, ROOT)[0].worker, 'build-1', 'first round: no suffix');
+  store.moveCard(b, 1, 'building');
+  store.moveCard(b, 1, 'review', null, { force: true });
+  b.cards[0].run.branch = 'factory/1-x';
+  assert.equal(run.plan(b, config, ROOT)[0].worker, 'review-qa-1');
+  store.moveCard(b, 1, 'building', null, { force: true });
+  assert.equal(run.plan(b, config, ROOT)[0].worker, 'build-1-r2', 'a card sent back gets a new name');
+  store.moveCard(b, 1, 'review', null, { force: true });
+  assert.equal(run.plan(b, config, ROOT)[0].worker, 'review-qa-1-r2');
+
+  // The leftover reviewer of round 1 is refused by round 2's claim.
+  store.claimLens(b, 1, 'qa', 'review-qa-1-r2');
+  assert.throws(() => store.claimLens(b, 1, 'qa', 'review-qa-1'), /already claimed by review-qa-1-r2/);
+});
+
+test('a reviewer whose round another lens ended becomes an orphan to stop; the one that ended it does not', () => {
+  const b = board([{ column: 'review', run: { branch: 'b' }, lenses: { qa: 'review-qa-1', security: 'review-security-1', code: 'review-code-1' } }]);
+  run.recordDispatch(b, 1, { worker: 'review-qa-1', dispatch: 'd-qa' });
+  run.recordDispatch(b, 1, { worker: 'review-security-1', dispatch: 'd-sec' });
+  // code never recorded a dispatch: nothing to stop for it.
+  store.sendBack(b, 1, { who: 'review-security-1', role: 'review:security', text: 'S1 blocker' });
+  assert.equal(b.cards[0].column, 'building');
+  assert.deepEqual(b.cards[0].orphans.map((o) => [o.worker, o.lens, o.dispatch]), [['review-qa-1', 'qa', 'd-qa']]);
+
+  const s = run.status(b, config, ROOT);
+  assert.deepEqual(s.toStop.map((o) => [o.id, o.worker, o.dispatch]), [[1, 'review-qa-1', 'd-qa']]);
+  assert.equal(s.idle, false, 'not idle while a worker must be stopped');
+
+  store.forgetOrphan(b, 1, 'd-qa');
+  assert.deepEqual(run.status(b, config, ROOT).toStop, []);
+  assert.throws(() => store.forgetOrphan(b, 1, 'd-qa'), /no orphaned dispatch/);
+});
+
+test('the builder of a card that came back is told to bring in an Opus subagent', () => {
+  const b = board([{ column: 'ready' }]);
+  const card = b.cards[0];
+  assert.doesNotMatch(run.spec(card, 'build', 'build-1', ROOT), /has come back/);
+  store.moveCard(b, 1, 'building');
+  store.moveCard(b, 1, 'review', null, { force: true });
+  store.sendBack(b, 1, { who: 'r', role: 'review:security', text: 'S1' });
+  assert.match(run.spec(card, 'build', 'build-1-r2', ROOT), /has come back 1 time from review[\s\S]*Claude Opus subagent/);
+  assert.doesNotMatch(run.spec(card, 'spec', 'spec-1', ROOT), /has come back/, 'only the builder');
+});
+
+test('light panel: a Low-risk card with no business label gets two lenses; anything else, all four', async () => {
+  const { lensesFor } = await import('../src/lanes.mjs');
+  const full = { ...DEFAULTS, maxWorkers: 20 };
+  const high = GOOD_BODY.replace('🟢 **Low**', '🔴 **High**');
+  const b = board([
+    { column: 'review', run: { branch: 'b1' } },                       // 1: Low, no label
+    { column: 'review', run: { branch: 'b2' }, labels: ['pricing'] }, // 2: Low but business
+    { column: 'review', run: { branch: 'b3' } },                       // 3: High
+  ]);
+  b.cards[2].body = high;
+  assert.deepEqual(lensesFor(b.cards[0], full), ['qa', 'code']);
+  assert.deepEqual(lensesFor(b.cards[1], full), ['qa', 'security', 'code', 'ops']);
+  assert.deepEqual(lensesFor(b.cards[2], full), ['qa', 'security', 'code', 'ops']);
+  assert.deepEqual(lensesFor(b.cards[0], { ...full, review: { ...full.review, light: [] } }), ['qa', 'security', 'code', 'ops'], 'light: [] turns it off');
+  const perCard = run.plan(b, full, ROOT).reduce((n, a) => ({ ...n, [a.id]: (n[a.id] || 0) + 1 }), {});
+  assert.deepEqual(perCard, { 1: 2, 2: 4, 3: 4 });
+
+  // An escalation (needs-human) upgrades a light round to the full panel: the missing lenses get dispatched.
+  b.cards[0].panel.lenses = { qa: { verdict: 'pass' }, code: { verdict: 'pass' } };
+  b.cards[0].labels.push('needs-human');
+  assert.deepEqual(run.plan(b, full, ROOT).filter((a) => a.id === 1).map((a) => a.lens), ['security', 'ops']);
+});
+
+test('maxWorkers per agent: reviewers on Grok do not take the slots of builders on Claude', () => {
+  const cfg = { ...DEFAULTS, maxWorkers: { claude: 1, grok: 2 }, review: { lenses: ['qa', 'code', 'ops'], light: [] }, agents: { review: { agent: 'grok', model: 'grok-4.7' } } };
+  const b = board([
+    { column: 'review', run: { branch: 'b1' } }, // 3 lenses on grok: 2 fit
+    { column: 'ready' },                          // build on claude: fits
+    { column: 'ready' },                          // claude is full
+  ]);
+  assert.deepEqual(run.plan(b, cfg, ROOT).map((a) => [a.id, a.lane, a.lens, a.launch.agent]), [
+    [1, 'review', 'qa', 'grok'], [1, 'review', 'code', 'grok'], [2, 'build', null, 'claude'],
+  ]);
+  // A claude worker already in flight takes the only claude slot; grok keeps its own two.
+  store.claimCard(b, 3, 'build-3');
+  store.moveCard(b, 3, 'building', null, { force: true });
+  assert.deepEqual(run.plan(b, cfg, ROOT).map((a) => a.launch.agent), ['grok', 'grok']);
+});
+
+test('maxWorkers is validated: a number, or a positive number per agent', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-mw-'));
+  const write = (c) => fs.writeFileSync(path.join(dir, 'factory.config.json'), JSON.stringify(c));
+  write({ maxWorkers: { claude: 3, grok: 4 } });
+  assert.deepEqual(loadConfig(dir).config.maxWorkers, { claude: 3, grok: 4 });
+  for (const bad of [{ maxWorkers: 0 }, { maxWorkers: {} }, { maxWorkers: { claude: 0 } }, { maxWorkers: [3] }]) {
+    write(bad);
+    assert.throws(() => loadConfig(dir), /"maxWorkers" must be/);
+  }
+});
+
+// `factory dispatch` against a fake Orca: one coordinator step with no manual Orca calls.
+test('dispatch: starts what the plan says, stops orphans, releases finished workers, and recovers from a failed start', async () => {
+  const { dispatch } = await import('../src/dispatch.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-dispatch-'));
+  const file = path.join(dir, 'board.json');
+  const log = path.join(dir, 'orca.log');
+  const calls = () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : []);
+  const prev = { orca: process.env.FACTORY_ORCA, log: process.env.FAKE_ORCA_LOG, fail: process.env.FAKE_ORCA_FAIL };
+  process.env.FACTORY_ORCA = path.join(import.meta.dirname, 'fake-orca.mjs');
+  process.env.FAKE_ORCA_LOG = log;
+  const cfg = { ...config, maxWorkers: 5, agents: { review: { agent: 'grok', model: 'grok-4.7', effort: 'high' } } };
+  try {
+    store.update(file, (b) => {
+      store.addCard(b, { title: 'idea', column: 'spec' });
+      const c = store.addCard(b, { title: 'built', body: GOOD_BODY });
+      store.moveCard(b, c.id, 'review', null, { force: true });
+      c.run.branch = 'factory/2-built';
+    });
+
+    const first = dispatch({ file, config: cfg, repoRoot: ROOT });
+    assert.deepEqual(first.events.map((e) => [e.kind, e.id, e.worker]), [['started', 2, 'review-qa-2'], ['started', 2, 'review-code-2'], ['started', 1, 'spec-1']]);
+    const starts = calls().filter((c) => c.args[1] === 'worker-start');
+    assert.deepEqual(starts[0].args.slice(starts[0].args.indexOf('--agent'), starts[0].args.indexOf('--agent') + 6), ['--agent', 'grok', '--model', 'grok-4.7', '--effort', 'high']);
+    assert.match(starts[0].input, /review \(qa\) worker/, 'the spec goes in on stdin');
+    assert.ok(starts[2].args.includes('--base-branch'), 'a new worktree is created from the base');
+    let b = store.load(file);
+    assert.equal(b.cards[1].panel.lenses.qa.dispatch, starts[0].args.length && b.cards[1].panel.lenses.qa.dispatch);
+    assert.equal(b.workers.length, 3);
+
+    // The spec writer hands off (its claim is gone) and code fails the round while qa still runs.
+    store.update(file, (bd) => store.releaseCard(bd, 1));
+    store.update(file, (bd) => store.sendBack(bd, 2, { who: 'review-code-2', role: 'review:code', text: 'C1' }));
+    fs.rmSync(log);
+    const second = dispatch({ file, config: cfg, repoRoot: ROOT });
+    const kinds = second.events.map((e) => [e.kind, e.worker]);
+    assert.ok(kinds.some(([k, w]) => k === 'stopped' && w === 'review-qa-2'), 'the qa reviewer of the closed round is stopped');
+    assert.ok(kinds.some(([k, w]) => k === 'released' && w === 'spec-1'), 'the finished spec writer is released');
+    assert.ok(kinds.some(([k, w]) => k === 'released' && w === 'review-code-2'), 'and so is the reviewer that ended the round');
+    assert.ok(kinds.some(([k, w]) => k === 'started' && w === 'build-2'), 'the card goes back to a builder');
+    b = store.load(file);
+    assert.deepEqual(b.cards[1].orphans, []);
+    assert.deepEqual(b.workers.filter((w) => !w.released).map((w) => w.worker).sort(), ['build-2', 'spec-1'], 'the card left in spec gets a new spec writer');
+    // Every worker stays on record for `factory report`, with how it ended.
+    assert.deepEqual(b.workers.filter((w) => w.released).map((w) => [w.worker, w.outcome]).sort(), [['review-code-2', 'done'], ['review-qa-2', 'round-over'], ['spec-1', 'done']]);
+
+    // A start that Orca refuses gives the claim back, so the next dispatch tries again.
+    store.update(file, (bd) => store.addCard(bd, { title: 'idea 2', column: 'spec' }));
+    process.env.FAKE_ORCA_FAIL = 'worker-start';
+    const third = dispatch({ file, config: cfg, repoRoot: ROOT });
+    assert.deepEqual(third.events.filter((e) => e.kind === 'failed').map((e) => e.worker), ['spec-3']);
+    assert.equal(store.load(file).cards[2].assignee, null);
+  } finally {
+    for (const [k, v] of [['FACTORY_ORCA', prev.orca], ['FAKE_ORCA_LOG', prev.log], ['FAKE_ORCA_FAIL', prev.fail]]) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
+test('report: workers, minutes and wasted rounds per lane, model and card', async () => {
+  const { report } = await import('../src/report.mjs');
+  const b = board([{ title: 'one', column: 'done' }, { title: 'two', column: 'review' }]);
+  const t = (m) => new Date(Date.UTC(2026, 10, 12, 10, m)).toISOString();
+  b.workers = [
+    { id: 1, worker: 'spec-1', lane: 'spec', agent: 'claude', model: 'claude-sonnet-5-5', startedAt: t(0), endedAt: t(2), outcome: 'done' },
+    { id: 1, worker: 'build-1', lane: 'build', agent: 'claude', model: 'claude-sonnet-5-5', startedAt: t(2), endedAt: t(6), outcome: 'done' },
+    { id: 2, worker: 'review-qa-2', lane: 'review', lens: 'qa', agent: 'grok', model: 'grok-4.7', startedAt: t(0), endedAt: t(10), outcome: 'round-over' },
+    { id: 2, worker: 'review-code-2', lane: 'review', lens: 'code', agent: 'grok', model: 'grok-4.7', startedAt: t(0) }, // still running
+  ];
+  const r = report(b, Date.parse(t(5)));
+  assert.equal(r.workers, 4);
+  assert.equal(r.minutes, 2 + 4 + 10 + 5);
+  assert.equal(r.wastedMinutes, 10);
+  assert.deepEqual(r.byLane.review, { workers: 2, minutes: 15, wasted: 10 });
+  assert.deepEqual(r.byModel['claude claude-sonnet-5-5'], { workers: 2, minutes: 6, wasted: 0 });
+  assert.deepEqual(r.cards.map((c) => [c.id, c.workers, c.minutes]), [[1, 2, 6], [2, 2, 15]]);
 });

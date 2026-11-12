@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { guardSecrets, guardKeyLiterals, guardProtectedPush, guardDeleteOutside, isSecretPath, segments, normalize } from '../hooks/factory-guard.mjs';
+import { guardSecrets, guardKeyLiterals, guardProtectedPush, guardDeleteOutside, isSecretPath, segments, normalize, commandDir } from '../hooks/factory-guard.mjs';
 
 const bash = (command) => ({ tool_name: 'Bash', tool_input: { command } });
 const GUARD = path.join(import.meta.dirname, '..', 'hooks', 'factory-guard.mjs');
@@ -121,4 +121,41 @@ test('grok events: the script blocks with exit 2 and allows with exit 0', () => 
   assert.equal(blocked.status, 2);
   assert.match(blocked.stderr, /factory guard \(secrets\)/);
   assert.equal(run('secrets', grok('read_file', { target_file: '/p/README.md' })).status, 0);
+});
+
+// `cd X && git …` acts on X: the guard must judge X, without letting a worker escape into the
+// person's checkout of the same repo.
+test('protected push follows a leading cd or git -C, but a worker stays a worker inside its own repo', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const fs = await import('node:fs');
+  const sh = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const mkRepo = (dir) => {
+    fs.mkdirSync(dir, { recursive: true });
+    sh(dir, 'init', '-q', '-b', 'main');
+    sh(dir, 'config', 'user.email', 't@e.com');
+    sh(dir, 'config', 'user.name', 't');
+    fs.writeFileSync(path.join(dir, 'a.txt'), 'a');
+    sh(dir, 'add', '.');
+    sh(dir, 'commit', '-qm', 'init');
+    return dir;
+  };
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'guard-cd-')));
+  const repo = mkRepo(path.join(root, 'repo'));
+  const wt = path.join(root, 'wt');
+  sh(repo, 'worktree', 'add', '-q', '-b', 'factory/1-x', wt);
+  const other = mkRepo(path.join(root, 'other'));
+  const asWorker = (command) => guardProtectedPush({ tool_name: 'Bash', tool_input: { command }, cwd: wt });
+
+  assert.equal(commandDir(`cd "${other}" && git switch main`, wt), other);
+  assert.equal(commandDir(`git -C "${other}" switch main`, wt), other);
+  assert.equal(commandDir(`cd "${path.join(root, 'missing')}" && git switch main`, wt), wt, 'a folder that does not exist changes nothing');
+
+  // Another repository is judged on its own: not this factory's worker, so its main is fair game.
+  assert.equal(asWorker(`cd "${other}" && git switch main`), null);
+  assert.equal(asWorker(`git -C "${other}" commit -m x`), null);
+  // Without the cd, the worker is still stopped.
+  assert.match(asWorker('git switch main'), /Workers do not check out main/);
+  // Moving into the person's checkout of the same repo does not make a worker a person.
+  assert.match(asWorker(`cd "${repo}" && git commit -m x`), /protected branch main/);
+  assert.match(asWorker(`git -C "${repo}" push origin main`), /Workers never push main/);
 });

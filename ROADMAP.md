@@ -141,9 +141,32 @@ Para no gastar cuota de Claude en todo, cada lane puede correr en otro agente de
 - [x] Plugin de Orca: `install` lo copia a `.prz-factory/orca-plugin`, así se instala desde cualquier proyecto sin clonar este repo. Instrucciones en el README, en la guía y en `orca-plugin/README.md`.
 - [x] `test/readme.test.mjs` falla si el README deja fuera una skill, un rol, una lente o un guard.
 
+## Fase 13 · Validación: de prototipo a uso profesional
+
+La mecánica está probada (tests, CI, una tarjeta real, evals del agente de merge y del Builder). Falta demostrar el flujo completo con agentes reales y medir su coste antes de usarla sin supervisión en otros repos. Cada paso deja sus números en `docs/VALIDACION.md`.
+
+- [ ] **1 · Cerrar la #6.** Aprobarla en el tablero: primera prueba real del camino "te pide aprobación → apruebas → se mergea". Su rama salió de un `main` antiguo, así que el gate la devuelve al Builder para rebase y vuelve a recorrer el panel y el agente de merge antes de pedir la aprobación otra vez.
+- [ ] **2 · Una ejecución completa en este repo.** Dos o tres ideas pequeñas y reales con `/factory-run`: una inocente, que debe mergearse sola, y otra que toque una ruta sensible, que debe llegar como solicitud. Medir tiempo por paso, cuota y errores.
+- [ ] **2b · Las 5 evals pendientes con agentes reales:** `spec-empty-cart` y `spec-pricing-is-business` (Sonnet), `review-code-pass`, `review-ops-escalates-pricing` y `review-qa-missing-test` (Grok 4.7).
+- [ ] **3 · Piloto en un repo no crítico, con buenos tests**, en modo piloto: `"humanRisk": ["low", "medium", "high"]` en su `factory.config.json`, de modo que todos los merges pasan por una persona.
+- [ ] **4 · Decidir con datos.** Tras 10 o 20 tarjetas del piloto: cuántas se aprobarían tal cual, cuántas se rechazarían y cuánto cuesta cada una. Si salen las cuentas, quitar el modo piloto para que los cambios pequeños se mergeen solos.
+- [ ] **5 · Ajustar con lo que salga.** Candidatos: el reparto de modelos (por la cuota), `maxWorkers`, y avisos fuera del tablero si se escapan las solicitudes. Puntos flacos vistos en la ejecución del paso 2:
+  - [x] **Supervisión de workers.** Un reviewer seguía trabajando (y gastando cuota) cuando otra lente ya había cerrado la ronda. Ahora la reserva que otra mano cierra deja un huérfano en `status.toStop`, y el coordinador lo para (`worker-stop` + `worker-release` + `factory stopped`).
+  - [x] **Nombres de worker repetidos entre rondas.** Un reviewer de la ronda 2 actuó con la reserva de la ronda 3 porque se llamaban igual. Ahora el nombre lleva la ronda (`review-qa-8-r3`) y el tablero rechaza al sobrante.
+  - [x] **Terminales y worktrees acumulados en Orca.** Los intentos parados no se liberaban y los worktrees de tarjetas terminadas se quedaban. El coordinador ahora libera siempre, limpia al arrancar y ejecuta `factory cleanup --apply` tras cada merge.
+  - [x] **El Builder no pedía ayuda a Opus** aunque la tarjeta volviera dos veces. El spec del Builder dice ahora cuántas veces ha vuelto y que empiece por un subagente Opus.
+  - [x] **Cada merge obligaba a rebase y revisión completa** de las tarjetas en vuelo. Ahora el gate rebasa él mismo en un worktree temporal y mergea sin volver a build ni al panel cuando no hay conflictos y el cambio es el mismo que se revisó (mismo `patch-id`); `verify` corre sobre el commit rebasado. Una aprobación de la persona sigue valiendo.
+  - [x] **El panel no cabía con `maxWorkers: 4`** y era lo que más workers consumía (28 de 41). Ahora una tarjeta de riesgo Low sin etiqueta de negocio pasa por un panel ligero (`review.light`: qa y code), y `maxWorkers` puede ser un límite por agente de Orca (este repo: claude 3, grok 4).
+  - [x] **Un cambio sin commitear en el checkout de la persona bloqueaba los merges.** Ahora decide git: el merge se hace si no toca esos archivos, y la tarjeta solo pasa a blocked si los toca.
+  - [x] **Arreglos de seguridad por lista negra no convergían** (la #8). La lente `security` informa ahora del tipo de fallo con su causa raíz y todas sus variantes, y el Spec Writer pide "denegar por defecto" en toda tarjeta que bloquea o valida algo.
+  - [x] **Formato de commits sin comprobar.** El handoff del Builder a review rechaza commits nuevos sin `Card: #N` e imprime cómo arreglarlo.
+  - [x] **El coordinador hacía cuatro pasos a mano por worker.** `factory dispatch` hace el paso entero: para los workers de rondas cerradas, libera los terminales de los que terminaron y lanza lo que diga `plan`.
+  - [x] **No se podía medir el coste.** `factory dispatch` registra cada worker (inicio, fin, modelo, cómo acabó) y `factory report` da workers y minutos por rol, modelo y tarjeta. Los tokens siguen sin medirse: Orca no los da.
+  - [x] **El guard se equivocaba con `cd`.** Ahora evalúa la carpeta de un `cd X &&` o `git -C X`; otro repo se juzga solo, y un worker que entra en otro checkout del mismo repo sigue siendo worker.
+
 ## Pendiente fuera del código
 
 - [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.
-- [ ] Ejecutar las evals con un agente real (`factory eval`): lanzan Claude Code headless con Bash en repos temporales y requieren tu permiso.
+- [ ] Ejecutar todas las evals con un agente real: ver Fase 13, paso 2b.
 - [ ] Instalar el plugin en Orca (ver "Plugin para Orca" en el README): es `trusted-worker` y requiere tu aprobación.
 - [x] Subir el repo a GitHub (PR #1).

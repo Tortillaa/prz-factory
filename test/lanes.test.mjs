@@ -336,17 +336,52 @@ test('merge refuses a head that moved after review', () => {
   assert.notEqual(sh(env.repo, 'rev-parse', 'main'), reviewed);
 });
 
-test('a branch behind the base goes back to building', () => {
+test('a branch behind the base is rebased by the gate when that leaves the reviewed change intact', () => {
   const env = setup();
   const id = addReadyCard(env);
   const head = toReviewed(env, id);
-  commitIn(env.repo, 'other.txt'); // someone else landed on main
+  const other = commitIn(env.repo, 'other.txt'); // another card landed on main meanwhile
+  const r = mergeCard({ file: env.file, id, sha: head, cwd: env.repo, config: env.config });
+  assert.equal(r.status, 'merged', r.message);
+  assert.notEqual(r.land, head, 'it landed a rebased commit');
+  assert.equal(sh(env.repo, 'rev-parse', 'main'), r.land);
+  assert.equal(sh(env.repo, 'rev-parse', `${r.land}~1`), other, 'on top of the new base');
+  assert.ok(fs.existsSync(path.join(env.repo, 'login.txt')) && fs.existsSync(path.join(env.repo, 'other.txt')));
+  const c = card(env, id);
+  assert.equal(c.column, 'done', 'no new build, no new review');
+  assert.deepEqual([c.run.reviewedSha, c.run.mergedSha], [head, r.land]);
+  assert.match(c.comments.at(-1).text, /rebasado sobre main: .* el mismo cambio que revisó el panel/);
+  // The builder's checkout of the branch followed, so the branch reads as merged for cleanup.
+  assert.equal(sh(env.wt.build, 'rev-parse', 'HEAD'), r.land);
+});
+
+test('a clean rebase that changes what was reviewed still goes back to building', () => {
+  const env = setup();
+  const id = addReadyCard(env);
+  const head = toReviewed(env, id, ['login.txt', 'extra.txt']);
+  // Another card lands the very same login.txt in a commit of its own: the rebase drops that part,
+  // so the change is no longer the one the panel reviewed.
+  fs.writeFileSync(path.join(env.repo, 'login.txt'), 'x');
+  sh(env.repo, 'add', 'login.txt');
+  sh(env.repo, 'commit', '-qm', 'another card adds the same login.txt');
+  const r = mergeCard({ file: env.file, id, sha: head, cwd: env.repo, config: env.config });
+  assert.equal(r.code, 8, r.message);
+  assert.equal(card(env, id).column, 'building');
+  assert.ok(!fs.existsSync(path.join(env.repo, 'extra.txt')), 'nothing landed');
+});
+
+test('a branch behind the base goes back to building when the rebase conflicts', () => {
+  const env = setup();
+  const id = addReadyCard(env);
+  const head = toReviewed(env, id, ['login.txt']);
+  commitIn(env.repo, 'login.txt', 'someone else\'s login'); // the same file, different content
   const r = mergeCard({ file: env.file, id, sha: head, cwd: env.repo, config: env.config });
   assert.equal(r.code, 8);
   const c = card(env, id);
   assert.equal(c.column, 'building');
   assert.equal(c.assignee, null);
   assert.match(c.comments.at(-1).text, /rebase/);
+  assert.equal(sh(env.repo, 'worktree', 'list').split('\n').filter((l) => l.includes('rebase-')).length, 0, 'no rebase worktree left behind');
 });
 
 test('failing verify goes back to building with the output', () => {
@@ -399,19 +434,30 @@ test('with the base checked out nowhere, the gate moves the ref', () => {
   assert.equal(sh(env.repo, 'rev-parse', 'main'), head);
 });
 
-test('a dirty base checkout stops the merge without touching the card', () => {
+test('uncommitted changes in the base checkout stop a merge only when the merge touches them', () => {
   const env = setup();
-  const id = addReadyCard(env);
-  const head = toReviewed(env, id);
+  // An edit to a file the merge does not touch: the merge lands and the edit stays.
+  const other = addReadyCard(env);
+  const otherHead = toReviewed(env, other, ['other.txt']);
   fs.appendFileSync(path.join(env.repo, 'check.js'), '// local edit\n');
+  assert.equal(mergeCard({ file: env.file, id: other, sha: otherHead, cwd: env.wt.code, config: env.config }).status, 'merged');
+  assert.match(fs.readFileSync(path.join(env.repo, 'check.js'), 'utf8'), /local edit/, 'the person keeps their change');
+  sh(env.repo, 'checkout', '--', 'check.js');
+
+  // A local file the merge would overwrite: git refuses and the card waits for the person.
+  const id = addReadyCard(env);
+  sh(env.wt.build, 'switch', '-q', '--detach', 'main');
+  const head = toReviewed(env, id, ['login.txt']);
+  fs.writeFileSync(path.join(env.repo, 'login.txt'), 'mine');
   const r = mergeCard({ file: env.file, id, sha: head, cwd: env.wt.code, config: env.config });
   assert.equal(r.code, 10);
+  assert.equal(fs.readFileSync(path.join(env.repo, 'login.txt'), 'utf8'), 'mine', 'git touched nothing');
   assert.equal(card(env, id).column, 'blocked', 'only the person can clean their checkout');
   assert.ok(card(env, id).labels.includes('needs-you'));
   assert.ok(!card(env, id).labels.includes('merge-approval'), 'not a merge request: the merge itself was fine');
   assert.deepEqual(store.claimsOf(card(env, id)), [], 'nobody holds it');
-  // Once the person cleans their checkout and moves the card back to merge, the same reviewed commit lands.
-  sh(env.repo, 'checkout', '--', 'check.js');
+  // Once the person clears it and moves the card back to merge, the same reviewed commit lands.
+  fs.rmSync(path.join(env.repo, 'login.txt'));
   store.update(env.file, (b) => store.moveCard(b, id, 'merge', 'user'));
   assert.ok(!card(env, id).labels.includes('needs-you'), 'leaving blocked clears the request');
   assert.equal(mergeCard({ file: env.file, id, cwd: env.repo, config: env.config }).status, 'merged');
@@ -592,4 +638,29 @@ test('only merges the gate held can be approved: a card blocked by bounces canno
     server.close();
   }
   assert.notEqual(sh(env.repo, 'rev-parse', 'main'), head);
+});
+
+test('a builder cannot hand off to review new commits without `Card: #<id>`; reviewed ones are not checked again', () => {
+  const env = setup();
+  const { file, wt, config } = env;
+  const id = addReadyCard(env);
+  startLane({ file, id, who: 'b', lane: 'build', cwd: wt.build, config });
+  commitIn(wt.build, 'login.txt'); // "add login.txt", no Card line
+  assert.throws(() => handoff({ file, id, who: 'b', lane: 'build', to: 'review', text: 'built', cwd: wt.build, config }), (err) => err.message.includes(`lack the line \`Card: #${id}\``) && err.message.includes(`--trailer "Card: #${id}"`));
+  assert.equal(card(env, id).column, 'building', 'the card did not move');
+  // Fixed the way the message says: every commit gets the line.
+  sh(wt.build, 'rebase', '-q', 'main', '--exec', `git commit -q --amend --no-edit --trailer "Card: #${id}"`);
+  const head = sh(wt.build, 'rev-parse', 'HEAD');
+  handoff({ file, id, who: 'b', lane: 'build', to: 'review', text: 'built', cwd: wt.build, config });
+  assert.equal(card(env, id).column, 'review');
+
+  // A later round: the commit the panel already saw is not checked again, only the new one.
+  startReview(env, id, 'code');
+  fail(env, id, 'code', head);
+  startLane({ file, id, who: 'b', lane: 'build', cwd: wt.build, config });
+  fs.writeFileSync(path.join(wt.build, 'fix.txt'), 'x');
+  sh(wt.build, 'add', 'fix.txt');
+  sh(wt.build, 'commit', '-qm', `🐛 [fix] login: fix\n\n- C1\nCard: #${id}`);
+  handoff({ file, id, who: 'b', lane: 'build', to: 'review', text: 'fixed', cwd: wt.build, config });
+  assert.equal(card(env, id).column, 'review');
 });

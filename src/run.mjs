@@ -6,7 +6,8 @@ import path from 'node:path';
 import * as store from './store.mjs';
 import { FACTORY_ROOT } from './install.mjs';
 import { APPROVAL } from './merge.mjs';
-import { launchFor } from './config.mjs';
+import { launchFor, workerLimit } from './config.mjs';
+import { lensesFor } from './lanes.mjs';
 
 // Columns with one lane per card. Review is a panel: one worker per lens, handled apart.
 const LANE_OF = { merge: 'merge', qa: 'qa', building: 'build', spec: 'spec' };
@@ -14,7 +15,18 @@ const ACTIVE = ['spec', 'ready', 'building', 'qa', 'review', 'merge'];
 export const MAX_FAILED_DISPATCHES = 2;
 const STALE_CLAIM_MS = 3 * 60 * 60_000;
 
-export const workerName = (id, lane, lens = null) => (lens ? `${lane}-${lens}-${id}` : `${lane}-${id}`);
+// A worker's name carries the round after the first one (build-8-r3): a worker left over from an
+// earlier round can then never act under the claim of the current one.
+export const workerName = (id, lane, lens = null, round = 1) => `${lens ? `${lane}-${lens}-${id}` : `${lane}-${id}`}${round > 1 ? `-r${round}` : ''}`;
+
+const COLUMN_OF = { spec: 'spec', build: 'building', qa: 'qa', review: 'review', merge: 'merge' };
+// Which visit of the lane's column this dispatch serves: entries into it so far, plus the one a card in
+// ready is about to make.
+export function round(card, lane) {
+  const column = COLUMN_OF[lane];
+  const entries = card.history.filter((h) => h.to === column).length;
+  return card.column === column ? Math.max(entries, 1) : entries + 1;
+}
 
 // Where the worker runs. A reviewer gets its own worktree per lens (the panel runs in parallel);
 // every other lane shares the card's worktree once it has one, else a new one.
@@ -33,12 +45,25 @@ export function inFlight(board) {
 // Next dispatches, up to the free worker slots. Each: { id, title, lane, lens, worker, placement }.
 // Finishing work beats starting more: merges, review lenses, qa, building, ready, then specs to write.
 export function plan(board, config, repoRoot) {
-  const slots = Math.max(0, config.maxWorkers - inFlight(board).length);
+  // Free slots per Orca agent: maxWorkers is one shared limit, or one per agent (each its own quota).
+  const shared = typeof config.maxWorkers === 'number';
+  const busy = {};
+  for (const k of inFlight(board)) {
+    // A card claimed in ready is about to be built.
+    const agent = shared ? '*' : launchFor(k.lens ? 'review' : LANE_OF[k.card.column] ?? 'build', config).agent;
+    busy[agent] = (busy[agent] || 0) + 1;
+  }
+  const fits = (lane) => {
+    const agent = shared ? '*' : launchFor(lane, config).agent;
+    if ((busy[agent] || 0) >= workerLimit(config, agent === '*' ? null : agent)) return false;
+    busy[agent] = (busy[agent] || 0) + 1;
+    return true;
+  };
   const waiting = [];
   for (const c of board.cards) if (c.column === 'merge' && !c.assignee) waiting.push({ card: c, lane: 'merge' });
   for (const c of board.cards) {
     if (c.column !== 'review' || !c.run.branch) continue;
-    for (const lens of config.review.lenses) {
+    for (const lens of lensesFor(c, config)) {
       const slot = c.panel?.lenses?.[lens];
       if (!slot?.worker && !slot?.verdict) waiting.push({ card: c, lane: 'review', lens });
     }
@@ -48,12 +73,12 @@ export function plan(board, config, repoRoot) {
   }
   for (const c of store.readyQueue(board)) waiting.push({ card: c, lane: c.next === 'qa' ? 'qa' : 'build' });
   for (const c of board.cards) if (c.column === 'spec' && !c.assignee) waiting.push({ card: c, lane: 'spec' });
-  return waiting.slice(0, slots).map(({ card, lane, lens = null }) => ({
+  return waiting.filter(({ lane }) => fits(lane)).map(({ card, lane, lens = null }) => ({
     id: card.id,
     title: card.title,
     lane,
     lens,
-    worker: workerName(card.id, lane, lens),
+    worker: workerName(card.id, lane, lens, round(card, lane)),
     placement: placement(card, repoRoot, lens),
     launch: launchFor(lane, config),
   }));
@@ -87,6 +112,14 @@ export function spec(card, lane, worker, repoRoot, lens = null) {
    the skill's \`references/lenses.md\` says. Other reviewers cover the other lenses.`
     : '';
   const craft = CRAFT[lane];
+  // A card that came back is where a stronger model pays off: say so, with the count, not as advice.
+  const back = lane === 'build' && card.history ? store.bounces(card) : 0;
+  const backLine = back
+    ? `
+   This card has come back ${back} time${back > 1 ? 's' : ''} from review or the merge gate. Before you change code, start a
+   Claude Opus subagent (see "When a part needs more capacity" in the skill) on the open findings: it
+   diagnoses or designs, you build.`
+    : '';
   const craftLine = craft
     ? `\n   Then load the \`${craft.skill}\` skill too, before you start (if it is not installed, read
    ${path.join(FACTORY_ROOT, 'skills', craft.skill, 'SKILL.md')}): ${craft.use}.`
@@ -99,7 +132,7 @@ Repository: ${repoRoot}
 0. If your agent has not loaded this project's rules on its own (Grok does only in a folder it
    trusts), read the \`CLAUDE.md\` or \`AGENTS.md\` at the root of this worktree first.
 1. Load the \`factory-${lane}\` skill and follow it for card #${card.id}. If your agent does not list it
-   (Claude Code and Grok find it in \`.claude/skills/\`), read ${skill} and follow that file.${lensLine}${craftLine}
+   (Claude Code and Grok find it in \`.claude/skills/\`), read ${skill} and follow that file.${lensLine}${craftLine}${backLine}
 2. The card is already claimed as ${worker}: use \`--as ${worker}\` in every factory command, starting with
    \`factory start ${card.id} --lane ${lane}${lensFlag} --as ${worker} --json\`. If \`factory\` is not on PATH, run
    \`node .prz-factory/bin/factory.mjs\` from this worktree's root (or \`node ${cli}\`) instead.
@@ -124,7 +157,7 @@ export function status(board, config, repoRoot, now = Date.now()) {
   const panels = board.cards.filter((c) => c.column === 'review').map((c) => ({
     id: c.id,
     head: c.panel?.head ?? null,
-    lenses: Object.fromEntries(config.review.lenses.map((l) => {
+    lenses: Object.fromEntries(lensesFor(c, config).map((l) => {
       const s = c.panel?.lenses?.[l] || {};
       return [l, s.verdict || (s.worker ? 'reviewing' : 'waiting')];
     })),
@@ -132,7 +165,9 @@ export function status(board, config, repoRoot, now = Date.now()) {
   const waitingOnDeps = board.cards.filter((c) => c.column === 'ready' && store.unmetDeps(board, c).length).map((c) => ({ id: c.id, waitingOn: store.unmetDeps(board, c) }));
   const next = plan(board, config, repoRoot);
   const idle = flying.length === 0 && next.length === 0;
-  return { counts, inFlight: flying, approvals, needsYou, panels, waitingOnDeps, next, idle, maxWorkers: config.maxWorkers };
+  // Workers still running on a round that is over: stop them in Orca, then `factory stopped`.
+  const toStop = board.cards.flatMap((c) => (c.orphans || []).map((o) => ({ id: c.id, ...o })));
+  return { counts, inFlight: flying, toStop, approvals, needsYou, panels, waitingOnDeps, next, idle: idle && toStop.length === 0, maxWorkers: config.maxWorkers };
 }
 
 // Records the Orca dispatch holding a card (or a lens of it). A fast worker may have finished before
@@ -141,7 +176,11 @@ export function recordDispatch(board, id, { worker, dispatch }) {
   const card = store.getCard(board, id);
   const held = store.holding(card, worker);
   if (!held) return { card, recorded: false, note: card.assignee ? `card is claimed by ${card.assignee}` : 'already handed off' };
-  if (held.lens) card.panel.lenses[held.lens].dispatch = dispatch;
+  // A relaunch keeps the claim (same worker name) but is a new run: restart its age.
+  const holder = held.lens ? card.panel.lenses[held.lens] : card;
+  const previous = held.lens ? holder.dispatch : card.run.dispatch;
+  if (previous && previous !== dispatch) holder.claimedAt = new Date().toISOString();
+  if (held.lens) holder.dispatch = dispatch;
   else store.editCard(board, id, { run: { dispatch } });
   return { card, recorded: true, lens: held.lens };
 }

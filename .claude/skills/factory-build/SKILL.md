@@ -99,6 +99,10 @@ to build or could not check, every `shortcut:` you left, and any risk the review
 factory handoff <id> review --lane build --as <your-worker-name> --text-file <comment.md> --json
 ```
 
+The handoff refuses commits made since the last review that lack the line `Card: #<id>`: the
+gate fast-forwards them onto the base as they are. Run the `git rebase … --exec` command it prints,
+then hand off again.
+
 **Block instead** when you cannot meet the ACs without guessing: the ACs contradict the code or
 each other, a product/design/security decision is missing, or a credential or service you need is
 absent. Commit any useful partial work as `🚧 [wip]`, then hand off to `blocked` with a 🛑 comment

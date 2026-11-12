@@ -147,7 +147,7 @@ function lensState(card, lens) {
   return { cls: '', mark: '·', title: 'esperando reviewer' };
 }
 function panel(card) {
-  return state.lenses.map((lens) => {
+  return (card.lenses || state.lenses).map((lens) => {
     const st = lensState(card, lens);
     return el('span', { className: 'tag ' + st.cls, textContent: `${lens} ${st.mark}`, title: `Reviewer ${lens}: ${st.title}` });
   });
@@ -262,7 +262,7 @@ function fillView() {
   $('v-lint').replaceChildren(...(c.lint.length && c.column !== 'spec' ? [el('h4', { textContent: 'Lint' }),
     el('ul', {}, ...c.lint.map((i) => el('li', { className: i.severity, textContent: i.message })))] : []));
   // The review panel: who passed this commit, who is still looking.
-  const lenses = c.panel?.head || c.column === 'review' ? state.lenses : [];
+  const lenses = c.panel?.head || c.column === 'review' ? c.lenses || state.lenses : [];
   $('v-panel').replaceChildren(...(lenses.length ? [
     el('h4', { textContent: `Panel de revisión${c.panel?.head ? ' · commit ' + c.panel.head.slice(0, 8) : ''}` }),
     el('div', { className: 'meta' }, ...panel(c)),

@@ -2,7 +2,8 @@
 // hand it to the next lane, and record a reviewer's verdict. The judgment work happens in the
 // skills; this is the plumbing.
 import * as store from './store.mjs';
-import { git, revParse, isClean, toplevel, worktrees, samePath, slugify } from './git.mjs';
+import { git, revParse, isAncestor, isClean, toplevel, worktrees, samePath, slugify } from './git.mjs';
+import { riskLevel } from './ticket.mjs';
 
 export const LANES = {
   // lane: { column it works in, where it may hand a card to }
@@ -99,11 +100,30 @@ export function startLane({ file, id, who, lane, lens = null, cwd, config, allow
   }
 }
 
+// Commits on the card's branch that lack the `Card: #<id>` line the writing standard asks for. Only the
+// ones after the last commit a panel reviewed (or after the base): older ones were already accepted.
+export function commitsWithoutCard(card, cwd, base) {
+  const branch = card.run.branch;
+  if (!branch || !revParse(`refs/heads/${branch}`, cwd)) return [];
+  const reviewed = card.panel?.head;
+  const since = reviewed && isAncestor(reviewed, `refs/heads/${branch}`, cwd) ? reviewed : base;
+  const log = git(['log', '--format=%h%x1f%B%x1e', `${since}..refs/heads/${branch}`], cwd);
+  const want = new RegExp(`^Card: #${card.id}\\s*$`, 'm');
+  return log.split('\x1e').map((e) => e.trim()).filter(Boolean).map((e) => e.split('\x1f')).filter(([, body]) => !want.test(body)).map(([sha]) => sha);
+}
+
 // Comment, move and release in one write, so a card is never left claimed but moved (or the reverse).
-export function handoff({ file, id, who, lane, to, text }) {
+// With `cwd` and `config`, a builder's handoff to review also checks the commit format first.
+export function handoff({ file, id, who, lane, to, text, cwd = null, config = null }) {
   const { column, to: allowed } = checkLane(lane);
   if (lane === 'review') throw new Error('reviewers finish with `factory verdict`, not a handoff');
   if (!text || !text.trim()) throw new Error('a handoff needs a comment with what you did and the evidence');
+  if (lane === 'build' && to === 'review' && cwd && config) {
+    const missing = commitsWithoutCard(store.getCard(store.load(file), id), cwd, config.baseBranch);
+    if (missing.length) {
+      throw new Error(`commits ${missing.join(', ')} lack the line \`Card: #${id}\` (writing standard §1). Add it and hand off again:\n  git rebase ${missing.length > 1 ? `${missing.at(-1)}~1` : `${missing[0]}~1`} --exec 'git commit --amend --no-edit --trailer "Card: #${id}"'`);
+    }
+  }
   return store.update(file, (b) => {
     const card = store.getCard(b, id);
     if (card.column !== column) throw new Error(`card #${id} is in ${card.column}, not ${column}`);
@@ -119,9 +139,20 @@ export function handoff({ file, id, who, lane, to, text }) {
   });
 }
 
+// The lenses this card's panel needs. A Low-risk card with no business label gets the light panel;
+// anything else, or a card a reviewer escalated (needs-human is a business label), gets every lens.
+export function lensesFor(card, config) {
+  const { lenses } = config.review;
+  // Only the light lenses this project reviews with.
+  const light = (config.review.light || []).filter((l) => lenses.includes(l));
+  if (!light.length) return lenses;
+  const business = card.labels.some((l) => config.merge.humanLabels.includes(l));
+  return riskLevel(card.body) === 'low' && !business ? light : lenses;
+}
+
 // Lenses of this round that have not passed yet.
 export function pendingLenses(card, config) {
-  return config.review.lenses.filter((l) => card.panel?.lenses?.[l]?.verdict !== 'pass');
+  return lensesFor(card, config).filter((l) => card.panel?.lenses?.[l]?.verdict !== 'pass');
 }
 
 /**
@@ -163,6 +194,7 @@ export function verdict({ file, id, who, lens, sha, pass, to = 'building', escal
     slot.verdict = 'pass';
     slot.sha = head;
     slot.at = new Date().toISOString();
+    store.endWork(b, slot.worker);
     slot.worker = null;
     slot.claimedAt = null;
     delete slot.dispatch;

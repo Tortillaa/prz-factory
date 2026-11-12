@@ -13,6 +13,8 @@ import { startLane, handoff, verdict } from '../src/lanes.mjs';
 import { runVerify, verifySummary } from '../src/verify.mjs';
 import { mergeCard } from '../src/merge.mjs';
 import * as run from '../src/run.mjs';
+import { dispatch, describe } from '../src/dispatch.mjs';
+import { report, describeReport } from '../src/report.mjs';
 import { worktrees } from '../src/git.mjs';
 import { findLeftovers, applyCleanup } from '../src/cleanup.mjs';
 import { writeBlock } from '../src/agentsmd.mjs';
@@ -63,6 +65,9 @@ Lanes (run inside the worker's own worktree)
                                          failed · 10 base checkout dirty · 11 review panel incomplete
 
 Run (the coordinator; it dispatches, never builds)
+  dispatch [--dry-run]                   One coordinator step: stop workers whose round is over, release the
+                                         terminals of finished ones, start a worker for every plan action
+  report                                 What the workers cost: count and minutes per lane, model and card
   plan                                   Next dispatches for the free worker slots, with placement
   spec <id> --lane <l> [--lens l] --as <worker>
                                          The task text for that worker (pipe to --spec-file -)
@@ -71,6 +76,7 @@ Run (the coordinator; it dispatches, never builds)
   status                                 Snapshot: columns, in flight (stale claims), needs-you, next
   reclaim <id> [--worker w] [--reason t] Worker ended without a handoff: release it (2nd time: blocked)
   stop [--reason t]                      Release every in-flight card; prints the dispatches to stop
+  stopped <id> --dispatch <d>            Forget an orphaned dispatch (status.toStop) once it is stopped in Orca
 
 Setup
   install [target] [--no-hooks]          Copy skills and guard hooks into <target>/.claude, create factory.config.json
@@ -127,6 +133,7 @@ const { values: opts, positionals } = parseOptions({
     sha: { type: 'string' },
     human: { type: 'boolean' },
     'allow-main': { type: 'boolean' },
+    'dry-run': { type: 'boolean' },
     dispatch: { type: 'string' },
     reason: { type: 'string' },
     apply: { type: 'boolean' },
@@ -325,7 +332,7 @@ try {
     }
     case 'handoff': {
       const text = opts['text-file'] !== undefined ? fs.readFileSync(opts['text-file'], 'utf8') : opts.text;
-      const card = handoff({ file, id: need(args[0], 'id'), to: need(args[1], 'column'), lane: need(opts.lane, '--lane'), who: need(opts.as, '--as'), text });
+      const card = handoff({ file, id: need(args[0], 'id'), to: need(args[1], 'column'), lane: need(opts.lane, '--lane'), who: need(opts.as, '--as'), text, cwd: process.cwd(), config: loadConfig(repoRoot()).config });
       print(card, `handed off ${line(card)} → ${card.column}`);
       break;
     }
@@ -376,7 +383,8 @@ try {
       const s = run.status(store.load(file), loadConfig(root).config, root);
       const lines = [
         store.COLUMNS.map((c) => `${c} ${s.counts[c]}`).join(' · '),
-        `in flight ${s.inFlight.length}/${s.maxWorkers}`,
+        `in flight ${s.inFlight.length}/${typeof s.maxWorkers === 'number' ? s.maxWorkers : Object.entries(s.maxWorkers).map(([a, n]) => `${a} ${n}`).join(' · ')}`,
+        ...(s.toStop.length ? ['⛔ to stop (their round is over)', ...s.toStop.map((o) => `  #${o.id} ${o.worker} dispatch ${o.dispatch}`)] : []),
         ...s.inFlight.map((f) => `  #${f.id} ${f.column}${f.lens ? `:${f.lens}` : ''} ${f.worker} ${f.ageMinutes ?? '?'}min${f.stale ? ' ⚠️ stale' : ''}${f.dispatch ? ` dispatch ${f.dispatch}` : ''}`),
         ...(s.approvals.length ? ['🙋 waiting for your approval (web board, or factory merge <id> --sha <sha> --human)', ...s.approvals.map((a) => `  #${a.id} ${a.title} (${a.branch} @ ${(a.sha || '').slice(0, 8)})`)] : []),
         ...s.panels.map((p) => `  review #${p.id}: ${Object.entries(p.lenses).map(([l, v]) => `${l} ${v}`).join(' · ')}`),
@@ -385,6 +393,24 @@ try {
         `next: ${s.next.map((a) => `#${a.id} ${a.lane}`).join(', ') || 'nothing'}${s.idle ? ' · idle' : ''}`,
       ];
       print(s, lines.join('\n'));
+      break;
+    }
+    case 'dispatch': {
+      const root = mainCheckout();
+      const r = dispatch({ file, config: loadConfig(root).config, repoRoot: root, dryRun: opts['dry-run'] });
+      print(r, r.events.map(describe).join('\n') || 'nothing to do');
+      if (r.events.some((e) => e.kind === 'failed')) process.exitCode = 1;
+      break;
+    }
+    case 'report': {
+      const r = report(store.load(file));
+      print(r, r.workers ? describeReport(r) : 'no workers recorded yet (factory dispatch records them)');
+      break;
+    }
+    case 'stopped': {
+      // The coordinator stopped an orphaned worker in Orca: drop it from the list to stop.
+      const card = store.update(file, (b) => store.forgetOrphan(b, need(args[0], 'id'), need(opts.dispatch, '--dispatch')));
+      print(card, `forgot orphan ${opts.dispatch} of ${line(card)}`);
       break;
     }
     case 'dispatched': {

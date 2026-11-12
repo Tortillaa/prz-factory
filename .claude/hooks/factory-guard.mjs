@@ -151,19 +151,63 @@ function protectedBranches(root) {
 }
 
 // ctx: { cwd, protectedBranches, linkedWorktree, currentBranch } (computed from git when not given).
+function isLinked(dir) {
+  const gitDir = git(['rev-parse', '--path-format=absolute', '--git-dir'], dir);
+  const common = git(['rev-parse', '--path-format=absolute', '--git-common-dir'], dir);
+  return !!(gitDir && common && norm(gitDir) !== norm(common));
+}
+
+function sameRepo(a, b) {
+  const ca = git(['rev-parse', '--path-format=absolute', '--git-common-dir'], a);
+  const cb = git(['rev-parse', '--path-format=absolute', '--git-common-dir'], b);
+  return !!(ca && cb && norm(ca) === norm(cb));
+}
+
+// A Git Bash path (/c/Users/…) or ~ as a path Node can resolve.
+function hostPath(p) {
+  const home = os.homedir();
+  let s = p.replace(/^~(?=$|[\\/])/, home);
+  if (process.platform === 'win32') s = s.replace(/^\/([a-zA-Z])(?=\/|$)/, '$1:');
+  return s;
+}
+
+// The folder the git commands of `command` run in: `base`, moved by each `cd`/`Set-Location`/
+// `pushd` before the first git command, or that command's own `-C dir`. A folder that does not
+// exist leaves `base`, so a typo never makes the guard look at another repo.
+export function commandDir(command, base) {
+  let dir = base;
+  for (const seg of segments(command)) {
+    const verb = path.basename(seg[0]).toLowerCase();
+    if (['cd', 'set-location', 'sl', 'chdir', 'pushd'].includes(verb) && seg[1]) {
+      const next = path.resolve(dir, hostPath(seg.slice(1).find((w) => !w.startsWith('-')) ?? seg[1]));
+      if (fs.existsSync(next)) dir = next;
+      continue;
+    }
+    if (verb === 'git') {
+      const c = seg.indexOf('-C');
+      if (c > 0 && seg[c + 1]) {
+        const next = path.resolve(dir, hostPath(seg[c + 1]));
+        if (fs.existsSync(next)) return next;
+      }
+      return dir;
+    }
+  }
+  return dir;
+}
+
 export function guardProtectedPush(input, ctx = {}) {
   input = normalize(input);
   if (input.tool_name !== 'Bash' && input.tool_name !== 'PowerShell') return null;
-  const cwd = ctx.cwd ?? input.cwd ?? process.cwd();
+  const session = input.cwd ?? process.cwd();
+  // The repo the git commands act on: the session's, or the one a leading `cd X` / `git -C X` names.
+  const cwd = ctx.cwd ?? commandDir(input.tool_input?.command || '', session);
   const segs = segments(input.tool_input?.command || '').filter((s) => path.basename(s[0]).toLowerCase() === 'git');
   if (!segs.length) return null;
   const root = git(['rev-parse', '--show-toplevel'], cwd) ?? cwd;
   const prot = ctx.protectedBranches ?? protectedBranches(root);
-  const linked = ctx.linkedWorktree ?? (() => {
-    const gitDir = git(['rev-parse', '--path-format=absolute', '--git-dir'], cwd);
-    const common = git(['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd);
-    return gitDir && common && norm(gitDir) !== norm(common);
-  })();
+  // A worker stays a worker when it moves to another checkout of the same repo (the person's, say);
+  // only a different repository is judged on its own.
+  const linked = ctx.linkedWorktree ?? (isLinked(cwd) || (sameRepo(cwd, session) && isLinked(session)));
   const current = ctx.currentBranch ?? git(['branch', '--show-current'], cwd);
   const isProt = (ref) => {
     const r = String(ref).replace(/^\+/, '').replace(/^refs\/heads\//, '');

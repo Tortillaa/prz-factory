@@ -70,6 +70,16 @@ A partir de aquí, el comando de la fábrica es `node .prz-factory/bin/factory.m
 
 Para actualizar la fábrica a su última versión, repite la línea de `npx`: reemplaza `.prz-factory/` y las skills, y no toca tu configuración.
 
+### Paso 2b. El panel dentro de Orca (opcional)
+
+Para ver el tablero en la barra lateral de Orca, instala el plugin una vez por máquina:
+
+```sh
+orca plugin install .prz-factory/orca-plugin
+```
+
+Ese comando todavía no instala nada: te enseña lo que el plugin podrá hacer y una huella `ap1-…`. Si estás de acuerdo, repítelo añadiendo `--approve ap1-<la huella>`, y ábrelo con `orca plugin open local.prz-factory-board --panel board`.
+
 ### Paso 3. Ajusta `factory.config.json`
 
 Es el archivo donde decides cómo se comporta la fábrica en ese proyecto. Lo más importante:

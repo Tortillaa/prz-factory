@@ -11,7 +11,7 @@ export const MARKER = '.factory-managed';
 // The factory's own runtime, copied into every project so it needs nothing installed anywhere:
 // `node .prz-factory/bin/factory.mjs` works in the project and in each of its worktrees (it is committed).
 export const RUNTIME_DIR = '.prz-factory';
-const RUNTIME_PARTS = ['bin', 'src', 'public', 'hooks', 'skills', 'package.json'];
+const RUNTIME_PARTS = ['bin', 'src', 'public', 'hooks', 'skills', 'orca-plugin', 'package.json'];
 
 function samePath(a, b) {
   const norm = (p) => path.resolve(p).replace(/\\/g, '/').replace(/\/+$/, '');

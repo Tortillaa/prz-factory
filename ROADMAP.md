@@ -132,11 +132,18 @@ Para no gastar cuota de Claude en todo, cada lane puede correr en otro agente de
 - [x] Un solo comando desde cualquier repo: `npx -y github:Tortillaa/prz-factory install .`, o un prompt para el agente: «Instala prz-factory en este repositorio: ejecuta `npx -y github:Tortillaa/prz-factory install .` y después sigue la skill factory-onboard que se acaba de instalar.».
 - [x] Skills, spec de los workers, hook de SessionStart y `doctor` usan `node .prz-factory/bin/factory.mjs` cuando `factory` no está en el PATH. `doctor` solo marca Grok como fallo si alguna lane corre en Grok.
 - [x] Probado: un repo vacío queda listo con `npm exec` sobre este repo local, `doctor` en verde, y el tablero se usa desde un worktree.
-- [ ] Subir `main` a GitHub: hasta entonces, `npx github:` descarga la versión antigua.
+- [x] Subir `main` a GitHub (PR #1).
+
+## Fase 12 · El repo como fuente de reglas, roles y skills ✅
+
+- [x] `README.md` reorganizado en tres apartados, con una tabla cada uno: reglas para los agentes (y qué código hace cumplir cada una), roles de agentes (columna, cómo termina, skill y modelo) y skills (quién la usa y para qué).
+- [x] Instrucciones de despliegue en el README: requisitos, desplegar en un proyecto, arrancar, actualizar, quitar y publicar una versión.
+- [x] Plugin de Orca: `install` lo copia a `.prz-factory/orca-plugin`, así se instala desde cualquier proyecto sin clonar este repo. Instrucciones en el README, en la guía y en `orca-plugin/README.md`.
+- [x] `test/readme.test.mjs` falla si el README deja fuera una skill, un rol, una lente o un guard.
 
 ## Pendiente fuera del código
 
 - [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.
 - [ ] Ejecutar las evals con un agente real (`factory eval`): lanzan Claude Code headless con Bash en repos temporales y requieren tu permiso.
-- [ ] Instalar el plugin en Orca (`orca-plugin/README.md`): es `trusted-worker` y requiere tu aprobación.
-- [ ] Subir el repo a GitHub para que corra el CI.
+- [ ] Instalar el plugin en Orca (ver "Plugin para Orca" en el README): es `trusted-worker` y requiere tu aprobación.
+- [x] Subir el repo a GitHub (PR #1).

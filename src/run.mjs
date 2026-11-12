@@ -141,7 +141,11 @@ export function recordDispatch(board, id, { worker, dispatch }) {
   const card = store.getCard(board, id);
   const held = store.holding(card, worker);
   if (!held) return { card, recorded: false, note: card.assignee ? `card is claimed by ${card.assignee}` : 'already handed off' };
-  if (held.lens) card.panel.lenses[held.lens].dispatch = dispatch;
+  // A relaunch keeps the claim (same worker name) but is a new run: restart its age.
+  const holder = held.lens ? card.panel.lenses[held.lens] : card;
+  const previous = held.lens ? holder.dispatch : card.run.dispatch;
+  if (previous && previous !== dispatch) holder.claimedAt = new Date().toISOString();
+  if (held.lens) holder.dispatch = dispatch;
   else store.editCard(board, id, { run: { dispatch } });
   return { card, recorded: true, lens: held.lens };
 }

@@ -177,6 +177,27 @@ test('recordDispatch writes only while the worker still holds the card or its le
   assert.equal(run.recordDispatch(b, 3, { worker: 'review-code-3', dispatch: 'd9' }).recorded, false);
 });
 
+test('a relaunch with a new dispatch restarts the worker age; the first or a repeated one does not', () => {
+  const T0 = '2026-01-01T00:00:00.000Z';
+  const b = board([{ column: 'building', assignee: 'build-1' }, { column: 'review', run: { branch: 'b' }, lenses: { qa: 'review-qa-2' } }]);
+  b.cards[0].claimedAt = T0;
+  b.cards[1].panel.lenses.qa.claimedAt = T0;
+
+  run.recordDispatch(b, 1, { worker: 'build-1', dispatch: 'd1' });
+  assert.equal(b.cards[0].claimedAt, T0, 'first dispatch keeps the claim time');
+  run.recordDispatch(b, 1, { worker: 'build-1', dispatch: 'd1' });
+  assert.equal(b.cards[0].claimedAt, T0, 'same dispatch again changes nothing');
+  run.recordDispatch(b, 1, { worker: 'build-1', dispatch: 'd2' });
+  assert.ok(b.cards[0].claimedAt > T0);
+
+  run.recordDispatch(b, 2, { worker: 'review-qa-2', dispatch: 'd1' });
+  run.recordDispatch(b, 2, { worker: 'review-qa-2', dispatch: 'd2' });
+  assert.ok(b.cards[1].panel.lenses.qa.claimedAt > T0);
+
+  const flying = run.status(b, config, ROOT).inFlight;
+  assert.deepEqual(flying.map((f) => [f.ageMinutes, f.stale]), [[0, false], [0, false]]);
+});
+
 test('plan dispatches the merge agent first, in the card worktree, on its own model', () => {
   const wt = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-wt-'));
   const b = board([{ column: 'ready' }, { column: 'merge', run: { branch: 'factory/2-x', worktree: wt } }]);

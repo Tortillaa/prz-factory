@@ -350,7 +350,9 @@ test('dispatch: starts what the plan says, stops orphans, releases finished work
     assert.ok(kinds.some(([k, w]) => k === 'started' && w === 'build-2'), 'the card goes back to a builder');
     b = store.load(file);
     assert.deepEqual(b.cards[1].orphans, []);
-    assert.deepEqual(b.workers.map((w) => w.worker).sort(), ['build-2', 'spec-1'], 'the card left in spec gets a new spec writer');
+    assert.deepEqual(b.workers.filter((w) => !w.released).map((w) => w.worker).sort(), ['build-2', 'spec-1'], 'the card left in spec gets a new spec writer');
+    // Every worker stays on record for `factory report`, with how it ended.
+    assert.deepEqual(b.workers.filter((w) => w.released).map((w) => [w.worker, w.outcome]).sort(), [['review-code-2', 'done'], ['review-qa-2', 'round-over'], ['spec-1', 'done']]);
 
     // A start that Orca refuses gives the claim back, so the next dispatch tries again.
     store.update(file, (bd) => store.addCard(bd, { title: 'idea 2', column: 'spec' }));
@@ -364,4 +366,23 @@ test('dispatch: starts what the plan says, stops orphans, releases finished work
       else process.env[k] = v;
     }
   }
+});
+
+test('report: workers, minutes and wasted rounds per lane, model and card', async () => {
+  const { report } = await import('../src/report.mjs');
+  const b = board([{ title: 'one', column: 'done' }, { title: 'two', column: 'review' }]);
+  const t = (m) => new Date(Date.UTC(2026, 10, 12, 10, m)).toISOString();
+  b.workers = [
+    { id: 1, worker: 'spec-1', lane: 'spec', agent: 'claude', model: 'claude-sonnet-5-5', startedAt: t(0), endedAt: t(2), outcome: 'done' },
+    { id: 1, worker: 'build-1', lane: 'build', agent: 'claude', model: 'claude-sonnet-5-5', startedAt: t(2), endedAt: t(6), outcome: 'done' },
+    { id: 2, worker: 'review-qa-2', lane: 'review', lens: 'qa', agent: 'grok', model: 'grok-4.7', startedAt: t(0), endedAt: t(10), outcome: 'round-over' },
+    { id: 2, worker: 'review-code-2', lane: 'review', lens: 'code', agent: 'grok', model: 'grok-4.7', startedAt: t(0) }, // still running
+  ];
+  const r = report(b, Date.parse(t(5)));
+  assert.equal(r.workers, 4);
+  assert.equal(r.minutes, 2 + 4 + 10 + 5);
+  assert.equal(r.wastedMinutes, 10);
+  assert.deepEqual(r.byLane.review, { workers: 2, minutes: 15, wasted: 10 });
+  assert.deepEqual(r.byModel['claude claude-sonnet-5-5'], { workers: 2, minutes: 6, wasted: 0 });
+  assert.deepEqual(r.cards.map((c) => [c.id, c.workers, c.minutes]), [[1, 2, 6], [2, 2, 15]]);
 });

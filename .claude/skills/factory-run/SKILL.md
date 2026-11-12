@@ -143,7 +143,8 @@ Never approve, answer or move those cards yourself. Keep dispatching everything 
 
 When `factory status --json` says `idle` (nothing in flight, nothing to dispatch), report: cards
 merged this run (with SHAs), merges waiting for the user's approval, cards that need the user,
-and cards waiting on blockers. Then stop.
+cards waiting on blockers, and what the run cost (`factory report`: workers and minutes per lane,
+model and card, and the minutes spent on rounds that were over). Then stop.
 
 ## Status and stop
 

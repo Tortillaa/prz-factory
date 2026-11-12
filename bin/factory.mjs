@@ -14,6 +14,7 @@ import { runVerify, verifySummary } from '../src/verify.mjs';
 import { mergeCard } from '../src/merge.mjs';
 import * as run from '../src/run.mjs';
 import { dispatch, describe } from '../src/dispatch.mjs';
+import { report, describeReport } from '../src/report.mjs';
 import { worktrees } from '../src/git.mjs';
 import { findLeftovers, applyCleanup } from '../src/cleanup.mjs';
 import { writeBlock } from '../src/agentsmd.mjs';
@@ -66,6 +67,7 @@ Lanes (run inside the worker's own worktree)
 Run (the coordinator; it dispatches, never builds)
   dispatch [--dry-run]                   One coordinator step: stop workers whose round is over, release the
                                          terminals of finished ones, start a worker for every plan action
+  report                                 What the workers cost: count and minutes per lane, model and card
   plan                                   Next dispatches for the free worker slots, with placement
   spec <id> --lane <l> [--lens l] --as <worker>
                                          The task text for that worker (pipe to --spec-file -)
@@ -398,6 +400,11 @@ try {
       const r = dispatch({ file, config: loadConfig(root).config, repoRoot: root, dryRun: opts['dry-run'] });
       print(r, r.events.map(describe).join('\n') || 'nothing to do');
       if (r.events.some((e) => e.kind === 'failed')) process.exitCode = 1;
+      break;
+    }
+    case 'report': {
+      const r = report(store.load(file));
+      print(r, r.workers ? describeReport(r) : 'no workers recorded yet (factory dispatch records them)');
       break;
     }
     case 'stopped': {

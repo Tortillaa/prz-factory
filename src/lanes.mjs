@@ -194,6 +194,7 @@ export function verdict({ file, id, who, lens, sha, pass, to = 'building', escal
     slot.verdict = 'pass';
     slot.sha = head;
     slot.at = new Date().toISOString();
+    store.endWork(b, slot.worker);
     slot.worker = null;
     slot.claimedAt = null;
     delete slot.dispatch;

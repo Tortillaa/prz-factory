@@ -41,14 +41,15 @@ export function dispatch({ file, config, repoRoot, dryRun = false }) {
     // A worker that already ended has nothing left to stop: forget it all the same.
     store.update(file, (b) => {
       store.forgetOrphan(b, o.id, o.dispatch);
-      b.workers = b.workers.filter((x) => x.dispatch !== o.dispatch);
+      const rec = b.workers.find((x) => x.dispatch === o.dispatch);
+      if (rec) Object.assign(rec, { released: true, endedAt: rec.endedAt ?? new Date().toISOString(), outcome: 'round-over' });
     });
     events.push({ kind: 'stopped', id: o.id, worker: o.worker, dispatch: o.dispatch, ...(stop.error ? { note: stop.error } : {}) });
   }
 
   // 2 · Terminals of workers that no longer hold their claim (they handed off, or were reclaimed):
   // release them so Orca does not fill up. Orca refuses a worker that is still running; it stays listed.
-  for (const w of store.load(file).workers || []) {
+  for (const w of (store.load(file).workers || []).filter((x) => !x.released)) {
     const card = store.load(file).cards.find((c) => c.id === w.id);
     if (card && store.holding(card, w.worker)) continue;
     if (dryRun) {
@@ -58,7 +59,11 @@ export function dispatch({ file, config, repoRoot, dryRun = false }) {
     const rel = orca(['orchestration', 'worker-release', '--dispatch', w.dispatch]);
     if (rel.error && !/settled|released|unknown|not found/i.test(rel.error)) continue;
     store.update(file, (b) => {
-      b.workers = (b.workers || []).filter((x) => x.dispatch !== w.dispatch);
+      const rec = b.workers.find((x) => x.dispatch === w.dispatch);
+      if (rec) {
+        rec.released = true;
+        rec.endedAt ??= new Date().toISOString();
+      }
     });
     events.push({ kind: 'released', id: w.id, worker: w.worker, dispatch: w.dispatch });
   }

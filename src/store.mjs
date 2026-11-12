@@ -77,8 +77,19 @@ function resetPanel(card) {
 // A reviewer whose claim another hand ended (another lens failed the round, the card was moved) may
 // still be running in Orca on work that no longer counts: its dispatch becomes an orphan for the
 // coordinator to stop. A worker that ends its own claim (`by`) is not one.
-function clearLensClaims(card, by = null) {
+// The record of the worker `factory dispatch` started (board.workers) gets its end time and how it ended.
+export function endWork(board, worker, outcome = 'done') {
+  for (const w of board?.workers || []) {
+    if (w.worker === worker && !w.endedAt) {
+      w.endedAt = now();
+      w.outcome = outcome;
+    }
+  }
+}
+
+function clearLensClaims(card, by = null, board = null) {
   for (const [lens, slot] of Object.entries(card.panel?.lenses || {})) {
+    if (slot.worker) endWork(board, slot.worker, slot.worker === by ? 'done' : 'round-over');
     if (slot.worker && slot.dispatch && slot.worker !== by) {
       (card.orphans ??= []).push({ worker: slot.worker, lens, dispatch: slot.dispatch, at: now(), reason: `the card left review (${card.column})` });
     }
@@ -243,7 +254,7 @@ export function moveCard(board, id, column, by = null, { before = null, force = 
   if (card.column !== column) {
     // Every entry to review is a new panel round; leaving it ends every reviewer's claim.
     if (column === 'review') resetPanel(card);
-    if (card.column === 'review') clearLensClaims(card, by);
+    if (card.column === 'review') clearLensClaims(card, by, board);
     // A card that leaves blocked no longer waits for the person: the request labels go with it.
     if (card.column === 'blocked') card.labels = card.labels.filter((l) => !REQUEST_LABELS.includes(l));
     card.history.push({ at: now(), from: card.column, to: column, by });
@@ -310,6 +321,7 @@ export function claimCard(board, id, who) {
 
 export function releaseCard(board, id) {
   const card = findCard(board, id);
+  if (card.assignee) endWork(board, card.assignee);
   card.assignee = null;
   card.claimedAt = null;
   delete card.run.dispatch; // the Orca dispatch that held the claim is over
@@ -335,6 +347,7 @@ export function releaseLens(board, id, lens) {
   const card = findCard(board, id);
   const slot = card.panel.lenses[lens];
   if (slot) {
+    if (slot.worker) endWork(board, slot.worker);
     slot.worker = null;
     slot.claimedAt = null;
     delete slot.dispatch;

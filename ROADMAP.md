@@ -155,11 +155,14 @@ La mecánica está probada (tests, CI, una tarjeta real, evals del agente de mer
   - [x] **Nombres de worker repetidos entre rondas.** Un reviewer de la ronda 2 actuó con la reserva de la ronda 3 porque se llamaban igual. Ahora el nombre lleva la ronda (`review-qa-8-r3`) y el tablero rechaza al sobrante.
   - [x] **Terminales y worktrees acumulados en Orca.** Los intentos parados no se liberaban y los worktrees de tarjetas terminadas se quedaban. El coordinador ahora libera siempre, limpia al arrancar y ejecuta `factory cleanup --apply` tras cada merge.
   - [x] **El Builder no pedía ayuda a Opus** aunque la tarjeta volviera dos veces. El spec del Builder dice ahora cuántas veces ha vuelto y que empiece por un subagente Opus.
-  - [ ] **Cada merge obliga a rebase y revisión completa** de las tarjetas en vuelo (la #6 y la #8 tras mergearse la #7). Opciones: rebase sin re-revisión cuando no hay conflictos y `verify` pasa, o mergear de una en una.
-  - [ ] **El panel no cabe con `maxWorkers: 4`** cuando hay Builders trabajando: las lentes esperan hueco (13 min de panel para la #7).
-  - [ ] **El gate mergea en el checkout de la persona:** cualquier cambio sin commitear ahí bloquea los merges (pasó con una edición del ROADMAP). Opción: que el gate trabaje en un worktree propio de la rama base.
-  - [ ] **Arreglos de seguridad por lista negra no convergen** (la #8: tres rondas tapando sintaxis de git). El Spec Writer debería pedir de entrada un diseño que bloquee por defecto en las tarjetas de seguridad.
-  - [ ] **Formato de commits sin comprobar:** el reviewer `code` vio commits sin `Card: #N`; nada lo verifica.
+  - [x] **Cada merge obligaba a rebase y revisión completa** de las tarjetas en vuelo. Ahora el gate rebasa él mismo en un worktree temporal y mergea sin volver a build ni al panel cuando no hay conflictos y el cambio es el mismo que se revisó (mismo `patch-id`); `verify` corre sobre el commit rebasado. Una aprobación de la persona sigue valiendo.
+  - [x] **El panel no cabía con `maxWorkers: 4`** y era lo que más workers consumía (28 de 41). Ahora una tarjeta de riesgo Low sin etiqueta de negocio pasa por un panel ligero (`review.light`: qa y code), y `maxWorkers` puede ser un límite por agente de Orca (este repo: claude 3, grok 4).
+  - [x] **Un cambio sin commitear en el checkout de la persona bloqueaba los merges.** Ahora decide git: el merge se hace si no toca esos archivos, y la tarjeta solo pasa a blocked si los toca.
+  - [x] **Arreglos de seguridad por lista negra no convergían** (la #8). La lente `security` informa ahora del tipo de fallo con su causa raíz y todas sus variantes, y el Spec Writer pide "denegar por defecto" en toda tarjeta que bloquea o valida algo.
+  - [x] **Formato de commits sin comprobar.** El handoff del Builder a review rechaza commits nuevos sin `Card: #N` e imprime cómo arreglarlo.
+  - [x] **El coordinador hacía cuatro pasos a mano por worker.** `factory dispatch` hace el paso entero: para los workers de rondas cerradas, libera los terminales de los que terminaron y lanza lo que diga `plan`.
+  - [x] **No se podía medir el coste.** `factory dispatch` registra cada worker (inicio, fin, modelo, cómo acabó) y `factory report` da workers y minutos por rol, modelo y tarjeta. Los tokens siguen sin medirse: Orca no los da.
+  - [x] **El guard se equivocaba con `cd`.** Ahora evalúa la carpeta de un `cd X &&` o `git -C X`; otro repo se juzga solo, y un worker que entra en otro checkout del mismo repo sigue siendo worker.
 
 ## Pendiente fuera del código
 

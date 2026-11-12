@@ -60,7 +60,7 @@ test('with --json a mistyped option prints {"error"} on stdout and exits 64', ()
   }
 });
 
-const UNKNOWN = 'unknown column "nope" (use: backlog, spec, ready, building, qa, review, blocked, done)';
+const UNKNOWN = 'unknown column "nope" (use: backlog, spec, ready, building, qa, review, merge, blocked, done)';
 
 test('list --column with an unknown column is an error on stderr, exit 1', () => {
   const r = run('list', '--column', 'nope');
@@ -75,13 +75,13 @@ test('list --column with an unknown column and --json prints {"error"} on stdout
   assert.equal(JSON.parse(r.stdout).error, UNKNOWN);
 });
 
-test('list still prints a known column, or all eight, on an empty board', () => {
+test('list still prints a known column, or every column, on an empty board', () => {
   const one = run('list', '--column', 'ready');
   assert.equal(one.code, 0, one.stderr);
   assert.equal(one.stdout.trimEnd(), 'READY (0)');
   const all = run('list');
   assert.equal(all.code, 0, all.stderr);
   assert.deepEqual(all.stdout.trimEnd().split(/\r?\n/), [
-    'BACKLOG (0)', 'SPEC (0)', 'READY (0)', 'BUILDING (0)', 'QA (0)', 'REVIEW (0)', 'BLOCKED (0)', 'DONE (0)',
+    'BACKLOG (0)', 'SPEC (0)', 'READY (0)', 'BUILDING (0)', 'QA (0)', 'REVIEW (0)', 'MERGE (0)', 'BLOCKED (0)', 'DONE (0)',
   ]);
 });

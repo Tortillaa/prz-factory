@@ -74,6 +74,19 @@ test('pre-push hook in a real repo: rewrites of main fail however typed, fast-fo
   assert.equal(tryGit(wt, 'push', 'origin', 'HEAD:main').status, 0, 'fast-forward from a worktree');
 });
 
+test('pre-push hook still blocks a force-push in a "type":"commonjs" repo, and doctor needs the script', () => {
+  const { remote, repo } = repoWithRemote();
+  fs.writeFileSync(path.join(repo, 'package.json'), '{"type":"commonjs"}');
+  install(repo);
+  const before = git(remote, 'rev-parse', 'main');
+  git(repo, 'commit', '-q', '--amend', '-m', 'rewritten');
+  assert.notEqual(tryGit(repo, 'push', '--force', 'origin', 'HEAD:main').status, 0);
+  assert.equal(git(remote, 'rev-parse', 'main'), before);
+
+  fs.rmSync(path.join(repo, '.git', 'hooks', 'factory-pre-push.mjs'));
+  assert.equal(doctor(repo).checks.find((c) => c.name === 'pre-push hook').ok, false, 'script missing');
+});
+
 test('install keeps a foreign pre-push byte for byte, updates its own, and doctor follows', () => {
   const { repo } = repoWithRemote();
   const hook = path.join(repo, '.git', 'hooks', 'pre-push');

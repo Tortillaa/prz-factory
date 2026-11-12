@@ -99,6 +99,8 @@ export function prePushPath(dir) {
   }
 }
 export const PRE_PUSH_MARKER = 'factory-managed';
+// The ESM check the pre-push wrapper runs.
+export const prePushScript = (file) => path.join(path.dirname(file), 'factory-pre-push.mjs');
 
 // Installs the git pre-push hook that refuses non-fast-forward pushes to protected branches.
 // A pre-push hook the factory did not write is left alone.
@@ -110,7 +112,10 @@ function installPrePush(target, factoryRoot) {
   }
   const existed = fs.existsSync(file);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.copyFileSync(path.join(factoryRoot, 'hooks', 'factory-pre-push.mjs'), file);
+  // The hook git runs is a sh wrapper: an extensionless ESM file would take its module format from the
+  // repo's package.json ("type":"commonjs" skips the check; Node < 22.7 cannot load it).
+  fs.copyFileSync(path.join(factoryRoot, 'hooks', 'factory-pre-push.mjs'), prePushScript(file));
+  fs.writeFileSync(file, `#!/bin/sh\n# ${PRE_PUSH_MARKER}: runs factory-pre-push.mjs (same folder); no node means no push.\nFACTORY_PRE_PUSH=1 exec node "$(dirname "$0")/factory-pre-push.mjs" "$@"\n`);
   fs.chmodSync(file, 0o755);
   return { file, status: existed ? 'updated' : 'installed' };
 }

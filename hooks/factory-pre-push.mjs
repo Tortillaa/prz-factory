@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// factory-managed: prz-factory git pre-push hook. `factory install` copies this file to the repo's
-// pre-push hook path (shared by every worktree). Self-contained on purpose: no imports from src/.
+// factory-managed: prz-factory git pre-push check. `factory install` copies it next to the repo's sh `pre-push`
+// wrapper (shared by every worktree). Self-contained on purpose: no imports from src/.
 // Git runs it after resolving the push, so no way of typing the command gets around it.
 // Denies by default any push to a protected branch that is not a fast-forward (or a new branch).
 import fs from 'node:fs';
@@ -42,7 +42,8 @@ const isAncestor = (a, b) => {
   }
 };
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// The sh wrapper sets FACTORY_PRE_PUSH so a path-spelling mismatch (drive case, symlink) cannot make the check a no-op.
+if (process.env.FACTORY_PRE_PUSH || (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url))) {
   const lines = fs.readFileSync(0, 'utf8').split('\n').filter((l) => l.trim());
   const refused = checkPush(lines, { protectedBranches: protectedFromConfig(), isAncestor });
   if (refused.length) {

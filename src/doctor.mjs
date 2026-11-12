@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, execSync } from 'node:child_process';
 import { loadConfig, repoRoot } from './config.mjs';
-import { listSkills, RUNTIME_DIR, prePushPath, PRE_PUSH_MARKER } from './install.mjs';
+import { listSkills, RUNTIME_DIR, prePushPath, prePushScript, PRE_PUSH_MARKER } from './install.mjs';
 import * as store from './store.mjs';
 
 // Runs a fixed command line. Goes through the shell so Windows .cmd shims (orca, factory) resolve.
@@ -78,7 +78,7 @@ export function doctor(cwd = process.cwd()) {
   add('guard hooks', guards.length >= 4 && guardFile, guardFile ? `${guards.length} guards wired` : 'factory-guard.mjs not installed', 'run `factory install` (without --no-hooks)');
 
   const prePush = prePushPath(root);
-  const prePushOk = !!prePush && fs.existsSync(prePush) && fs.readFileSync(prePush, 'utf8').includes(PRE_PUSH_MARKER);
+  const prePushOk = !!prePush && fs.existsSync(prePush) && fs.readFileSync(prePush, 'utf8').includes(PRE_PUSH_MARKER) && fs.existsSync(prePushScript(prePush));
   add('pre-push hook', prePushOk, prePushOk ? prePush : 'no factory pre-push hook: force-pushes to protected branches are not stopped by git', 'run `factory install`');
 
   // Grok reads the same .claude/ skills, CLAUDE.md and guard hooks, but only in a folder it trusts,

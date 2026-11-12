@@ -255,7 +255,7 @@ export function guardProtectedPush(input, ctx = {}) {
   const linked = ctx.linkedWorktree ?? (isLinked(cwd) || (sameRepo(cwd, session) && isLinked(session)));
   const current = ctx.currentBranch ?? git(['branch', '--show-current'], cwd);
   const isProt = (ref) => {
-    const r = String(ref).replace(/^\+/, '').replace(/^refs\/heads\//, '');
+    const r = String(ref).replace(/^\+/, '').replace(/^(refs\/)?heads\//, '');
     return prot.includes(r) || prot.some((b) => r.endsWith(`:${b}`) || r.endsWith(`:refs/heads/${b}`) || r.endsWith(`:heads/${b}`));
   };
   // Rather than spot every way to force a protected branch (+HEAD, globs, "+:", aliases...), a push
@@ -272,15 +272,17 @@ export function guardProtectedPush(input, ctx = {}) {
     // Skip global options (-C dir, -c k=v...) to find the subcommand; remember the -c config.
     let i = 1;
     const config = [];
+    let gitDirOpt = false; // --git-dir / --work-tree point git at another repo, like GIT_DIR
     while (i < seg.length && seg[i].startsWith('-')) {
       if (/^(-c|--config-env)$/.test(seg[i])) config.push(seg[i + 1] ?? '');
       else if (seg[i].startsWith('--config-env=')) config.push(seg[i].slice(13));
+      else if (/^--(git-dir|work-tree)(=|$)/.test(seg[i])) gitDirOpt = true;
       i += /^(-C|-c|--config-env|--git-dir|--work-tree|--namespace)$/.test(seg[i]) ? 2 : 1;
     }
     const sub = seg[i];
     const rest = seg.slice(i + 1);
     // An alias or include can make any subcommand a push we cannot see.
-    if (sub !== 'push' && sub !== 'send-pack' && config.some((c) => /^(alias|include)/i.test(c))) return forceMsg;
+    if (sub !== 'push' && sub !== 'send-pack' && (envForces || gitDirOpt || config.some((c) => /^(alias|include)/i.test(c)))) return forceMsg;
     if (sub === 'push' || sub === 'send-pack') {
       const flags = [];
       const pos = [];
@@ -291,10 +293,11 @@ export function guardProtectedPush(input, ctx = {}) {
         else if (flags.push(w) && /^(-o|--push-option|--receive-pack|--exec)$/.test(w)) j++;
       }
       const refspecs = pos.slice(1); // pos[0] is the remote
-      const canForce = envForces || config.some((c) => pushConfig.test(c)) || pos.some((w) => w.startsWith('+'))
+      const canForce = envForces || gitDirOpt || config.some((c) => pushConfig.test(c)) || pos.some((w) => w.startsWith('+'))
         || flags.some((f) => /^(-[a-zA-Z]*f[a-zA-Z]*|--force.*|--all|--branches|--mirror)$/.test(f));
       if (canForce && !(refspecs.length && refspecs.every(namedUnprotected))) return forceMsg;
-      const touchesProt = refspecs.some(isProt) || (!refspecs.length && prot.includes(current));
+      const onCurrent = (w) => /^\+?(HEAD|@)$/i.test(w) && prot.includes(current); // HEAD and @ name the checked-out branch
+      const touchesProt = refspecs.some((w) => isProt(w) || onCurrent(w)) ||(!refspecs.length && prot.includes(current));
       if (linked && touchesProt) return `Workers never push ${prot.join(', ')}: only \`factory merge\` lands code on the base branch.`;
     }
     if (!linked) continue;

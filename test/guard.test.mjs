@@ -88,6 +88,12 @@ test('protected push: a push that can force must name every destination, none pr
     "Set-Item -Path env:GIT_CONFIG_KEY_0 -Value 'push.default'; git push", 'export GIT_CONFIG_GLOBAL=/tmp/evil; git push', '$env:GIT_CONFIG_SYSTEM = "x"; git push',
     'export GIT_DIR=/tmp/other.git; git push origin main', '$env:GIT_WORK_TREE="x"; git push', 'bash -c "GIT_CONFIG_KEY_0=remote.origin.push git push"',
     'git send-pack -f origin main', '/usr/bin/git push origin +main', 'git.exe push -f origin HEAD',
+    // a forcing environment with another subcommand (an alias), a bare GIT_CONFIG, and --git-dir / --work-tree
+    'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0="push origin +main" git p',
+    "$env:GIT_CONFIG_KEY_0='alias.p'; git p", 'export GIT_CONFIG_GLOBAL=/tmp/evil && git p', 'set GIT_CONFIG_GLOBAL=x && git p',
+    `GIT_CONFIG_PARAMETERS="'alias.p'='push origin +main'" git p`, 'GIT_CONFIG_KEY_0=include.path git p', 'GIT_CONFIG_GLOBAL=/tmp/evil git p',
+    'GIT_CONFIG=/tmp/evil git push origin main', 'set GIT_CONFIG=/tmp/evil && git push origin main',
+    'git --git-dir=.git --work-tree=. push', 'git --git-dir .git --work-tree . push', 'git --git-dir=.git p', 'git --work-tree=. push origin main',
   ];
   for (const cmd of blocked) {
     assert.match(guardProtectedPush(bash(cmd), person) ?? '', /Force-pushing/, `person: ${cmd}`);
@@ -102,12 +108,20 @@ test('protected push: a push that can force must name every destination, none pr
     "$env:GIT_CONFIG_KEY_0='user.name'; git push origin main", 'export GIT_CONFIG_KEY_0=user.name && git push origin main',
     "Set-Item env:FOO bar; git push origin main", 'export PATH=/x:$PATH; git push origin main', 'echo "export GIT_CONFIG_GLOBAL=x" && git push origin main',
     'git commit -m "$env:GIT_CONFIG_KEY_0=remote.origin.push" && git push origin main',
+    'GIT_CONFIG_KEY_0=user.name git status', 'git --git-dir=.git --work-tree=. push origin feature/x',
     'GIT_CONFIG_COUNT=0 git push origin main', 'git commit -m "see GIT_CONFIG_PARAMETERS" && git push origin main', 'git config alias.st status', 'git commit -m "explain git push -f origin main"']) {
     assert.equal(guardProtectedPush(bash(cmd), person), null, `person: ${cmd}`);
   }
   assert.equal(guardProtectedPush(bash('git push origin main'), { ...person, currentBranch: 'main' }), null, 'a plain push of main by the person');
   assert.equal(guardProtectedPush(bash('git push -f origin factory/8-x'), worker), null);
   assert.equal(guardProtectedPush(bash('git push origin +factory/8-x'), worker), null);
+  // a worker never pushes main by another name: heads/main, HEAD or @ on main
+  for (const cmd of ['git push origin heads/main', 'git push origin refs/heads/main']) assert.ok(guardProtectedPush(bash(cmd), worker), cmd);
+  for (const cmd of ['git push origin HEAD', 'git push origin @', 'git push origin heads/main']) {
+    assert.match(guardProtectedPush(bash(cmd), { ...worker, currentBranch: 'main' }) ?? '', /Workers never push/, cmd);
+  }
+  assert.equal(guardProtectedPush(bash('git push origin HEAD'), worker), null, 'HEAD on the card branch is fine');
+  assert.equal(guardProtectedPush(bash('git push origin heads/main'), person), null, 'the person may push main without forcing');
 });
 
 test('delete outside: recursive deletes stay inside the project or temp', () => {

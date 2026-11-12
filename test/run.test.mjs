@@ -208,3 +208,53 @@ test('plan dispatches the merge agent first, in the card worktree, on its own mo
   assert.match(run.spec(b.cards[1], 'merge', 'merge-2', ROOT), /factory-merge[\s\S]*factory start 2 --lane merge --as merge-2[\s\S]*`factory merge`/);
   assert.doesNotMatch(run.spec(b.cards[1], 'merge', 'merge-2', ROOT), /ponytail/, 'the merge agent writes no code');
 });
+
+test('worker names carry the round after the first: a leftover worker cannot act under the new claim', () => {
+  assert.equal(run.workerName(8, 'review', 'qa'), 'review-qa-8');
+  assert.equal(run.workerName(8, 'review', 'qa', 3), 'review-qa-8-r3');
+  assert.equal(run.workerName(8, 'build', null, 2), 'build-8-r2');
+
+  const b = board([{ column: 'ready' }]);
+  assert.equal(run.plan(b, config, ROOT)[0].worker, 'build-1', 'first round: no suffix');
+  store.moveCard(b, 1, 'building');
+  store.moveCard(b, 1, 'review', null, { force: true });
+  b.cards[0].run.branch = 'factory/1-x';
+  assert.equal(run.plan(b, config, ROOT)[0].worker, 'review-qa-1');
+  store.moveCard(b, 1, 'building', null, { force: true });
+  assert.equal(run.plan(b, config, ROOT)[0].worker, 'build-1-r2', 'a card sent back gets a new name');
+  store.moveCard(b, 1, 'review', null, { force: true });
+  assert.equal(run.plan(b, config, ROOT)[0].worker, 'review-qa-1-r2');
+
+  // The leftover reviewer of round 1 is refused by round 2's claim.
+  store.claimLens(b, 1, 'qa', 'review-qa-1-r2');
+  assert.throws(() => store.claimLens(b, 1, 'qa', 'review-qa-1'), /already claimed by review-qa-1-r2/);
+});
+
+test('a reviewer whose round another lens ended becomes an orphan to stop; the one that ended it does not', () => {
+  const b = board([{ column: 'review', run: { branch: 'b' }, lenses: { qa: 'review-qa-1', security: 'review-security-1', code: 'review-code-1' } }]);
+  run.recordDispatch(b, 1, { worker: 'review-qa-1', dispatch: 'd-qa' });
+  run.recordDispatch(b, 1, { worker: 'review-security-1', dispatch: 'd-sec' });
+  // code never recorded a dispatch: nothing to stop for it.
+  store.sendBack(b, 1, { who: 'review-security-1', role: 'review:security', text: 'S1 blocker' });
+  assert.equal(b.cards[0].column, 'building');
+  assert.deepEqual(b.cards[0].orphans.map((o) => [o.worker, o.lens, o.dispatch]), [['review-qa-1', 'qa', 'd-qa']]);
+
+  const s = run.status(b, config, ROOT);
+  assert.deepEqual(s.toStop.map((o) => [o.id, o.worker, o.dispatch]), [[1, 'review-qa-1', 'd-qa']]);
+  assert.equal(s.idle, false, 'not idle while a worker must be stopped');
+
+  store.forgetOrphan(b, 1, 'd-qa');
+  assert.deepEqual(run.status(b, config, ROOT).toStop, []);
+  assert.throws(() => store.forgetOrphan(b, 1, 'd-qa'), /no orphaned dispatch/);
+});
+
+test('the builder of a card that came back is told to bring in an Opus subagent', () => {
+  const b = board([{ column: 'ready' }]);
+  const card = b.cards[0];
+  assert.doesNotMatch(run.spec(card, 'build', 'build-1', ROOT), /has come back/);
+  store.moveCard(b, 1, 'building');
+  store.moveCard(b, 1, 'review', null, { force: true });
+  store.sendBack(b, 1, { who: 'r', role: 'review:security', text: 'S1' });
+  assert.match(run.spec(card, 'build', 'build-1-r2', ROOT), /has come back 1 time from review[\s\S]*Claude Opus subagent/);
+  assert.doesNotMatch(run.spec(card, 'spec', 'spec-1', ROOT), /has come back/, 'only the builder');
+});

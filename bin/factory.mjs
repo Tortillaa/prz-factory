@@ -71,6 +71,7 @@ Run (the coordinator; it dispatches, never builds)
   status                                 Snapshot: columns, in flight (stale claims), needs-you, next
   reclaim <id> [--worker w] [--reason t] Worker ended without a handoff: release it (2nd time: blocked)
   stop [--reason t]                      Release every in-flight card; prints the dispatches to stop
+  stopped <id> --dispatch <d>            Forget an orphaned dispatch (status.toStop) once it is stopped in Orca
 
 Setup
   install [target] [--no-hooks]          Copy skills and guard hooks into <target>/.claude, create factory.config.json
@@ -377,6 +378,7 @@ try {
       const lines = [
         store.COLUMNS.map((c) => `${c} ${s.counts[c]}`).join(' · '),
         `in flight ${s.inFlight.length}/${s.maxWorkers}`,
+        ...(s.toStop.length ? ['⛔ to stop (their round is over)', ...s.toStop.map((o) => `  #${o.id} ${o.worker} dispatch ${o.dispatch}`)] : []),
         ...s.inFlight.map((f) => `  #${f.id} ${f.column}${f.lens ? `:${f.lens}` : ''} ${f.worker} ${f.ageMinutes ?? '?'}min${f.stale ? ' ⚠️ stale' : ''}${f.dispatch ? ` dispatch ${f.dispatch}` : ''}`),
         ...(s.approvals.length ? ['🙋 waiting for your approval (web board, or factory merge <id> --sha <sha> --human)', ...s.approvals.map((a) => `  #${a.id} ${a.title} (${a.branch} @ ${(a.sha || '').slice(0, 8)})`)] : []),
         ...s.panels.map((p) => `  review #${p.id}: ${Object.entries(p.lenses).map(([l, v]) => `${l} ${v}`).join(' · ')}`),
@@ -385,6 +387,12 @@ try {
         `next: ${s.next.map((a) => `#${a.id} ${a.lane}`).join(', ') || 'nothing'}${s.idle ? ' · idle' : ''}`,
       ];
       print(s, lines.join('\n'));
+      break;
+    }
+    case 'stopped': {
+      // The coordinator stopped an orphaned worker in Orca: drop it from the list to stop.
+      const card = store.update(file, (b) => store.forgetOrphan(b, need(args[0], 'id'), need(opts.dispatch, '--dispatch')));
+      print(card, `forgot orphan ${opts.dispatch} of ${line(card)}`);
       break;
     }
     case 'dispatched': {

@@ -54,6 +54,7 @@ export function load(file) {
     card.run ??= {};
     card.source ??= null;
     card.panel ??= emptyPanel();
+    card.orphans ??= [];
   }
   return board;
 }
@@ -71,8 +72,14 @@ function resetPanel(card) {
   card.panel = { head: null, lenses };
 }
 
-function clearLensClaims(card) {
-  for (const slot of Object.values(card.panel?.lenses || {})) {
+// A reviewer whose claim another hand ended (another lens failed the round, the card was moved) may
+// still be running in Orca on work that no longer counts: its dispatch becomes an orphan for the
+// coordinator to stop. A worker that ends its own claim (`by`) is not one.
+function clearLensClaims(card, by = null) {
+  for (const [lens, slot] of Object.entries(card.panel?.lenses || {})) {
+    if (slot.worker && slot.dispatch && slot.worker !== by) {
+      (card.orphans ??= []).push({ worker: slot.worker, lens, dispatch: slot.dispatch, at: now(), reason: `the card left review (${card.column})` });
+    }
     slot.worker = null;
     slot.claimedAt = null;
     delete slot.dispatch;
@@ -234,7 +241,7 @@ export function moveCard(board, id, column, by = null, { before = null, force = 
   if (card.column !== column) {
     // Every entry to review is a new panel round; leaving it ends every reviewer's claim.
     if (column === 'review') resetPanel(card);
-    if (card.column === 'review') clearLensClaims(card);
+    if (card.column === 'review') clearLensClaims(card, by);
     // A card that leaves blocked no longer waits for the person: the request labels go with it.
     if (card.column === 'blocked') card.labels = card.labels.filter((l) => !REQUEST_LABELS.includes(l));
     card.history.push({ at: now(), from: card.column, to: column, by });
@@ -351,6 +358,15 @@ export function claimsOf(card) {
     if (slot.worker) out.push({ worker: slot.worker, lens, claimedAt: slot.claimedAt, dispatch: slot.dispatch ?? null });
   }
   return out;
+}
+
+// The coordinator stopped an orphaned dispatch in Orca: forget it.
+export function forgetOrphan(board, id, dispatch) {
+  const card = findCard(board, id);
+  const before = card.orphans.length;
+  card.orphans = card.orphans.filter((o) => o.dispatch !== dispatch);
+  if (card.orphans.length === before) throw new Error(`card #${id} has no orphaned dispatch ${dispatch}`);
+  return card;
 }
 
 export const MAX_BOUNCES = 3;

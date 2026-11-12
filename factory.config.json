@@ -6,7 +6,10 @@
   "verify": [
     "npm test"
   ],
-  "maxWorkers": 4,
+  "maxWorkers": {
+    "claude": 3,
+    "grok": 4
+  },
   "review": {
     "lenses": [
       "qa",

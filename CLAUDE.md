@@ -140,7 +140,7 @@ Also backlog (parked), qa (`qa` cards) and blocked (waiting for a person). `fact
 | CLI | `factory`, or `node .prz-factory/bin/factory.mjs` (the factory lives in this repo: nothing to install) |
 | Base branch | `main` (protected: main) |
 | Proof of build | `npm test` |
-| Review panel | qa · security · code · ops: every lens must pass the same commit |
+| Review panel | qa · security · code · ops (Low risk with no business label: qa · code): every lens must pass the same commit |
 | Merge by a person | risk high · labels auth, payments, pricing, schema, ops, money, needs-human · paths `src/merge.mjs`, `src/store.mjs`, `src/lanes.mjs`, `hooks/**`, `.claude/hooks/**`, `.claude/settings.json`, `factory.config.json` · diff > 400 lines |
 | Business labels | agents may add one (or `needs-human`), never remove one |
 | Craft | every step loads `ponytail` (spec, build) or `ponytail-review` (reviewers): the smallest change that fully works, and no code that should not exist |

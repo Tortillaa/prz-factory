@@ -6,7 +6,8 @@ import path from 'node:path';
 import * as store from './store.mjs';
 import { FACTORY_ROOT } from './install.mjs';
 import { APPROVAL } from './merge.mjs';
-import { launchFor } from './config.mjs';
+import { launchFor, workerLimit } from './config.mjs';
+import { lensesFor } from './lanes.mjs';
 
 // Columns with one lane per card. Review is a panel: one worker per lens, handled apart.
 const LANE_OF = { merge: 'merge', qa: 'qa', building: 'build', spec: 'spec' };
@@ -44,12 +45,25 @@ export function inFlight(board) {
 // Next dispatches, up to the free worker slots. Each: { id, title, lane, lens, worker, placement }.
 // Finishing work beats starting more: merges, review lenses, qa, building, ready, then specs to write.
 export function plan(board, config, repoRoot) {
-  const slots = Math.max(0, config.maxWorkers - inFlight(board).length);
+  // Free slots per Orca agent: maxWorkers is one shared limit, or one per agent (each its own quota).
+  const shared = typeof config.maxWorkers === 'number';
+  const busy = {};
+  for (const k of inFlight(board)) {
+    // A card claimed in ready is about to be built.
+    const agent = shared ? '*' : launchFor(k.lens ? 'review' : LANE_OF[k.card.column] ?? 'build', config).agent;
+    busy[agent] = (busy[agent] || 0) + 1;
+  }
+  const fits = (lane) => {
+    const agent = shared ? '*' : launchFor(lane, config).agent;
+    if ((busy[agent] || 0) >= workerLimit(config, agent === '*' ? null : agent)) return false;
+    busy[agent] = (busy[agent] || 0) + 1;
+    return true;
+  };
   const waiting = [];
   for (const c of board.cards) if (c.column === 'merge' && !c.assignee) waiting.push({ card: c, lane: 'merge' });
   for (const c of board.cards) {
     if (c.column !== 'review' || !c.run.branch) continue;
-    for (const lens of config.review.lenses) {
+    for (const lens of lensesFor(c, config)) {
       const slot = c.panel?.lenses?.[lens];
       if (!slot?.worker && !slot?.verdict) waiting.push({ card: c, lane: 'review', lens });
     }
@@ -59,7 +73,7 @@ export function plan(board, config, repoRoot) {
   }
   for (const c of store.readyQueue(board)) waiting.push({ card: c, lane: c.next === 'qa' ? 'qa' : 'build' });
   for (const c of board.cards) if (c.column === 'spec' && !c.assignee) waiting.push({ card: c, lane: 'spec' });
-  return waiting.slice(0, slots).map(({ card, lane, lens = null }) => ({
+  return waiting.filter(({ lane }) => fits(lane)).map(({ card, lane, lens = null }) => ({
     id: card.id,
     title: card.title,
     lane,
@@ -143,7 +157,7 @@ export function status(board, config, repoRoot, now = Date.now()) {
   const panels = board.cards.filter((c) => c.column === 'review').map((c) => ({
     id: c.id,
     head: c.panel?.head ?? null,
-    lenses: Object.fromEntries(config.review.lenses.map((l) => {
+    lenses: Object.fromEntries(lensesFor(c, config).map((l) => {
       const s = c.panel?.lenses?.[l] || {};
       return [l, s.verdict || (s.worker ? 'reviewing' : 'waiting')];
     })),

@@ -377,7 +377,7 @@ try {
       const s = run.status(store.load(file), loadConfig(root).config, root);
       const lines = [
         store.COLUMNS.map((c) => `${c} ${s.counts[c]}`).join(' · '),
-        `in flight ${s.inFlight.length}/${s.maxWorkers}`,
+        `in flight ${s.inFlight.length}/${typeof s.maxWorkers === 'number' ? s.maxWorkers : Object.entries(s.maxWorkers).map(([a, n]) => `${a} ${n}`).join(' · ')}`,
         ...(s.toStop.length ? ['⛔ to stop (their round is over)', ...s.toStop.map((o) => `  #${o.id} ${o.worker} dispatch ${o.dispatch}`)] : []),
         ...s.inFlight.map((f) => `  #${f.id} ${f.column}${f.lens ? `:${f.lens}` : ''} ${f.worker} ${f.ageMinutes ?? '?'}min${f.stale ? ' ⚠️ stale' : ''}${f.dispatch ? ` dispatch ${f.dispatch}` : ''}`),
         ...(s.approvals.length ? ['🙋 waiting for your approval (web board, or factory merge <id> --sha <sha> --human)', ...s.approvals.map((a) => `  #${a.id} ${a.title} (${a.branch} @ ${(a.sha || '').slice(0, 8)})`)] : []),

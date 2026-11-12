@@ -17,12 +17,15 @@ export const DEFAULTS = Object.freeze({
   // Commands that prove the build. The merge gate runs every one; all must exit 0.
   verify: [],
   verifyTimeoutMinutes: 20,
+  // Workers at once: a number for all of them, or one limit per Orca agent ({ "claude": 3, "grok": 4 }),
+  // since each provider has its own quota. An agent not listed there has no limit of its own.
   maxWorkers: 2,
   // When the merge gate hands the merge to a person instead of doing it: anything that can touch
   // the business or keep the product running. humanPaths are globs checked against the diff.
   merge: { humanRisk: ['high'], humanLabels: BUSINESS_LABELS, humanPaths: [], maxLines: 400 },
   // The review panel: one expert reviewer per lens, in parallel. All must pass the same commit.
-  review: { lenses: LENSES },
+  // `light` is the smaller panel for a Low-risk card with no business label; [] turns it off.
+  review: { lenses: LENSES, light: ['qa', 'code'] },
   // Which Orca agent runs each lane: { <lane>: { agent, model?, effort? } }. A lane without an entry
   // runs on DEFAULT_AGENT. Example: review on Grok to spare Claude's quota.
   agents: {},
@@ -37,6 +40,12 @@ export const DEFAULT_AGENT = Object.freeze({ agent: 'claude' });
 export function launchFor(lane, config) {
   const pick = config.agents?.[lane];
   return pick ? { agent: pick.agent, ...(pick.model ? { model: pick.model } : {}), ...(pick.effort ? { effort: pick.effort } : {}) } : { ...DEFAULT_AGENT };
+}
+
+// The worker limit for one Orca agent: the shared number, or that agent's own entry (none: no limit).
+export function workerLimit(config, agent) {
+  const mw = config.maxWorkers;
+  return typeof mw === 'number' ? mw : mw[agent] ?? Infinity;
 }
 
 export function repoRoot(cwd = process.cwd()) {
@@ -58,7 +67,10 @@ function validate(config, file) {
   if (!Array.isArray(config.verify) || !config.verify.every((c) => typeof c === 'string' && c.trim())) {
     fail('"verify" must be an array of non-empty command strings');
   }
-  if (!Number.isInteger(config.maxWorkers) || config.maxWorkers < 1) fail('"maxWorkers" must be a positive integer');
+  const positive = (n) => Number.isInteger(n) && n >= 1;
+  const mw = config.maxWorkers;
+  const perAgent = mw && typeof mw === 'object' && !Array.isArray(mw) && Object.keys(mw).length && Object.values(mw).every(positive);
+  if (!positive(mw) && !perAgent) fail('"maxWorkers" must be a positive integer, or one per agent like { "claude": 3, "grok": 4 }');
   if (!(config.verifyTimeoutMinutes > 0)) fail('"verifyTimeoutMinutes" must be a positive number');
   const m = config.merge;
   const strings = (v) => Array.isArray(v) && v.every((s) => typeof s === 'string');
@@ -72,6 +84,9 @@ function validate(config, file) {
   const r = config.review;
   if (!r || !strings(r.lenses) || !r.lenses.length || !r.lenses.every((l) => LENSES.includes(l)) || new Set(r.lenses).size !== r.lenses.length) {
     fail(`"review.lenses" must list one or more of ${LENSES.join(', ')}, without repeats`);
+  }
+  if (!strings(r.light) || !r.light.every((l) => LENSES.includes(l)) || new Set(r.light).size !== r.light.length) {
+    fail(`"review.light" must list some of ${LENSES.join(', ')} (or be [] to always run the full panel)`);
   }
   const a = config.agents;
   if (!a || typeof a !== 'object' || Array.isArray(a)) fail('"agents" must be an object of { <lane>: { agent, model?, effort? } }');

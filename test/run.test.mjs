@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as store from '../src/store.mjs';
 import * as run from '../src/run.mjs';
-import { DEFAULTS } from '../src/config.mjs';
+import { DEFAULTS, loadConfig } from '../src/config.mjs';
 import { GOOD_BODY } from './fixtures.mjs';
 
 const ROOT = path.resolve('/repo');
@@ -257,4 +257,54 @@ test('the builder of a card that came back is told to bring in an Opus subagent'
   store.sendBack(b, 1, { who: 'r', role: 'review:security', text: 'S1' });
   assert.match(run.spec(card, 'build', 'build-1-r2', ROOT), /has come back 1 time from review[\s\S]*Claude Opus subagent/);
   assert.doesNotMatch(run.spec(card, 'spec', 'spec-1', ROOT), /has come back/, 'only the builder');
+});
+
+test('light panel: a Low-risk card with no business label gets two lenses; anything else, all four', async () => {
+  const { lensesFor } = await import('../src/lanes.mjs');
+  const full = { ...DEFAULTS, maxWorkers: 20 };
+  const high = GOOD_BODY.replace('🟢 **Low**', '🔴 **High**');
+  const b = board([
+    { column: 'review', run: { branch: 'b1' } },                       // 1: Low, no label
+    { column: 'review', run: { branch: 'b2' }, labels: ['pricing'] }, // 2: Low but business
+    { column: 'review', run: { branch: 'b3' } },                       // 3: High
+  ]);
+  b.cards[2].body = high;
+  assert.deepEqual(lensesFor(b.cards[0], full), ['qa', 'code']);
+  assert.deepEqual(lensesFor(b.cards[1], full), ['qa', 'security', 'code', 'ops']);
+  assert.deepEqual(lensesFor(b.cards[2], full), ['qa', 'security', 'code', 'ops']);
+  assert.deepEqual(lensesFor(b.cards[0], { ...full, review: { ...full.review, light: [] } }), ['qa', 'security', 'code', 'ops'], 'light: [] turns it off');
+  const perCard = run.plan(b, full, ROOT).reduce((n, a) => ({ ...n, [a.id]: (n[a.id] || 0) + 1 }), {});
+  assert.deepEqual(perCard, { 1: 2, 2: 4, 3: 4 });
+
+  // An escalation (needs-human) upgrades a light round to the full panel: the missing lenses get dispatched.
+  b.cards[0].panel.lenses = { qa: { verdict: 'pass' }, code: { verdict: 'pass' } };
+  b.cards[0].labels.push('needs-human');
+  assert.deepEqual(run.plan(b, full, ROOT).filter((a) => a.id === 1).map((a) => a.lens), ['security', 'ops']);
+});
+
+test('maxWorkers per agent: reviewers on Grok do not take the slots of builders on Claude', () => {
+  const cfg = { ...DEFAULTS, maxWorkers: { claude: 1, grok: 2 }, review: { lenses: ['qa', 'code', 'ops'], light: [] }, agents: { review: { agent: 'grok', model: 'grok-4.7' } } };
+  const b = board([
+    { column: 'review', run: { branch: 'b1' } }, // 3 lenses on grok: 2 fit
+    { column: 'ready' },                          // build on claude: fits
+    { column: 'ready' },                          // claude is full
+  ]);
+  assert.deepEqual(run.plan(b, cfg, ROOT).map((a) => [a.id, a.lane, a.lens, a.launch.agent]), [
+    [1, 'review', 'qa', 'grok'], [1, 'review', 'code', 'grok'], [2, 'build', null, 'claude'],
+  ]);
+  // A claude worker already in flight takes the only claude slot; grok keeps its own two.
+  store.claimCard(b, 3, 'build-3');
+  store.moveCard(b, 3, 'building', null, { force: true });
+  assert.deepEqual(run.plan(b, cfg, ROOT).map((a) => a.launch.agent), ['grok', 'grok']);
+});
+
+test('maxWorkers is validated: a number, or a positive number per agent', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-mw-'));
+  const write = (c) => fs.writeFileSync(path.join(dir, 'factory.config.json'), JSON.stringify(c));
+  write({ maxWorkers: { claude: 3, grok: 4 } });
+  assert.deepEqual(loadConfig(dir).config.maxWorkers, { claude: 3, grok: 4 });
+  for (const bad of [{ maxWorkers: 0 }, { maxWorkers: {} }, { maxWorkers: { claude: 0 } }, { maxWorkers: [3] }]) {
+    write(bad);
+    assert.throws(() => loadConfig(dir), /"maxWorkers" must be/);
+  }
 });

@@ -8,14 +8,22 @@ import { spawn } from 'node:child_process';
 import * as store from './store.mjs';
 import { TEMPLATE } from './ticket.mjs';
 import { loadConfig, DEFAULTS } from './config.mjs';
+import { lensesFor } from './lanes.mjs';
 
-// The review lenses shown on review cards. A broken config must not take the board down.
-function lensesOf(repoRoot) {
+// The project config, for the review lenses shown on cards. A broken config must not take the board down.
+function configOf(repoRoot) {
   try {
-    return loadConfig(repoRoot).config.review.lenses;
+    return loadConfig(repoRoot).config;
   } catch {
-    return DEFAULTS.review.lenses;
+    return DEFAULTS;
   }
+}
+
+// The board for the web: each card also says which lenses its panel needs (light or full).
+function boardView(boardFile, repoRoot) {
+  const config = configOf(repoRoot);
+  const board = store.annotate(store.load(boardFile));
+  return { columns: store.COLUMNS, lenses: config.review.lenses, ...board, cards: board.cards.map((c) => ({ ...c, lenses: lensesFor(c, config) })) };
 }
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -89,7 +97,7 @@ export function createServer({ boardFile, repoRoot = process.cwd() }) {
         return send(res, 200, fs.readFileSync(path.join(PUBLIC_DIR, 'index.html')), 'text/html; charset=utf-8');
       }
       if (req.method === 'GET' && url.pathname === '/api/board') {
-        return send(res, 200, { columns: store.COLUMNS, lenses: lensesOf(repoRoot), ...store.annotate(store.load(boardFile)) });
+        return send(res, 200, boardView(boardFile, repoRoot));
       }
       if (req.method === 'GET' && url.pathname === '/api/template') {
         return send(res, 200, { template: TEMPLATE });

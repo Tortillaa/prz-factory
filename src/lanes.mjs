@@ -3,6 +3,7 @@
 // skills; this is the plumbing.
 import * as store from './store.mjs';
 import { git, revParse, isClean, toplevel, worktrees, samePath, slugify } from './git.mjs';
+import { riskLevel } from './ticket.mjs';
 
 export const LANES = {
   // lane: { column it works in, where it may hand a card to }
@@ -119,9 +120,20 @@ export function handoff({ file, id, who, lane, to, text }) {
   });
 }
 
+// The lenses this card's panel needs. A Low-risk card with no business label gets the light panel;
+// anything else, or a card a reviewer escalated (needs-human is a business label), gets every lens.
+export function lensesFor(card, config) {
+  const { lenses } = config.review;
+  // Only the light lenses this project reviews with.
+  const light = (config.review.light || []).filter((l) => lenses.includes(l));
+  if (!light.length) return lenses;
+  const business = card.labels.some((l) => config.merge.humanLabels.includes(l));
+  return riskLevel(card.body) === 'low' && !business ? light : lenses;
+}
+
 // Lenses of this round that have not passed yet.
 export function pendingLenses(card, config) {
-  return config.review.lenses.filter((l) => card.panel?.lenses?.[l]?.verdict !== 'pass');
+  return lensesFor(card, config).filter((l) => card.panel?.lenses?.[l]?.verdict !== 'pass');
 }
 
 /**

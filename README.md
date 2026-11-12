@@ -111,6 +111,7 @@ Cada regla la hace cumplir el código, no la buena voluntad del agente. `factory
 | Un agente puede subir una tarjeta a revisión humana, nunca bajarla; nunca usa `--human` ni `--force` | skills; el gate solo acepta `--human` con la etiqueta `merge-approval`, que solo pone él |
 | Nada de `git merge`, commit o push sobre la rama base desde un worker | guard `protected-push` |
 | `main` no admite force-push ni borrado, se escriba como se escriba | protección de rama en GitHub (en el servidor) |
+| Ningún push que no sea fast-forward (ni borrado) a una rama protegida, escrito como se escriba | hook de git `pre-push` (`hooks/factory-pre-push.mjs`, lo instala `factory install`); el guard `protected-push` veta `--no-verify` y `core.hooksPath` |
 | No leer `.env` ni archivos de claves; no escribir claves literales | guards `secrets` y `key-literals` |
 | Borrados recursivos solo dentro del proyecto | guard `delete-outside` |
 | No inventar una decisión de producto: la tarjeta va a `blocked` con la pregunta | skills `factory-spec`, `factory-build`, `factory-review` |

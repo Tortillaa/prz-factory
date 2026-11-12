@@ -284,6 +284,8 @@ export function guardProtectedPush(input, ctx = {}) {
     // An alias or include can make any subcommand a push we cannot see.
     if (sub !== 'push' && sub !== 'send-pack' && (envForces || gitDirOpt || config.some((c) => /^(alias|include)/i.test(c)))) return forceMsg;
     if (sub === 'push' || sub === 'send-pack') {
+      // The git pre-push hook (factory install) is the real check: refuse every way of switching it off.
+      if (sub === 'push' && (rest.some((w) => /^--no-v(e(r(i(fy?)?)?)?)?$/.test(w)) || config.some((c) => /^core.hookspath(=|$)/i.test(c)))) return 'The pre-push hook cannot be skipped: no --no-verify and no core.hooksPath override on a push.';
       const flags = [];
       const pos = [];
       for (let j = 0; j < rest.length; j++) {

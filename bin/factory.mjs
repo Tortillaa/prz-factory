@@ -498,8 +498,9 @@ try {
       const report = install(args[0] || '.', { hooks: !opts['no-hooks'] });
       const skills = report.skills.map((s) => `  ${s.status.padEnd(9)} ${s.name}${s.reason ? ` (${s.reason})` : ''}`).join('\n');
       const rt = report.runtime;
+      const pp = report.prePush;
       const next = rt.status === 'skipped' ? '' : `\n\nNext:\n  1. Commit .claude/, ${path.basename(rt.dir)}/ and factory.config.json (worker worktrees need them).\n  2. Ask your agent: "onboard" (skill factory-onboard): it proves verify and sets the merge policy.\n  3. The CLI is now in the repo: node ${path.basename(rt.dir)}/bin/factory.mjs <command> (or \`factory\` if on PATH).`;
-      print(report, `skills → ${report.target}\n${skills}\nruntime: ${rt.status} ${rt.dir}${rt.reason ? ` (${rt.reason})` : ''}\nconfig: ${report.config.status} ${report.config.file}\nhooks: ${report.hooks ? report.hooks.file : 'skipped (--no-hooks)'}${next}`);
+      print(report, `skills → ${report.target}\n${skills}\nruntime: ${rt.status} ${rt.dir}${rt.reason ? ` (${rt.reason})` : ''}\nconfig: ${report.config.status} ${report.config.file}\nhooks: ${report.hooks ? report.hooks.file : 'skipped (--no-hooks)'}${pp ? `\npre-push: ${pp.status} ${pp.file}${pp.reason ? `\nWARNING: ${pp.reason}; force-pushes to protected branches are not stopped by git` : ''}` : ''}${next}`);
       break;
     }
     case 'doctor': {

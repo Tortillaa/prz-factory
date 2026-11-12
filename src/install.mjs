@@ -3,6 +3,7 @@
 // A skill folder the factory did not create (no marker file) is never touched.
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CONFIG_NAME, DEFAULTS, detectBaseBranch, detectVerify } from './config.mjs';
 
@@ -89,10 +90,36 @@ function vendorRuntime(target, factoryRoot) {
   return { dir: dest, status: existed ? 'updated' : 'installed', version };
 }
 
+// Where git looks for the pre-push hook of `dir`: shared by worktrees, honours core.hooksPath. Null outside a repo.
+export function prePushPath(dir) {
+  try {
+    return execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-path', 'hooks/pre-push'], { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null;
+  } catch {
+    return null;
+  }
+}
+export const PRE_PUSH_MARKER = 'factory-managed';
+
+// Installs the git pre-push hook that refuses non-fast-forward pushes to protected branches.
+// A pre-push hook the factory did not write is left alone.
+function installPrePush(target, factoryRoot) {
+  const file = prePushPath(target);
+  if (!file) return null;
+  if (fs.existsSync(file) && !fs.readFileSync(file, 'utf8').includes(PRE_PUSH_MARKER)) {
+    return { file, status: 'skipped', reason: 'a pre-push hook that the factory did not write already exists' };
+  }
+  const existed = fs.existsSync(file);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.copyFileSync(path.join(factoryRoot, 'hooks', 'factory-pre-push.mjs'), file);
+  fs.chmodSync(file, 0o755);
+  return { file, status: existed ? 'updated' : 'installed' };
+}
+
 export function install(target, { factoryRoot = FACTORY_ROOT, hooks = true } = {}) {
   target = path.resolve(target);
   if (!fs.existsSync(target)) throw new Error(`target does not exist: ${target}`);
-  const report = { target, skills: [], config: null, hooks: null, runtime: vendorRuntime(target, factoryRoot) };
+  const report = { target, skills: [], config: null, hooks: null, prePush: null, runtime: vendorRuntime(target, factoryRoot) };
+  report.prePush = installPrePush(target, factoryRoot);
   if (hooks) report.hooks = installHooks(target, factoryRoot);
 
   for (const name of listSkills(factoryRoot)) {

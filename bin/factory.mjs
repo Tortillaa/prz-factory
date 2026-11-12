@@ -330,7 +330,7 @@ try {
     }
     case 'handoff': {
       const text = opts['text-file'] !== undefined ? fs.readFileSync(opts['text-file'], 'utf8') : opts.text;
-      const card = handoff({ file, id: need(args[0], 'id'), to: need(args[1], 'column'), lane: need(opts.lane, '--lane'), who: need(opts.as, '--as'), text });
+      const card = handoff({ file, id: need(args[0], 'id'), to: need(args[1], 'column'), lane: need(opts.lane, '--lane'), who: need(opts.as, '--as'), text, cwd: process.cwd(), config: loadConfig(repoRoot()).config });
       print(card, `handed off ${line(card)} → ${card.column}`);
       break;
     }

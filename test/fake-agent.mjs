@@ -20,7 +20,10 @@ factory('start', id, '--lane', 'build', '--as', worker);
 fs.writeFileSync('src/cart.mjs', 'export function average(prices) {\n  if (prices.length === 0) return 0;\n  return prices.reduce((sum, p) => sum + p, 0) / prices.length;\n}\n');
 fs.writeFileSync('test/cart-empty.test.mjs', "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { average } from '../src/cart.mjs';\ntest('empty', () => assert.equal(average([]), 0));\n");
 git('add', '-A');
-git('-c', 'user.email=fake@example.com', '-c', 'user.name=fake', 'commit', '-qm', '🐛 [fix] cart: empty cart average is 0');
+git('-c', 'user.email=fake@example.com', '-c', 'user.name=fake', 'commit', '-qm', `🐛 [fix] cart: empty cart average is 0
+
+- guard for an empty list
+Card: #${id}`);
 factory('verify');
 factory('handoff', id, 'review', '--lane', 'build', '--as', worker, '--text', '[build] ✅ built · round 1\nAC1 AC2 AC3 test/cart-empty.test.mjs');
 console.log('done');

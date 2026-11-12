@@ -639,3 +639,28 @@ test('only merges the gate held can be approved: a card blocked by bounces canno
   }
   assert.notEqual(sh(env.repo, 'rev-parse', 'main'), head);
 });
+
+test('a builder cannot hand off to review new commits without `Card: #<id>`; reviewed ones are not checked again', () => {
+  const env = setup();
+  const { file, wt, config } = env;
+  const id = addReadyCard(env);
+  startLane({ file, id, who: 'b', lane: 'build', cwd: wt.build, config });
+  commitIn(wt.build, 'login.txt'); // "add login.txt", no Card line
+  assert.throws(() => handoff({ file, id, who: 'b', lane: 'build', to: 'review', text: 'built', cwd: wt.build, config }), (err) => err.message.includes(`lack the line \`Card: #${id}\``) && err.message.includes(`--trailer "Card: #${id}"`));
+  assert.equal(card(env, id).column, 'building', 'the card did not move');
+  // Fixed the way the message says: every commit gets the line.
+  sh(wt.build, 'rebase', '-q', 'main', '--exec', `git commit -q --amend --no-edit --trailer "Card: #${id}"`);
+  const head = sh(wt.build, 'rev-parse', 'HEAD');
+  handoff({ file, id, who: 'b', lane: 'build', to: 'review', text: 'built', cwd: wt.build, config });
+  assert.equal(card(env, id).column, 'review');
+
+  // A later round: the commit the panel already saw is not checked again, only the new one.
+  startReview(env, id, 'code');
+  fail(env, id, 'code', head);
+  startLane({ file, id, who: 'b', lane: 'build', cwd: wt.build, config });
+  fs.writeFileSync(path.join(wt.build, 'fix.txt'), 'x');
+  sh(wt.build, 'add', 'fix.txt');
+  sh(wt.build, 'commit', '-qm', `🐛 [fix] login: fix\n\n- C1\nCard: #${id}`);
+  handoff({ file, id, who: 'b', lane: 'build', to: 'review', text: 'fixed', cwd: wt.build, config });
+  assert.equal(card(env, id).column, 'review');
+});

@@ -45,6 +45,14 @@ Drop the rest: a vague worry is not a finding.
 
 Blockers: any exploitable finding; any secret in the diff. A hardening idea with no exploit is Should fix.
 
+**Report the class, not just the case.** When you find one way around a check, stop and look for
+every other way of the same kind before you write the verdict: other spellings, flags, config,
+environment, aliases, encodings, case, globs, earlier statements in the same command. Write one
+finding per class: its root cause (why the check can be bypassed at all), the variants you
+confirmed, and the fix that closes the class, never one entry per variant. A bypass of a block-list
+check is a design finding: say the check must deny by default and allow only what it can prove safe.
+Handing the builder one variant per round makes the card bounce until it reaches a person.
+
 ## code · is this the right change, and only this change?
 
 IDs `C1`… ponytail-review categories: **bug** and **lean**. You decide whether this diff belongs in

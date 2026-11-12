@@ -2,10 +2,11 @@
 // reviewed and verified, as a fast-forward of the base branch, under a repo-wide mutex.
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import * as store from './store.mjs';
 import { riskLevel } from './ticket.mjs';
 import { runVerify, verifySummary } from './verify.mjs';
-import { git, revParse, isAncestor, isClean, worktrees, commonDir, diffLines, diffFiles, globToRegExp } from './git.mjs';
+import { git, tryGit, revParse, isAncestor, isClean, worktrees, commonDir, diffLines, diffFiles, globToRegExp } from './git.mjs';
 import { pendingLenses } from './lanes.mjs';
 import { pushBase } from './github.mjs';
 
@@ -55,6 +56,50 @@ function verifyAt(sha, cwd, config) {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   }
+}
+
+// The change a commit range makes, as git's stable patch-id: two ranges with the same id make the
+// exact same edits, whatever base they sit on.
+function patchId(from, to, cwd) {
+  const diff = git(['diff', '--no-color', '--no-ext-diff', `${from}...${to}`], cwd);
+  if (!diff) return null;
+  const out = execFileSync('git', ['patch-id', '--stable'], { cwd, input: diff + '\n', encoding: 'utf8' }).trim();
+  return out.split(/\s+/)[0] || null;
+}
+
+// When the base moved after the review, rebase `head` onto it in a throwaway worktree. Returns the
+// rebased commit when the rebase had no conflicts and makes exactly the change the panel reviewed
+// (same patch-id); otherwise null, and the card goes back to its builder.
+function cleanRebase(head, baseSha, cwd) {
+  const reviewed = patchId(baseSha, head, cwd);
+  if (!reviewed) return null;
+  const tmp = path.join(commonDir(cwd), 'factory', `rebase-${short(head)}`);
+  fs.rmSync(tmp, { recursive: true, force: true });
+  git(['worktree', 'prune'], cwd);
+  git(['worktree', 'add', '--detach', tmp, head], cwd);
+  try {
+    if (tryGit(['rebase', '--quiet', baseSha], tmp) === null) {
+      tryGit(['rebase', '--abort'], tmp);
+      return null;
+    }
+    const rebased = git(['rev-parse', 'HEAD'], tmp);
+    return patchId(baseSha, rebased, cwd) === reviewed ? rebased : null;
+  } finally {
+    try {
+      git(['worktree', 'remove', '--force', tmp], cwd);
+    } catch {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+}
+
+// Points the card's branch at the commit that landed, so the branch reads as merged. Where the branch
+// is checked out (the builder's worktree), move it there with `reset --keep`, which never drops local
+// changes; if that refuses, the branch stays where it was and only cleanup is affected.
+function followBranch(branch, from, to, cwd) {
+  const tree = worktrees(cwd).find((w) => w.branch === branch);
+  if (tree) return tryGit(['reset', '--quiet', '--keep', to], tree.path) !== null;
+  return tryGit(['update-ref', `refs/heads/${branch}`, to, from], cwd) !== null;
 }
 
 // Card side effects of a refusal that needs a lane to act: comment, move, release.
@@ -129,11 +174,6 @@ ${msg}`);
     const base = config.baseBranch;
     const baseSha = revParse(`refs/heads/${base}`, cwd);
     if (!baseSha) return result('error', `base branch ${base} does not exist`);
-    if (!isAncestor(baseSha, head, cwd)) {
-      const msg = `${branch} no contiene ${base} (${short(baseSha)}). Rebase sobre ${base}, vuelve a verificar y pasa otra vez por QA y review.`;
-      sendBack(file, id, who, 'building', `[merge] ↩️ rebase necesario\n${msg}`);
-      return result('behind', msg, { head, base: baseSha });
-    }
 
     // Agents merge only what the whole review panel passed, on this very head.
     if (!human) {
@@ -152,41 +192,60 @@ ${msg}`);
       return result('needs-human', msg, { head, lines, reasons });
     }
 
-    const verify = verifyAt(head, cwd, config);
+    // The base moved since the review (another card landed): rebase here when that is clean and
+    // leaves the reviewed change untouched, so the card does not go round build and the panel again.
+    let land = head;
+    if (!isAncestor(baseSha, head, cwd)) {
+      const rebased = cleanRebase(head, baseSha, cwd);
+      if (!rebased) {
+        const msg = `${branch} no contiene ${base} (${short(baseSha)}) y no se puede rebasar sin conflictos dejando el mismo cambio. Rebase sobre ${base}, vuelve a verificar y pasa otra vez por review.`;
+        sendBack(file, id, who, 'building', `[merge] ↩️ rebase necesario\n${msg}`);
+        return result('behind', msg, { head, base: baseSha });
+      }
+      land = rebased;
+    }
+
+    const verify = verifyAt(land, cwd, config);
     if (!verify.ok) {
       const failed = verify.results.find((r) => !r.ok);
-      const msg = `verify falló en ${short(head)} (${verify.where}):\n${verifySummary(verify)}\n${failed.output.slice(-1500)}`;
+      const where = land === head ? short(head) : `${short(land)} (${short(head)} rebasado sobre ${base})`;
+      const msg = `verify falló en ${where} (${verify.where}):\n${verifySummary(verify)}\n${failed.output.slice(-1500)}`;
       sendBack(file, id, who, 'building', `[merge] ✖ verify falló\n${msg}`);
-      return result('verify-failed', msg, { head, verify });
+      return result('verify-failed', msg, { head, land, verify });
     }
 
     // Fast-forward the base. Where it is checked out, merge there so that checkout follows;
     // otherwise move the ref with a compare-and-swap against the base we verified on.
     const baseTree = worktrees(cwd).find((w) => w.branch === base);
     if (baseTree) {
-      if (!isClean(baseTree.path)) {
-        const msg = `${base} is checked out in ${baseTree.path} with uncommitted changes; commit or stash them and run the merge again`;
-        // Only the person can clean their checkout: from merge, the card waits for them in blocked
-        // (moving it back to merge afterwards lands the same reviewed commit with no new review).
+      // Uncommitted changes in that checkout are fine unless the merge touches those very files:
+      // then git refuses without changing anything, and only the person can sort it out.
+      const ff = tryGit(['merge', '--ff-only', land], baseTree.path);
+      if (ff === null) {
+        const msg = `${base} is checked out in ${baseTree.path} and its uncommitted changes touch files this merge changes; commit or stash them and run the merge again`;
+        // From merge, the card waits for the person in blocked; moving it back to merge lands the
+        // same reviewed commit with no new review.
         if (card.column === 'merge') sendBack(file, id, who, 'blocked', `[merge] ⏸ ${msg}\nCuando esté limpio, mueve la tarjeta otra vez a merge.`, ['needs-you']);
         else release(file, id, `[merge] ⏸ ${msg}`);
         return result('base-dirty', msg, { head });
       }
-      git(['merge', '--ff-only', head], baseTree.path);
     } else {
-      git(['update-ref', `refs/heads/${base}`, head, baseSha], cwd);
+      git(['update-ref', `refs/heads/${base}`, land, baseSha], cwd);
     }
-    if (!isAncestor(head, `refs/heads/${base}`, cwd)) return result('error', `merge did not land: ${short(head)} is not on ${base}`);
+    if (!isAncestor(land, `refs/heads/${base}`, cwd)) return result('error', `merge did not land: ${short(land)} is not on ${base}`);
+    const followed = land === head || followBranch(branch, head, land, cwd);
     const pushed = config.github.pushBase ? pushBase({ cwd, config }) : null;
 
     store.update(file, (b) => {
       const c = store.getCard(b, id);
-      store.editCard(b, id, { labels: c.labels.filter((l) => l !== 'needs-you' && l !== APPROVAL), run: { reviewedSha: head, mergedSha: head } });
+      store.editCard(b, id, { labels: c.labels.filter((l) => l !== 'needs-you' && l !== APPROVAL), run: { reviewedSha: head, mergedSha: land } });
       const push = !pushed ? '' : pushed.pushed ? `\n↑ ${base} subida a ${config.github.remote}` : `\n⚠️ no se pudo subir ${base}: ${pushed.error}`;
-      store.commentCard(b, id, { role: 'merge', text: `[merge] ✅ ${branch} → ${base} en ${short(head)}${human ? ' (aprobado por una persona)' : ''}\n${verifySummary(verify)}${push}` });
+      const rebase = land === head ? '' : `\n↪️ rebasado sobre ${base}: ${short(head)} → ${short(land)}, el mismo cambio que revisó el panel (patch-id)${followed ? '' : `; ${branch} se queda en ${short(head)}`}`;
+      store.commentCard(b, id, { role: 'merge', text: `[merge] ✅ ${branch} → ${base} en ${short(land)}${human ? ' (aprobado por una persona)' : ''}${rebase}\n${verifySummary(verify)}${push}` });
       store.moveCard(b, id, 'done', who);
       store.releaseCard(b, id);
     });
-    return result('merged', `${branch} merged into ${base} at ${short(head)}`, { head, lines, verify, pushed });
+    const how = land === head ? '' : ` (rebased from ${short(head)})`;
+    return result('merged', `${branch} merged into ${base} at ${short(land)}${how}`, { head, land, lines, verify, pushed });
   }
 }

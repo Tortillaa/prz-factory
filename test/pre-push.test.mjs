@@ -123,6 +123,10 @@ test('baseBranch stays protected when protectedBranches is edited to [] or to an
   assert.deepEqual(protectedFromConfig({ baseBranch: 'main', protectedBranches: [] }), ['main']);
   assert.deepEqual(protectedFromConfig({ baseBranch: 'main', protectedBranches: ['dev'] }), ['dev', 'main']);
   assert.deepEqual(protectedFromConfig({ protectedBranches: ['main', 'main'] }), ['main']);
+  // no baseBranch: same fallback as the guard
+  assert.deepEqual(protectedFromConfig({}), ['main', 'master']);
+  assert.deepEqual(protectedFromConfig({ protectedBranches: [] }), ['main', 'master']);
+  assert.deepEqual(protectedFromConfig({ protectedBranches: ['master'] }), ['master']);
 
   const { remote, repo } = repoWithRemote();
   install(repo);

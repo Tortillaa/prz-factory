@@ -26,7 +26,8 @@ export function checkPush(lines, { protectedBranches, isAncestor }) {
 // baseBranch is always protected: a mistaken edit of protectedBranches must not unprotect it.
 export function protectedFromConfig(cfg) {
   const list = Array.isArray(cfg?.protectedBranches) ? cfg.protectedBranches : [];
-  return [...new Set([...list, cfg?.baseBranch || 'main'])];
+  const base = cfg?.baseBranch ? [cfg.baseBranch] : [];
+  return [...new Set([...(list.length || base.length ? list : ['main', 'master']), ...base])];
 }
 
 function readConfig() {

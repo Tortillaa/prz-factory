@@ -45,6 +45,15 @@ Drop the rest: a vague worry is not a finding.
 
 Blockers: any exploitable finding; any secret in the diff. A hardening idea with no exploit is Should fix.
 
+**Judge against the threat model.** Read the card's Context for it. Unless the card says otherwise,
+the factory's local barriers (guard hooks, the git `pre-push` hook, the merge gate) protect against
+**mistakes**: an agent that does the wrong thing by accident or because of a bad instruction. They do
+not try to stop an agent that deliberately sets out to bypass them (editing `.git`, grafts or replace
+refs, launching a tool through another shell, changing hook paths): anything on the machine can be
+undone from the machine, and the server side (branch protection on GitHub) is the guarantee there. A
+deliberate bypass is not a Blocker for such a card: list it in one line under "Out of scope (threat
+model)" so a person can see it, and judge the rest.
+
 **Report the class, not just the case.** When you find one way around a check, stop and look for
 every other way of the same kind before you write the verdict: other spellings, flags, config,
 environment, aliases, encodings, case, globs, earlier statements in the same command. Write one

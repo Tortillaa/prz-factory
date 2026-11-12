@@ -110,6 +110,7 @@ Cada regla la hace cumplir el código, no la buena voluntad del agente. `factory
 | Lo que toca el negocio lo aprueba una persona: riesgo High, etiquetas `auth`, `payments`, `pricing`, `schema`, `ops`, rutas sensibles o un diff grande | `src/merge.mjs`, `merge` en `factory.config.json` |
 | Un agente puede subir una tarjeta a revisión humana, nunca bajarla; nunca usa `--human` ni `--force` | skills; el gate solo acepta `--human` con la etiqueta `merge-approval`, que solo pone él |
 | Nada de `git merge`, commit o push sobre la rama base desde un worker | guard `protected-push` |
+| `main` no admite force-push ni borrado, se escriba como se escriba | protección de rama en GitHub (en el servidor) |
 | No leer `.env` ni archivos de claves; no escribir claves literales | guards `secrets` y `key-literals` |
 | Borrados recursivos solo dentro del proyecto | guard `delete-outside` |
 | No inventar una decisión de producto: la tarjeta va a `blocked` con la pregunta | skills `factory-spec`, `factory-build`, `factory-review` |
@@ -118,6 +119,8 @@ Cada regla la hace cumplir el código, no la buena voluntad del agente. `factory
 | A la cuarta vuelta al Builder, o al segundo worker caído, la tarjeta para y espera a una persona | `sendBack` en `src/store.mjs`, `reclaim` en `src/run.mjs` |
 
 Los guards (`hooks/factory-guard.mjs`) funcionan igual con Claude Code y con Grok.
+
+**Modelo de amenaza.** Las barreras locales (guards, hooks y el merge gate) protegen contra **errores**: un agente que hace algo mal por despiste o por una mala instrucción. No intentan parar a un agente que se las quiere saltar a propósito, porque todo lo que corre en la máquina se puede deshacer desde la máquina. Esa garantía la da el servidor: en este repo, `main` está protegida en GitHub contra force-push y borrado. En otro proyecto, activa lo mismo en su repositorio (Settings → Branches; en repos privados requiere GitHub Pro).
 
 ## Roles de agentes
 

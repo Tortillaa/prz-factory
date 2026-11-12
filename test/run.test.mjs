@@ -308,3 +308,60 @@ test('maxWorkers is validated: a number, or a positive number per agent', () => 
     assert.throws(() => loadConfig(dir), /"maxWorkers" must be/);
   }
 });
+
+// `factory dispatch` against a fake Orca: one coordinator step with no manual Orca calls.
+test('dispatch: starts what the plan says, stops orphans, releases finished workers, and recovers from a failed start', async () => {
+  const { dispatch } = await import('../src/dispatch.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-dispatch-'));
+  const file = path.join(dir, 'board.json');
+  const log = path.join(dir, 'orca.log');
+  const calls = () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : []);
+  const prev = { orca: process.env.FACTORY_ORCA, log: process.env.FAKE_ORCA_LOG, fail: process.env.FAKE_ORCA_FAIL };
+  process.env.FACTORY_ORCA = path.join(import.meta.dirname, 'fake-orca.mjs');
+  process.env.FAKE_ORCA_LOG = log;
+  const cfg = { ...config, maxWorkers: 5, agents: { review: { agent: 'grok', model: 'grok-4.7', effort: 'high' } } };
+  try {
+    store.update(file, (b) => {
+      store.addCard(b, { title: 'idea', column: 'spec' });
+      const c = store.addCard(b, { title: 'built', body: GOOD_BODY });
+      store.moveCard(b, c.id, 'review', null, { force: true });
+      c.run.branch = 'factory/2-built';
+    });
+
+    const first = dispatch({ file, config: cfg, repoRoot: ROOT });
+    assert.deepEqual(first.events.map((e) => [e.kind, e.id, e.worker]), [['started', 2, 'review-qa-2'], ['started', 2, 'review-code-2'], ['started', 1, 'spec-1']]);
+    const starts = calls().filter((c) => c.args[1] === 'worker-start');
+    assert.deepEqual(starts[0].args.slice(starts[0].args.indexOf('--agent'), starts[0].args.indexOf('--agent') + 6), ['--agent', 'grok', '--model', 'grok-4.7', '--effort', 'high']);
+    assert.match(starts[0].input, /review \(qa\) worker/, 'the spec goes in on stdin');
+    assert.ok(starts[2].args.includes('--base-branch'), 'a new worktree is created from the base');
+    let b = store.load(file);
+    assert.equal(b.cards[1].panel.lenses.qa.dispatch, starts[0].args.length && b.cards[1].panel.lenses.qa.dispatch);
+    assert.equal(b.workers.length, 3);
+
+    // The spec writer hands off (its claim is gone) and code fails the round while qa still runs.
+    store.update(file, (bd) => store.releaseCard(bd, 1));
+    store.update(file, (bd) => store.sendBack(bd, 2, { who: 'review-code-2', role: 'review:code', text: 'C1' }));
+    fs.rmSync(log);
+    const second = dispatch({ file, config: cfg, repoRoot: ROOT });
+    const kinds = second.events.map((e) => [e.kind, e.worker]);
+    assert.ok(kinds.some(([k, w]) => k === 'stopped' && w === 'review-qa-2'), 'the qa reviewer of the closed round is stopped');
+    assert.ok(kinds.some(([k, w]) => k === 'released' && w === 'spec-1'), 'the finished spec writer is released');
+    assert.ok(kinds.some(([k, w]) => k === 'released' && w === 'review-code-2'), 'and so is the reviewer that ended the round');
+    assert.ok(kinds.some(([k, w]) => k === 'started' && w === 'build-2'), 'the card goes back to a builder');
+    b = store.load(file);
+    assert.deepEqual(b.cards[1].orphans, []);
+    assert.deepEqual(b.workers.map((w) => w.worker).sort(), ['build-2', 'spec-1'], 'the card left in spec gets a new spec writer');
+
+    // A start that Orca refuses gives the claim back, so the next dispatch tries again.
+    store.update(file, (bd) => store.addCard(bd, { title: 'idea 2', column: 'spec' }));
+    process.env.FAKE_ORCA_FAIL = 'worker-start';
+    const third = dispatch({ file, config: cfg, repoRoot: ROOT });
+    assert.deepEqual(third.events.filter((e) => e.kind === 'failed').map((e) => e.worker), ['spec-3']);
+    assert.equal(store.load(file).cards[2].assignee, null);
+  } finally {
+    for (const [k, v] of [['FACTORY_ORCA', prev.orca], ['FAKE_ORCA_LOG', prev.log], ['FAKE_ORCA_FAIL', prev.fail]]) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});

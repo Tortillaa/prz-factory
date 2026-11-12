@@ -13,6 +13,7 @@ import { startLane, handoff, verdict } from '../src/lanes.mjs';
 import { runVerify, verifySummary } from '../src/verify.mjs';
 import { mergeCard } from '../src/merge.mjs';
 import * as run from '../src/run.mjs';
+import { dispatch, describe } from '../src/dispatch.mjs';
 import { worktrees } from '../src/git.mjs';
 import { findLeftovers, applyCleanup } from '../src/cleanup.mjs';
 import { writeBlock } from '../src/agentsmd.mjs';
@@ -63,6 +64,8 @@ Lanes (run inside the worker's own worktree)
                                          failed · 10 base checkout dirty · 11 review panel incomplete
 
 Run (the coordinator; it dispatches, never builds)
+  dispatch [--dry-run]                   One coordinator step: stop workers whose round is over, release the
+                                         terminals of finished ones, start a worker for every plan action
   plan                                   Next dispatches for the free worker slots, with placement
   spec <id> --lane <l> [--lens l] --as <worker>
                                          The task text for that worker (pipe to --spec-file -)
@@ -128,6 +131,7 @@ const { values: opts, positionals } = parseOptions({
     sha: { type: 'string' },
     human: { type: 'boolean' },
     'allow-main': { type: 'boolean' },
+    'dry-run': { type: 'boolean' },
     dispatch: { type: 'string' },
     reason: { type: 'string' },
     apply: { type: 'boolean' },
@@ -387,6 +391,13 @@ try {
         `next: ${s.next.map((a) => `#${a.id} ${a.lane}`).join(', ') || 'nothing'}${s.idle ? ' · idle' : ''}`,
       ];
       print(s, lines.join('\n'));
+      break;
+    }
+    case 'dispatch': {
+      const root = mainCheckout();
+      const r = dispatch({ file, config: loadConfig(root).config, repoRoot: root, dryRun: opts['dry-run'] });
+      print(r, r.events.map(describe).join('\n') || 'nothing to do');
+      if (r.events.some((e) => e.kind === 'failed')) process.exitCode = 1;
       break;
     }
     case 'stopped': {

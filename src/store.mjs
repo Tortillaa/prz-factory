@@ -36,7 +36,7 @@ export function resolveBoardPath(cwd = process.cwd()) {
 }
 
 function emptyBoard() {
-  return { version: 1, nextId: 1, cards: [] };
+  return { version: 1, nextId: 1, cards: [], workers: [] };
 }
 
 // Card order inside a column is the order of board.cards.
@@ -48,6 +48,8 @@ export function load(file) {
     if (err.code === 'ENOENT') return emptyBoard();
     throw err;
   }
+  // The Orca workers `factory dispatch` started, until their terminal is released.
+  board.workers ??= [];
   // Cards written by older versions lack the newer fields.
   for (const card of board.cards) {
     card.blockedBy ??= [];

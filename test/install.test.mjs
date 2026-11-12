@@ -114,7 +114,7 @@ test('install vendors the runtime: the project runs the factory with nothing ins
   const report = install(repo);
   assert.equal(report.runtime.status, 'installed');
   const cli = path.join(repo, RUNTIME_DIR, 'bin', 'factory.mjs');
-  for (const part of ['bin/factory.mjs', 'src/store.mjs', 'public/index.html', 'hooks/factory-guard.mjs', 'skills/factory-spec/SKILL.md', 'package.json', MARKER]) {
+  for (const part of ['bin/factory.mjs', 'src/store.mjs', 'public/index.html', 'hooks/factory-guard.mjs', 'skills/factory-spec/SKILL.md', 'orca-plugin/orca-plugin.json', 'package.json', MARKER]) {
     assert.ok(fs.existsSync(path.join(repo, RUNTIME_DIR, part)), part);
   }
   assert.ok(!fs.existsSync(path.join(repo, RUNTIME_DIR, 'test')), 'tests and evals stay out of the project');

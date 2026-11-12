@@ -16,15 +16,18 @@ board's rules.
 
 ## Install
 
-It runs its own Node worker (`trusted-worker`), so Orca asks you to approve it:
+Once per machine. `factory install` copies this folder into every project as
+`.prz-factory/orca-plugin`, so no clone of prz-factory is needed (from a clone, the folder is
+`./orca-plugin`). It runs its own Node worker (`trusted-worker`), so Orca asks you to approve it:
 
 ```sh
-orca plugin inspect ./orca-plugin --json        # what it gets, and its fingerprint
-orca plugin install ./orca-plugin --approve <fingerprint>
+orca plugin install .prz-factory/orca-plugin                        # installs nothing: shows the access and a fingerprint
+orca plugin install .prz-factory/orca-plugin --approve ap1-<fingerprint>
 orca plugin open local.prz-factory-board --panel board
 ```
 
-Without `--approve`, `install` stops and prints the fingerprint to approve.
+The fingerprint is bound to these exact files and this access: after an update that changes the
+plugin, Orca asks again.
 
 ## Develop
 

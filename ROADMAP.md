@@ -164,6 +164,13 @@ La mecánica está probada (tests, CI, una tarjeta real, evals del agente de mer
   - [x] **No se podía medir el coste.** `factory dispatch` registra cada worker (inicio, fin, modelo, cómo acabó) y `factory report` da workers y minutos por rol, modelo y tarjeta. Los tokens siguen sin medirse: Orca no los da.
   - [x] **El guard se equivocaba con `cd`.** Ahora evalúa la carpeta de un `cd X &&` o `git -C X`; otro repo se juzga solo, y un worker que entra en otro checkout del mismo repo sigue siendo worker.
 
+## Fase 14 · Modelo de amenaza y protección en el servidor ✅
+
+La #8 (guard) y la #9 (hook `pre-push`) no convergían: cada ronda, el reviewer de seguridad encontraba otra forma de saltarse una barrera local (sintaxis de shell, alias, `--no-verify`, grafts, `send-pack`…). Todo lo que corre en la máquina se puede deshacer desde ella.
+
+- [x] **Modelo de amenaza decidido:** las barreras locales protegen contra errores, no contra un agente que se las salta a propósito. Escrito en las tarjetas #8, #9 y #10, en la lente `security` (un bypass deliberado no es un Blocker; se apunta como fuera de alcance) y en el Spec Writer (toda barrera de seguridad lleva su modelo de amenaza en Context).
+- [x] **Garantía en el servidor:** el repo pasa a público y `main` queda protegida en GitHub contra force-push y borrado, también para administradores.
+
 ## Pendiente fuera del código
 
 - [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.

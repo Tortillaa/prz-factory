@@ -60,6 +60,8 @@ El flujo es **spec → ready → building → review (panel en paralelo) → mer
 
 ## Guard hooks (Fase 4)
 
+- **Modelo de amenaza:** los guards, el hook `pre-push` y el gate protegen contra errores de un agente, no contra uno que se los salte a propósito; esa garantía la da la protección de `main` en GitHub (repo público; sin force-push ni borrado, también para administradores). La lente `security` juzga contra el modelo de amenaza de la tarjeta.
+
 - **También para Grok.** Grok lee el mismo `.claude/settings.json` (compatibilidad con Claude) y pone `CLAUDE_PROJECT_DIR`, pero entrega el evento en otra forma (`toolName`/`toolInput`, herramientas `run_terminal_command`, `read_file`, `search_replace`…, ficheros en `target_file` o `path`). `normalize()` lo traduce a la forma de Claude al empezar cada guard; los tests de `test/guard.test.mjs` cubren los dos formatos.
 
 - `hooks/factory-guard.mjs <guard>` es un hook PreToolUse autocontenido: se copia tal cual a cada proyecto, así que **no puede importar nada de `src/`**. Exporta cada guard como función pura (`guardSecrets`, `guardKeyLiterals`, `guardProtectedPush`, `guardDeleteOutside`), que es lo que prueban los tests; `protectedPush` y `deleteOutside` aceptan un `ctx` para no depender de git en los tests. Un guard desconocido o un JSON roto nunca bloquean (exit 0).

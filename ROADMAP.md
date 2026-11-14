@@ -145,7 +145,7 @@ Para no gastar cuota de Claude en todo, cada lane puede correr en otro agente de
 
 La mecánica está probada (tests, CI, una tarjeta real, evals del agente de merge y del Builder). Falta demostrar el flujo completo con agentes reales y medir su coste antes de usarla sin supervisión en otros repos. Cada paso deja sus números en `docs/VALIDACION.md`.
 
-- [x] **1 · Cerrar la #6.** Aprobada por la persona el 2026-11-14: el gate la rebasó él mismo sobre `main` (sin volver al Builder ni al panel, mismo `patch-id`) y aterrizó en `db63e8a`. Primer recorrido real de "pide aprobación → apruebas → se mergea". La #8 aterrizó igual (`5bd5ea0`); la #9 tenía conflictos y volvió al Builder para rebase.
+- [x] **1 · Cerrar la #6.** Aprobada por la persona el 2026-11-14: el gate la rebasó él mismo sobre `main` (sin volver al Builder ni al panel, mismo `patch-id`) y aterrizó en `db63e8a`. Primer recorrido real de "pide aprobación → apruebas → se mergea". La #8 aterrizó igual (`5bd5ea0`). La #9 tenía conflictos: volvió al Builder, que la rebasó, el panel la aprobó en una ronda y aterrizó con aprobación en `a56ec49`.
 - [ ] **2 · Una ejecución completa en este repo.** Dos o tres ideas pequeñas y reales con `/factory-run`: una inocente, que debe mergearse sola, y otra que toque una ruta sensible, que debe llegar como solicitud. Medir tiempo por paso, cuota y errores.
 - [ ] **2b · Las 5 evals pendientes con agentes reales:** `spec-empty-cart` y `spec-pricing-is-business` (Sonnet), `review-code-pass`, `review-ops-escalates-pricing` y `review-qa-missing-test` (Grok 4.7).
 - [ ] **3 · Piloto en un repo no crítico, con buenos tests**, en modo piloto: `"humanRisk": ["low", "medium", "high"]` en su `factory.config.json`, de modo que todos los merges pasan por una persona.
@@ -169,6 +169,7 @@ La mecánica está probada (tests, CI, una tarjeta real, evals del agente de mer
 La #8 (guard) y la #9 (hook `pre-push`) no convergían: cada ronda, el reviewer de seguridad encontraba otra forma de saltarse una barrera local (sintaxis de shell, alias, `--no-verify`, grafts, `send-pack`…). Todo lo que corre en la máquina se puede deshacer desde ella.
 
 - [x] **Modelo de amenaza decidido:** las barreras locales protegen contra errores, no contra un agente que se las salta a propósito. Escrito en las tarjetas #8, #9 y #10, en la lente `security` (un bypass deliberado no es un Blocker; se apunta como fuera de alcance) y en el Spec Writer (toda barrera de seguridad lleva su modelo de amenaza en Context).
+- [x] **Las tres barreras locales en `main`:** guard del force-push (#8, `5bd5ea0`), hook `pre-push` que deniega por defecto lo que no sea fast-forward sobre una rama protegida (#9, `a56ec49`) y rechazo de cualquier actualización de una rama protegida desde un worktree de worker, con `pushBase` empujando desde el checkout principal (#10, `2b23537`). La #10 pasó el panel en una sola ronda.
 - [x] **Garantía en el servidor:** el repo pasa a público y `main` queda protegida en GitHub contra force-push y borrado, también para administradores.
 
 ## Fase 15 · Coste de la review

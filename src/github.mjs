@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import { git, revParse } from './git.mjs';
+import { git, revParse, commonDir } from './git.mjs';
 
 // The gh command; FACTORY_GH overrides it (tests use a fake).
 function gh(args, cwd) {
@@ -47,9 +47,12 @@ export function openPr({ card, cwd, config }) {
 }
 
 // After a local merge: fast-forward the remote base. A rejected push is reported, never forced.
+// Runs from the main checkout: the pre-push hook refuses protected-branch pushes from linked worktrees.
 export function pushBase({ cwd, config }) {
   try {
-    git(['push', config.github.remote, `refs/heads/${config.baseBranch}:refs/heads/${config.baseBranch}`], cwd);
+    const common = commonDir(cwd);
+    const main = path.basename(common) === '.git' ? path.dirname(common) : cwd;
+    git(['push', config.github.remote, `refs/heads/${config.baseBranch}:refs/heads/${config.baseBranch}`], main);
     return { pushed: true };
   } catch (err) {
     return { pushed: false, error: err.message.split('\n').slice(0, 3).join(' ') };

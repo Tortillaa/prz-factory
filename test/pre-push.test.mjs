@@ -8,12 +8,21 @@ import { checkPush, protectedFromConfig } from '../hooks/factory-pre-push.mjs';
 import { guardProtectedPush } from '../hooks/factory-guard.mjs';
 import { install } from '../src/install.mjs';
 import { doctor } from '../src/doctor.mjs';
+import { pushBase } from '../src/github.mjs';
 
 const Z = '0'.repeat(40);
 const A = 'a'.repeat(40);
 const B = 'b'.repeat(40);
 const ctx = (ancestor) => ({ protectedBranches: ['main'], isAncestor: () => ancestor });
 const line = (ref, local, remote) => `${ref} ${local} ${ref} ${remote}`;
+
+test('checkPush from a linked worktree refuses any update of a protected branch', () => {
+  const linked = { ...ctx(true), linked: true };
+  assert.equal(checkPush([line('refs/heads/main', A, B)], linked).length, 1, 'fast-forward');
+  assert.equal(checkPush([line('refs/heads/main', A, Z)], linked).length, 1, 'new branch');
+  assert.equal(checkPush([`(delete) ${Z} refs/heads/main ${B}`], linked).length, 1, 'delete');
+  assert.equal(checkPush([line('refs/heads/feature', A, B)], linked).length, 0, 'unprotected');
+});
 
 test('checkPush: protected branches only fast-forward, are never deleted, new ones are fine', () => {
   assert.equal(checkPush([line('refs/heads/main', A, B)], ctx(false)).length, 1, 'rewrite denied');
@@ -61,7 +70,7 @@ test('pre-push hook in a real repo: rewrites of main fail however typed, fast-fo
     }
   }
 
-  // A fast-forward on top of the remote is fine (from the main checkout and from the worktree).
+  // A fast-forward on top of the remote is fine from the main checkout, never from the worktree.
   git(repo, 'reset', '-q', '--hard', before);
   fs.writeFileSync(path.join(repo, 'a.txt'), '2');
   git(repo, 'commit', '-qam', 'two');
@@ -71,7 +80,25 @@ test('pre-push hook in a real repo: rewrites of main fail however typed, fast-fo
   git(wt, 'reset', '-q', '--hard', sha);
   fs.writeFileSync(path.join(wt, 'a.txt'), '3');
   git(wt, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'three');
-  assert.equal(tryGit(wt, 'push', 'origin', 'HEAD:main').status, 0, 'fast-forward from a worktree');
+  for (const dst of ['HEAD:main', 'HEAD:heads/main', '@:main']) {
+    const r = tryGit(wt, 'push', 'origin', dst);
+    assert.notEqual(r.status, 0, `fast-forward ${dst} from a worktree`);
+    assert.match(r.stderr, /pre-push/);
+    assert.equal(git(remote, 'rev-parse', 'main'), sha);
+  }
+  assert.equal(tryGit(wt, 'push', 'origin', 'HEAD:refs/heads/feature').status, 0, 'feature branch from a worktree');
+});
+
+test('pushBase from a linked worktree pushes the base through the hook', () => {
+  const { root, remote, repo } = repoWithRemote();
+  install(repo);
+  const wt = path.join(root, 'wt');
+  git(repo, 'worktree', 'add', '-q', '--detach', wt);
+  fs.writeFileSync(path.join(repo, 'a.txt'), '2');
+  git(repo, 'commit', '-qam', 'two');
+  const config = { baseBranch: 'main', github: { remote: 'origin' } };
+  assert.deepEqual(pushBase({ cwd: wt, config }), { pushed: true });
+  assert.equal(git(remote, 'rev-parse', 'main'), git(repo, 'rev-parse', 'main'));
 });
 
 test('pre-push hook still blocks a force-push in a "type":"commonjs" repo, and doctor needs the script', () => {

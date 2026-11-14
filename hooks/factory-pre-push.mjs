@@ -11,13 +11,14 @@ import { fileURLToPath } from 'node:url';
 const ZERO = /^0+$/;
 
 // lines: `<local ref> <local sha> <remote ref> <remote sha>`. Returns the refusals (empty = allowed).
-export function checkPush(lines, { protectedBranches, isAncestor }) {
+export function checkPush(lines, { protectedBranches, isAncestor, linked }) {
   const out = [];
   for (const line of lines) {
     const [, local, remoteRef, remote] = line.trim().split(/\s+/);
     const name = remoteRef?.replace(/^refs\/heads\//, '');
     if (!remoteRef?.startsWith('refs/heads/') || !protectedBranches.includes(name)) continue;
-    if (ZERO.test(local)) out.push(`deleting protected branch ${name}`);
+    if (linked) out.push(`${name}: workers never update a protected branch`);
+    else if (ZERO.test(local)) out.push(`deleting protected branch ${name}`);
     else if (!ZERO.test(remote) && !isAncestor(remote, local)) out.push(`${name} would not be a fast-forward`);
   }
   return out;
@@ -39,6 +40,12 @@ function readConfig() {
   }
 }
 
+// A linked worktree (a worker's) has a git dir apart from the common one.
+const isLinked = () => {
+  const p = (flag) => fs.realpathSync(path.resolve(execFileSync('git', ['rev-parse', flag], { encoding: 'utf8' }).trim()));
+  return p('--git-dir') !== p('--git-common-dir');
+};
+
 const isAncestor = (a, b) => {
   try {
     execFileSync('git', ['merge-base', '--is-ancestor', a, b], { stdio: 'ignore' });
@@ -51,9 +58,9 @@ const isAncestor = (a, b) => {
 // The sh wrapper sets FACTORY_PRE_PUSH so a path-spelling mismatch (drive case, symlink) cannot make the check a no-op.
 if (process.env.FACTORY_PRE_PUSH || (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url))) {
   const lines = fs.readFileSync(0, 'utf8').split('\n').filter((l) => l.trim());
-  const refused = checkPush(lines, { protectedBranches: protectedFromConfig(readConfig()), isAncestor });
+  const refused = checkPush(lines, { protectedBranches: protectedFromConfig(readConfig()), isAncestor, linked: isLinked() });
   if (refused.length) {
-    console.error(`prz-factory pre-push: refused: ${refused.join('; ')}. Protected branches only move forward; land code with \`factory merge\`.`);
+    console.error(`prz-factory pre-push: refused: ${refused.join('; ')}. Protected branches only move forward, and never from a worker worktree; land code with \`factory merge\`.`);
     process.exit(1);
   }
 }

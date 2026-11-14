@@ -41,20 +41,22 @@ Tú solo haces dos cosas: **mandar ideas** y **responder a las solicitudes** que
 
 ## Parte 1 · Preparar un proyecto (una sola vez)
 
-No hay que instalar nada antes. Solo necesitas Node 22 o superior, git, Orca, y acceso a GitHub (el repo de la fábrica es privado: basta con haber hecho `gh auth login`).
+No hay que instalar nada antes. Solo necesitas Node 22 o superior, git, Orca, y acceso a GitHub (el repo de la fábrica es público: no hacen falta credenciales).
 
 ### Paso 1. Pídeselo a tu agente
 
 Abre el proyecto en Orca, arranca un agente (Claude Code o Grok) y escríbele:
 
-> Instala prz-factory en este repositorio: ejecuta `npx -y github:Tortillaa/prz-factory install .` y después sigue la skill factory-onboard que se acaba de instalar.
+> Instala prz-factory en este repositorio: clona `https://github.com/Tortillaa/prz-factory.git` con `git clone --depth 1` en la carpeta `.prz-factory-src`, ejecuta `node .prz-factory-src/bin/factory.mjs install .`, borra `.prz-factory-src` y después sigue la skill factory-onboard que se acaba de instalar.
 
-El agente descarga la fábrica de GitHub, la copia dentro del proyecto y te guía por el resto: comprueba que los tests del proyecto pasan, te pregunta la política de merge y escribe las reglas para los agentes.
+El agente clona la fábrica de GitHub, la copia dentro del proyecto, borra el clon y te guía por el resto: comprueba que los tests del proyecto pasan, te pregunta la política de merge y escribe las reglas para los agentes.
 
 Si prefieres hacerlo tú, en la terminal del proyecto:
 
 ```sh
-npx -y github:Tortillaa/prz-factory install .
+git clone --depth 1 https://github.com/Tortillaa/prz-factory.git .prz-factory-src
+node .prz-factory-src/bin/factory.mjs install .
+rm -rf .prz-factory-src      # en PowerShell: Remove-Item -Recurse -Force .prz-factory-src
 ```
 
 ### Paso 2. Qué ha quedado en tu proyecto
@@ -68,7 +70,7 @@ npx -y github:Tortillaa/prz-factory install .
 
 A partir de aquí, el comando de la fábrica es `node .prz-factory/bin/factory.mjs`. En esta guía se escribe `factory` para abreviar: si quieres teclear solo `factory`, ejecuta `npm link` dentro de `.prz-factory`. Comprueba que todo está bien con `node .prz-factory/bin/factory.mjs doctor`.
 
-Para actualizar la fábrica a su última versión, repite la línea de `npx`: reemplaza `.prz-factory/` y las skills, y no toca tu configuración.
+Para actualizar la fábrica a su última versión, repite las tres líneas de la instalación: reemplaza `.prz-factory/` y las skills, y no toca tu configuración.
 
 ### Paso 2b. El panel dentro de Orca (opcional)
 

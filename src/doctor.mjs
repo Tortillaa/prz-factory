@@ -46,7 +46,7 @@ export function doctor(cwd = process.cwd()) {
   // The CLI either lives in the repo (vendored by `factory install`) or is on PATH (npm link).
   const vendored = path.join(repoRoot(cwd), RUNTIME_DIR, 'bin', 'factory.mjs');
   const cliWhere = fs.existsSync(vendored) ? `${RUNTIME_DIR}/bin/factory.mjs (in the repo)` : factoryOnPath ? factoryOnPath.split(/\r?\n/)[0] : null;
-  add('factory CLI', !!cliWhere, cliWhere || 'not in the repo and not on PATH', 'run `npx -y github:Tortillaa/prz-factory install .` in the repo');
+  add('factory CLI', !!cliWhere, cliWhere || 'not in the repo and not on PATH', 'in the repo: git clone --depth 1 https://github.com/Tortillaa/prz-factory.git .prz-factory-src, then node .prz-factory-src/bin/factory.mjs install . and delete .prz-factory-src');
 
   try {
     const { file, exists, config } = loadConfig(root);

@@ -16,16 +16,21 @@ block is touched. Report one line per step: `✔ step · what happened`.
 
 ## 1 · Install
 
-The factory needs nothing installed beforehand: one command fetches it from GitHub and copies it
-into the project (Node 22+ and git are all it takes; GitHub access through `gh auth login` or the
-user's git credentials, since the repo is private).
+The factory needs nothing installed beforehand: clone it from GitHub into a scratch folder inside
+the project, let it copy itself in, and delete the clone (Node 22+ and git are all it takes; the
+repo is public, so no credentials). Do not use `npx`.
 
 ```text
-npx -y github:Tortillaa/prz-factory install . --json
+git clone --depth 1 https://github.com/Tortillaa/prz-factory.git .prz-factory-src
+node .prz-factory-src/bin/factory.mjs install . --json
+rm -rf .prz-factory-src          (PowerShell: Remove-Item -Recurse -Force .prz-factory-src)
 ```
 
+The clone goes inside the project so that deleting it stays inside the repo (the `delete-outside`
+guard refuses a delete outside it). Delete it even when `install` fails.
+
 If the project already has `.prz-factory/`, use the copy it has instead (`node .prz-factory/bin/factory.mjs
-install . --json` refreshes skills, hooks and config from it); run the `npx` line only to update
+install . --json` refreshes skills, hooks and config from it); run the clone lines only to update
 the factory to its latest version. From here on, `factory` means `node .prz-factory/bin/factory.mjs`
 when it is not on PATH.
 

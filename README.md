@@ -24,21 +24,23 @@ Además: [Despliegue](#despliegue) · [Plugin para Orca](#plugin-para-orca) · [
 
 - Node 22 o superior y git.
 - [Orca](https://www.onorca.dev/), para lanzar los agentes. El tablero y el CLI funcionan sin él.
-- Acceso a este repo en GitHub. Es privado: basta con `gh auth login` o tus credenciales de git.
+- Acceso a GitHub: el repo es público, `git clone` basta sin credenciales.
 - Opcional: el CLI de Grok (`irm https://x.ai/cli/install.ps1 | iex` en Windows), si algún rol corre en Grok.
 
-No hace falta clonar este repo ni instalar nada de forma global.
+No hace falta instalar nada de forma global: se clona este repo un momento dentro del proyecto, `install` copia la fábrica y la carpeta del clon se borra.
 
 ### Desplegar la fábrica en un proyecto
 
 Abre tu agente (Claude Code o Grok) en el repositorio del proyecto y pídele:
 
-> Instala prz-factory en este repositorio: ejecuta `npx -y github:Tortillaa/prz-factory install .` y después sigue la skill factory-onboard que se acaba de instalar.
+> Instala prz-factory en este repositorio: clona `https://github.com/Tortillaa/prz-factory.git` con `git clone --depth 1` en la carpeta `.prz-factory-src`, ejecuta `node .prz-factory-src/bin/factory.mjs install .`, borra `.prz-factory-src` y después sigue la skill factory-onboard que se acaba de instalar.
 
 O hazlo tú, en la terminal del proyecto:
 
 ```sh
-npx -y github:Tortillaa/prz-factory install .
+git clone --depth 1 https://github.com/Tortillaa/prz-factory.git .prz-factory-src
+node .prz-factory-src/bin/factory.mjs install .
+rm -rf .prz-factory-src      # en PowerShell: Remove-Item -Recurse -Force .prz-factory-src
 ```
 
 Eso deja la fábrica entera dentro del proyecto:
@@ -70,12 +72,12 @@ Y en una sesión de Claude Code dentro de Orca, en el proyecto: `/factory-run` (
 
 ### Actualizar o quitar
 
-- **Actualizar** a la última versión: repite la línea de `npx`. Reemplaza `.prz-factory/` y las skills gestionadas; no toca tu configuración ni una skill tuya con el mismo nombre.
+- **Actualizar** a la última versión: repite las tres líneas de la instalación. Reemplaza `.prz-factory/` y las skills gestionadas; no toca tu configuración ni una skill tuya con el mismo nombre.
 - **Quitar**: borra `.prz-factory/`, las carpetas de `.claude/skills/` que tienen un archivo `.factory-managed`, `.claude/hooks/factory-guard.mjs`, las entradas de `factory-guard` en `.claude/settings.json`, el bloque `prz-factory` de `CLAUDE.md` y `factory.config.json`.
 
 ### Publicar una versión de la fábrica
 
-Los cambios de este repo llegan a `main` por rama y pull request: el guard `protected-push` bloquea el push directo a `main` desde una sesión de agente. Una vez en `main`, cada proyecto la recibe al repetir la línea de `npx`.
+Los cambios de este repo llegan a `main` por rama y pull request: el guard `protected-push` bloquea el push directo a `main` desde una sesión de agente. Una vez en `main`, cada proyecto la recibe al repetir la instalación (`git clone` de `main`).
 
 ## Plugin para Orca
 

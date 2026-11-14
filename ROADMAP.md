@@ -185,6 +185,10 @@ Datos de `factory report` tras #8 y #9: 42 workers y 483 min, de los que la revi
 - [ ] **Avisos de aprobación fuera del tablero:** el hook `SessionStart` dice cuántos merges esperan a la persona y la web pone el número en el título de la pestaña.
 - [ ] **Tokens en `factory report`:** sumar el `usage` de las sesiones de Claude Code (`~/.claude/projects/<worktree>/*.jsonl`) por worker según su worktree y su ventana de tiempo. Grok, si guarda sesiones con uso.
 
+## Fase 16 · Instalar desde GitHub con git clone
+
+- [x] El repo es público: la instalación ya no usa `npx` sino `git clone --depth 1 https://github.com/Tortillaa/prz-factory.git .prz-factory-src`, `node .prz-factory-src/bin/factory.mjs install .` y borrar el clon. El clon va dentro del proyecto para que el guard `delete-outside` deje borrarlo. Actualizados README, GUIA, la skill `factory-onboard`, el aviso de `doctor` y CLAUDE.md; `test/readme.test.mjs` comprueba el comando y que no quede `npx`. Probado en un proyecto vacío: `doctor` en verde y sin restos del clon.
+
 ## Pendiente fuera del código
 
 - [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.

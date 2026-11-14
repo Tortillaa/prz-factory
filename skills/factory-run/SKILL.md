@@ -133,7 +133,7 @@ After every reconcile, read `factory status --json` and tell the user, once per 
            factory merge 12 --sha <sha> --human
   ```
 
-- **`needsYou`** — something is stuck: a spec that needs a decision, a card that bounced three
+- **`needsYou`** — something is stuck: a spec that needs a decision, a card that failed ten
   times, a worker that failed twice. Quote the question or the reason from the last comment and
   say what unblocks it (answer in a comment and move the card back to `spec`, `ready` or `building`).
 

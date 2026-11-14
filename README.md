@@ -116,7 +116,7 @@ Cada regla la hace cumplir el código, no la buena voluntad del agente. `factory
 | No inventar una decisión de producto: la tarjeta va a `blocked` con la pregunta | skills `factory-spec`, `factory-build`, `factory-review` |
 | El mínimo código que resuelve la tarjeta; el que no debería existir se devuelve | skills `ponytail` y `ponytail-review` |
 | Commits y comentarios en un formato único, con evidencias | `skills/factory-board/references/writing-standard.md` |
-| A la cuarta vuelta al Builder, o al segundo worker caído, la tarjeta para y espera a una persona | `sendBack` en `src/store.mjs`, `reclaim` en `src/run.mjs` |
+| A la décima ronda fallida, o al segundo worker caído, la tarjeta para y espera a una persona | `sendBack` en `src/store.mjs`, `reclaim` en `src/run.mjs` |
 
 Los guards (`hooks/factory-guard.mjs`) funcionan igual con Claude Code y con Grok.
 

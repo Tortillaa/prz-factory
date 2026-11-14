@@ -193,7 +193,7 @@ En el tablero verás la tarjeta moverse sola:
 4. **REVIEW → MERGE**, cuando los cuatro aprueban. El agente de merge lee el cambio y su comentario `[merge]` te dice qué cambia y, si te lo va a preguntar, por qué.
 5. **MERGE → DONE**, si el cambio es pequeño y no toca el negocio. Ya está en `main`. Si lo toca, pasa a **BLOCKED** con una solicitud de aprobación (paso 5).
 
-Si un reviewer encuentra un problema, la tarjeta vuelve a **BUILDING** con el hallazgo, el Builder lo arregla y el panel la revisa otra vez desde cero. A la cuarta vuelta sin converger, la fábrica para y te la manda a ti.
+Si un reviewer encuentra un problema, la tarjeta vuelve a **BUILDING** con el hallazgo, el Builder lo arregla y el panel la revisa otra vez desde cero. Si suma 10 rondas fallidas, la fábrica para y te la manda a ti.
 
 Qué mira cada reviewer:
 
@@ -276,7 +276,7 @@ factory cleanup --apply    # lo borra
 
 | Síntoma | Causa y solución |
 |---|---|
-| Una tarjeta rebota entre BUILDING y REVIEW | A la cuarta vuelta pasa sola a BLOCKED con una solicitud. Lee los hallazgos: suele faltar una decisión en la tarjeta. |
+| Una tarjeta rebota entre BUILDING y REVIEW | A la décima ronda fallida pasa sola a BLOCKED con una solicitud. Lee los hallazgos: suele faltar una decisión en la tarjeta. |
 | Una tarjeta está en BLOCKED y no sé por qué | Ábrela: el último comentario lo explica. |
 | Tu checkout de `main` tenía cambios sin commitear y la tarjeta pasó de MERGE a BLOCKED | Haz commit o stash y arrastra la tarjeta otra vez a MERGE: aterriza el mismo commit revisado. |
 | Un agente se ha quedado colgado | `factory status` marca los claims viejos con ⚠️. Di "status" al coordinador, o libérala con `factory reclaim <id>`. |

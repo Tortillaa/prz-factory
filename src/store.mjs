@@ -384,22 +384,22 @@ export function forgetOrphan(board, id, dispatch) {
   return card;
 }
 
-export const MAX_BOUNCES = 3;
+export const MAX_ROUNDS = 10;
 
 // Times a card was sent back to building from qa, review or the merge gate.
 export function bounces(card) {
   return card.history.filter((h) => h.to === 'building' && ['qa', 'review', 'merge'].includes(h.from)).length;
 }
 
-// Sends a card back to building, unless it has already bounced MAX_BOUNCES times: then the
-// loop is not converging, so it goes to blocked with needs-you for a person to look at.
+// Sends a card back to building, unless this is its MAX_ROUNDS-th failed round: then the loop
+// is not converging, so it goes to blocked with needs-you for a person to look at.
 export function sendBack(board, id, { who, role, text }) {
   const card = findCard(board, id);
   let to = 'building';
   let note = '';
-  if (bounces(card) >= MAX_BOUNCES) {
+  if (bounces(card) + 1 >= MAX_ROUNDS) {
     to = 'blocked';
-    note = `\n🙋 ${MAX_BOUNCES} vueltas a building sin converger: necesita a una persona.`;
+    note = `\n🙋 ${MAX_ROUNDS} rondas fallidas sin converger: necesita a una persona.`;
     if (!card.labels.includes('needs-you')) card.labels.push('needs-you');
   }
   commentCard(board, id, { role, text: text + note });

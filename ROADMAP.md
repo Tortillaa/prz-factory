@@ -175,7 +175,8 @@ La #8 (guard) y la #9 (hook `pre-push`) no convergían: cada ronda, el reviewer 
 
 Datos de `factory report` tras #8 y #9: 42 workers y 483 min, de los que la review se llevó 466 min (97 %) y 136 min en rondas ya cerradas. La #8 necesitó 10 rondas de panel y la #9, 4. El límite de vueltas (`MAX_BOUNCES`) no frena un bucle que pasa por blocked y vuelve.
 
-- [ ] **Presupuesto por tarjeta:** `review.maxRounds` (o `review.maxMinutes`) en `factory.config.json`. Al superarlo, `plan` no despacha otra ronda y la tarjeta pasa a blocked con `needs-you` y la pregunta "¿se recorta el alcance o se parte la tarjeta?".
+- [x] **Límite de rondas:** `store.MAX_ROUNDS = 10` (decisión del usuario, 2026-11-14). La décima ronda fallida pasa la tarjeta a blocked con `needs-you`, en vez de la cuarta vuelta de antes. Las rondas se cuentan sobre todo el historial, así que tras desbloquearla, el siguiente fallo vuelve a pararla.
+- [ ] **Presupuesto en minutos:** `review.maxMinutes` en `factory.config.json`, por si 10 rondas resultan caras. Al superarlo, `plan` no despacha otra ronda y la tarjeta pasa a blocked con la pregunta "¿se recorta el alcance o se parte la tarjeta?".
 - [ ] **Revisión incremental:** cada lente guarda `lastPassSha`. En la ronda siguiente, el spec del reviewer le pide revisar solo `lastPassSha..head` y sus hallazgos anteriores. Todas las lentes siguen aprobando el mismo head.
 - [ ] **Medir antes de optimizar las rondas cerradas:** `factory report --since <fecha>` para saber si los 136 min son anteriores a la parada de huérfanos. Si persisten, el reviewer comprueba que su lente sigue reservada antes de cada paso caro.
 - [ ] **Esfuerzo por lente:** `agents.review.lenses.<lens>` (por ejemplo `high` solo en security). Solo si el informe lo justifica.

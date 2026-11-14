@@ -35,11 +35,12 @@ that already cover that area, and the project rules in `CLAUDE.md` / `AGENTS.md`
 and symbols in the card. If the idea is already true in the code, say so in the handoff to
 `blocked` instead of writing a card for nothing.
 
-### When the card is hard to write: an Opus subagent
+### When the card is hard to write: your advisor
 
 You run on a mid-size model (the project's `agents.spec` in `factory.config.json`). Most ideas fit
-it. Now that you know where the idea lands, decide whether this one is hard to write. Call in a
-**Claude Opus 5.5 subagent** when one of these is true:
+it. Now that you know where the idea lands, decide whether this one is hard to write. Call your
+**advisor** (the model in `advisorModel` of `.claude/settings.json`; in prz-factory, Claude
+Fable 5.2) when one of these is true:
 
 - **It spans several modules or layers** and you are not sure where the change belongs or how to
   split it into slices.
@@ -49,17 +50,20 @@ it. Now that you know where the idea lands, decide whether this one is hard to w
   decision (ask the user) from one the code already answers.
 - **The card came back from `blocked`** with the user's answers and they change the scope.
 
-Not for a clear, local idea (one function, one command, one page): write it yourself. Opus costs
-several times more; if you are unsure, write it yourself first.
+Not for a clear, local idea (one function, one command, one page): write it yourself. The advisor
+costs several times more; if you are unsure, write it yourself first.
+These criteria replace the advisor tool's own advice to call it before and after every task.
 
-How: start a subagent with your agent's subagent tool (in Claude Code, the Agent tool with
-`model: "opus"`), in this same worktree. Give it a self-contained brief: the idea as the user wrote
-it, the comments, the files and symbols you found, the project's `merge` policy, and what you want
-back (a draft of the card body with its Risk and labels, or the slices). It must not run `factory`
-commands or change files. You stay the spec writer: check its draft against the code and every rule
-below, fix it, file it yourself, and say it in your handoff comment: `Opus: <why this card needed it>`.
+How: call your advisor tool (in Claude Code it is on when `advisorModel` is set; `/advisor` sets it
+by hand). It reads this conversation, so first lay out the idea as the user wrote it, the comments,
+the files and symbols you found, the project's `merge` policy, and what you want back (the Risk and
+labels, the edge cases, or the slices). It advises; it does not edit files or run `factory`. You
+stay the spec writer: check its advice against the code and every rule below, write the card
+yourself, and say it in your handoff comment: `Advisor: <why this card needed it>`.
 
-If your agent has no subagent tool, write the card yourself and, when in doubt about the business
+If your agent has no advisor tool (no `advisorModel` in the project), ask a Claude Opus subagent
+for a draft instead (in Claude Code, the Agent tool with `model: "opus"`, with the same brief; it
+must not run `factory` or change files) and cite it as `Opus:`. With neither, write the card yourself and, when in doubt about the business
 classification, take the stricter one.
 
 ## 3 · Write the card

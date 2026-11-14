@@ -130,8 +130,8 @@ Cada rol es un worker de Orca en su propio worktree. Carga su skill solo, por la
 | Rol | Trabaja en | Qué hace | Termina con | Skill | Modelo en este repo |
 |---|---|---|---|---|---|
 | **Coordinador** | — | Lanza a los demás con `factory dispatch`, para los que trabajan en una ronda cerrada, libera los terminales, reconcilia el tablero y te avisa de cada solicitud. Nunca redacta, construye, revisa ni mergea | — | `factory-run` | el de tu sesión |
-| **Spec Writer** | `spec` | Lee el código, recorta la idea, la redacta como tarjeta y clasifica su impacto en el negocio | `handoff` a `ready` o `blocked` | `factory-spec` + `ponytail` | Claude Sonnet 5.5; subagente Opus 5.5 si la tarjeta es difícil |
-| **Builder** | `building` | Construye la tarjeta en su rama, con los tests primero | `handoff` a `review` o `blocked` | `factory-build` + `ponytail` | Claude Sonnet 5.5; subagente Opus 5.5 para lo difícil |
+| **Spec Writer** | `spec` | Lee el código, recorta la idea, la redacta como tarjeta y clasifica su impacto en el negocio | `handoff` a `ready` o `blocked` | `factory-spec` + `ponytail` | Claude Sonnet 5.5; advisor Fable 5.2 si la tarjeta es difícil |
+| **Builder** | `building` | Construye la tarjeta en su rama, con los tests primero | `handoff` a `review` o `blocked` | `factory-build` + `ponytail` | Claude Sonnet 5.5; advisor Fable 5.2 para lo difícil |
 | **Reviewers**, uno por lente | `review` | Revisan el mismo commit en paralelo: `qa`, `security`, `code` y `ops`. Una tarjeta de riesgo Low sin etiqueta de negocio solo pasa por `qa` y `code` | `verdict`: pass, fail o escalar | `factory-review` + `ponytail-review` | Grok 4.7, esfuerzo alto |
 | **Agente de merge** | `merge` | Comprueba si el cambio toca el negocio, te lo explica y lanza el merge gate | `merge`, o `handoff` a `blocked` | `factory-merge` | Claude Haiku 5.5 |
 | **QA** | `qa` | Solo para tarjetas con la etiqueta `qa`: prueba lo que ya está en la rama base | `merge` (cierra la tarjeta) | `factory-qa` | Claude |

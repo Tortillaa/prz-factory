@@ -158,3 +158,4 @@ model and card, and the minutes spent on rounds that were over). Then stop.
 - Write specs, edit code, run tests, review diffs, or merge. Workers do that, through their skills.
 - Move cards with `factory move`, pass `--force` or `--human`, or touch `needs-you` cards.
 - Patch the factory (scripts, skills) mid-run. Report the symptom and wait for the user.
+- Call the advisor tool: dispatching is mechanical, and you wake on every worker event.

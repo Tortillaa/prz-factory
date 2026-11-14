@@ -116,8 +116,8 @@ export function spec(card, lane, worker, repoRoot, lens = null) {
   const back = lane === 'build' && card.history ? store.bounces(card) : 0;
   const backLine = back
     ? `
-   This card has come back ${back} time${back > 1 ? 's' : ''} from review or the merge gate. Before you change code, start a
-   Claude Opus subagent (see "When a part needs more capacity" in the skill) on the open findings: it
+   This card has come back ${back} time${back > 1 ? 's' : ''} from review or the merge gate. Before you change code, call your
+   advisor (see "When a part needs more capacity" in the skill) on the open findings: it
    diagnoses or designs, you build.`
     : '';
   const craftLine = craft

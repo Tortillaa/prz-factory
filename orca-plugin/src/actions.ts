@@ -40,10 +40,6 @@ export async function runAction(board: { key: string; file: string }, req: CardA
   switch (req.action) {
     case 'get':
       return go('show', [], [id])
-    case 'template':
-      return go('template', [], [])
-    case 'add':
-      return go('add', [...opt('--body', req.body), ...flags('--label', req.labels), ...deps(req.blockedBy), ...opt('--column', req.column)], [req.title])
     case 'edit':
       // the CLI's --label replaces all labels and has no way to say "none": refuse instead of answering OK without doing it
       if (req.labels?.length === 0) return { error: 'the factory CLI cannot clear all labels of a card; send the labels to keep' }

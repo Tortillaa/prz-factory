@@ -315,88 +315,11 @@ test('a button stays off while its request runs, so a double press sends once', 
   await view.unmount()
 })
 
-const calls: { add: unknown[]; template: number } = { add: [], template: 0 }
-const addHost = (add: (i: unknown) => object) => {
-  calls.add = []
-  calls.template = 0
-  return mockHost({
-    requests: {
-      'boards.get': () => ({ boards: [board('shop')] }),
-      'card.add': (i: unknown) => (calls.add.push(i), add(i)),
-      'card.template': () => (calls.template++, { template: '## Problem\n<x>' })
-    }
-  })
-}
-
-const unfold = (view: any) => view.press({ text: '+ Nueva idea' })
-
-test('Te esperan and En curso come before a folded + Nueva idea, which opens on press', async () => {
-  const view = await mount(panel, { host: addHost(() => ({})) })
+test('the panel offers no way to create cards: it points at the agent chat', async () => {
+  const view = await mount(panel, { host: mockHost({ requests: { 'boards.get': () => ({ boards: [board('shop')] }) } }) })
+  assert.ok(view.find({ text: 'Pide cambios al agente de Orca' }))
+  for (const text of ['+ Nueva idea', 'Nueva idea', 'Tarjeta completa']) assert.equal(view.find({ text }), null)
   assert.equal(view.find({ label: '+ Nueva idea' }), null)
-  const tree = JSON.stringify(view.tree())
-  assert.ok(tree.indexOf('Te esperan') < tree.indexOf('En curso') && tree.indexOf('En curso') < tree.indexOf('+ Nueva idea'))
-  await unfold(view)
-  assert.ok(view.find({ label: '+ Nueva idea' }))
-  assert.ok(view.find({ text: 'Tarjeta completa' }))
-  await view.unmount()
-  const none = await mount(panel, { host: mockHost({ requests: { 'boards.get': () => ({ boards: [] }) } }) })
-  assert.equal(none.find({ label: '+ Nueva idea' }), null)
-  await none.unmount()
-})
-
-test('an idea goes to spec as typed, then the field is empty; blank text is not sent', async () => {
-  const blank = await mount(panel, { host: addHost(() => ({ id: 9 })) })
-  await unfold(blank)
-  await blank.type({ label: '+ Nueva idea' }, '  \n ')
-  await assert.rejects(blank.press({ text: 'Añadir idea' }), /disabled/)
-  assert.deepEqual(calls.add, [])
-  await blank.unmount()
-  const view = await mount(panel, { host: addHost(() => ({ id: 9 })) })
-  await unfold(view)
-  await view.type({ label: '+ Nueva idea' }, 'Quiero un botón\ncon dos líneas')
-  await view.press({ text: 'Añadir idea' })
-  assert.deepEqual(calls.add, [{ board: '/r/shop/.git', title: 'Quiero un botón\ncon dos líneas', column: 'spec' }])
-  assert.equal(view.find({ label: '+ Nueva idea' }), null) // folded again
-  await unfold(view)
-  await assert.rejects(view.press({ text: 'Añadir idea' }), /disabled/) // and empty
-  assert.deepEqual(view.errors, [])
-  await view.unmount()
-})
-
-test('a failed idea shows its error and keeps the text', async () => {
-  const view = await mount(panel, { host: addHost(() => ({ error: 'sin CLI' })) })
-  await unfold(view)
-  await view.type({ label: '+ Nueva idea' }, 'x')
-  await view.press({ text: 'Añadir idea' })
-  assert.ok(JSON.stringify(view.tree()).includes('sin CLI'))
-  assert.ok(view.find({ label: '+ Nueva idea' }))
-  await view.press({ text: 'Añadir idea' }) // still enabled: the text was kept
-  assert.equal(calls.add.length, 2)
-  await view.unmount()
-})
-
-test('a full card starts from the CLI template, defaults to backlog, and keeps what was typed on error', async () => {
-  const lint = 'a new card in ready must pass lint:\n- falta la sección "## Risk"'
-  const view = await mount(panel, { host: addHost(() => (calls.add.length === 2 ? { error: lint } : { id: 9 })) })
-  await unfold(view)
-  await view.press({ text: 'Tarjeta completa' })
-  assert.equal(calls.template, 1)
-  await view.type({ label: 'Título' }, 'T')
-  await view.press({ text: 'Guardar' })
-  assert.deepEqual(calls.add[0], { board: '/r/shop/.git', title: 'T', body: '## Problem\n<x>', column: 'backlog' })
-  assert.equal(view.find({ label: 'Título' }), null) // closed on success
-  await unfold(view)
-  await view.press({ text: 'Tarjeta completa' })
-  await view.type({ label: 'Título' }, 'T')
-  await view.select({ label: 'Guardar en' }, 'ready')
-  await view.press({ text: 'Guardar' })
-  assert.deepEqual(calls.add[1], { board: '/r/shop/.git', title: 'T', body: '## Problem\n<x>', column: 'ready' })
-  assert.ok(JSON.stringify(view.tree()).includes(JSON.stringify(lint).slice(1, -1))) // the whole message, not a cut title
-  assert.ok(view.find({ label: 'Título' }))
-  await view.press({ text: 'Guardar' }) // corrected: succeeds and closes
-  assert.deepEqual(calls.add[2], calls.add[1]) // the title, body and column survived the error
-  assert.equal(view.find({ label: 'Título' }), null)
-  assert.deepEqual(view.errors, [])
   await view.unmount()
 })
 

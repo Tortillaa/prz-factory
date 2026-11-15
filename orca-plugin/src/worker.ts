@@ -117,11 +117,9 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     return board ? runAction(board, { action, ...input } as CardAction) : { error: `unknown board ${input.board}` }
   }
   orca.panels.handle('card.get', (input) => act('get', input))
-  orca.panels.handle('card.add', (input) => act('add', input))
   orca.panels.handle('card.edit', (input) => act('edit', input))
   orca.panels.handle('card.move', (input) => act('move', input))
   orca.panels.handle('card.comment', (input) => act('comment', input))
   orca.panels.handle('card.approve', (input) => act('approve', input))
-  orca.panels.handle('card.template', (input) => act('template', input))
   await snapshot()
 }

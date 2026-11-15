@@ -7,13 +7,10 @@ declare module 'orca' {
     'boards.get': { output: BoardsSnapshot }
     /** One card action: the worker runs the repo's factory CLI and returns its JSON (or { error }). */
     'card.get': { input: CardInputs['get']; output: CardReply }
-    'card.add': { input: CardInputs['add']; output: CardReply }
     'card.edit': { input: CardInputs['edit']; output: CardReply }
     'card.move': { input: CardInputs['move']; output: CardReply }
     'card.comment': { input: CardInputs['comment']; output: CardReply }
     'card.approve': { input: CardInputs['approve']; output: CardReply }
-    /** The card body template, asked of the CLI (`factory template --json`): { template } or { error }. */
-    'card.template': { input: CardInputs['template']; output: CardReply }
   }
   interface PluginPanelEvents {
     /** Posted to every open panel when a board file changes. */
@@ -64,19 +61,15 @@ export type CardReply = { error?: string; labels?: string[]; run?: { branch?: st
 /** A card request, as the worker's handlers pass it to src/actions.ts. */
 export type CardAction =
   | ({ action: 'get' } & CardInputs['get'])
-  | ({ action: 'add' } & CardInputs['add'])
   | ({ action: 'edit' } & CardInputs['edit'])
   | ({ action: 'move' } & CardInputs['move'])
   | ({ action: 'comment' } & CardInputs['comment'])
   | ({ action: 'approve' } & CardInputs['approve'])
-  | ({ action: 'template' } & CardInputs['template'])
 
 export type CardInputs = {
   get: { board: string; id: number }
-  add: { board: string; title: string; body?: string; labels?: string[]; blockedBy?: number[]; column?: string }
   edit: { board: string; id: number; title?: string; body?: string; labels?: string[]; blockedBy?: number[] }
   move: { board: string; id: number; column: string; before?: number; force?: boolean }
   comment: { board: string; id: number; text: string }
   approve: { board: string; id: number; sha?: string }
-  template: { board: string }
 }

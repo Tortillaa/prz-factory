@@ -62,8 +62,8 @@ test('no plugin change, HEAD at the merge-base, missing base or no repo: nothing
   assert.equal(versionProblem(fs.mkdtempSync(path.join(os.tmpdir(), 'pv-')), 'main'), null);
 });
 
-test('this repo: the plugin version is 0.7.1 and bumped when the plugin changed', () => {
-  assert.equal(JSON.parse(fs.readFileSync(path.join(root, MANIFEST), 'utf8')).version, '0.7.1');
+test('this repo: the plugin version is 0.8.0 and bumped when the plugin changed', () => {
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root, MANIFEST), 'utf8')).version, '0.8.0');
   assert.equal(versionProblem(root, loadConfig(root).config.baseBranch), null);
 });
 

@@ -44,18 +44,12 @@ const confirming = atom(false)
 const outcome = atom<{ merged: boolean; text: string } | null>(null)
 /** Actions in flight on this sheet: each button is disabled while its own request runs. */
 const busy = atom<string[]>([])
-/** The new-work form above the columns: the idea text, and the full-card editor when open. */
-const idea = atom('')
-const fresh = atom<{ title: string; body: string; column: string } | null>(null)
-const freshError = atom('')
-let adding = false
 /** The cover: search text, the card whose approval awaits confirmation, answers being typed, and the last worker error. */
 const query = atom('')
 const approving = atom<string | null>(null)
 const replies = atom<Record<string, string>>({})
 /** Cover state is per repo and card: two repos can both have a #5. */
 const slot = (board: string, id: number) => `${board}#${id}`
-const adder = atom(false)
 const coverError = atom('')
 
 /** Cover actions show the worker's error as it came. */
@@ -172,26 +166,6 @@ const approve = (at: At, sha: string) =>
     await load(at)
   })
 
-const add = async (board: string, input: { title: string; body?: string; column: string }, done: () => void) => {
-  if (adding) return
-  adding = true
-  try {
-    const reply = await plugin.request('card.add', { board, ...input })
-    if (reply.error) return set(freshError, reply.error)
-    set(freshError, '')
-    done()
-  } finally {
-    adding = false
-  }
-}
-
-async function openFresh(board: string): Promise<void> {
-  set(freshError, '')
-  const reply = await plugin.request('card.template', { board })
-  set(fresh, { title: '', body: reply.error ? '' : String(reply.template), column: 'backlog' })
-  if (reply.error) set(freshError, reply.error)
-}
-
 const risk = (body: string) => body.match(/^## Risk\s*\n\s*(\w+)/m)?.[1] ?? 'sin riesgo'
 const lensMark = (v?: { verdict?: string; worker?: string }) => (v?.verdict === 'pass' ? '✓' : v?.verdict === 'fail' ? '✖' : v?.worker ? '…' : '·')
 
@@ -304,13 +278,10 @@ export default function Panel() {
   const board = snap.boards.find((b) => b.key === pick) ?? snap.boards[0]
   const at = read(opened)
   if (at) return <CardSheet at={at} />
-  const text = read(idea)
-  const form = read(fresh)
-  const formError = read(freshError)
   const approve = board.cards.filter((c) => c.labels.includes('merge-approval') && c.sha)
   const answer = board.cards.filter((c) => c.labels.includes('needs-you') && !c.labels.includes('merge-approval'))
   const running = board.cards.filter((c) => c.assignee || c.panel)
-  const [q, confirmId, typed, coverErr, adderOpen] = [read(query), read(approving), read(replies), read(coverError), read(adder)]
+  const [q, confirmId, typed, coverErr] = [read(query), read(approving), read(replies), read(coverError)]
   const needle = q.trim().toLowerCase()
   const shown = needle ? board.cards.filter((c) => String(c.id) === needle.replace(/^#/, '') || c.title.toLowerCase().includes(needle)) : board.cards
   return (
@@ -375,29 +346,7 @@ export default function Panel() {
           </List>
         </Stack>
       )}
-      {adderOpen || text || form || formError ? (
-        <Stack gap="sm">
-          <Textarea label="+ Nueva idea" value={text} onChange={(v) => set(idea, v)} />
-          <Row gap="xs">
-            <Button disabled={!text.trim()} onPress={() => add(board.key, { title: text, column: 'spec' }, () => (set(idea, ''), set(adder, false)))}>Añadir idea</Button>
-            {!form && <Button variant="ghost" onPress={() => openFresh(board.key)}>Tarjeta completa</Button>}
-          </Row>
-          {formError && <Callout tone="danger" title={formError} />}
-          {form && (
-            <Stack gap="sm">
-              <Input label="Título" value={form.title} onChange={(v) => set(fresh, { ...form, title: v })} />
-              <Textarea label="Cuerpo" value={form.body} rows={12} onChange={(v) => set(fresh, { ...form, body: v })} />
-              <Select label="Guardar en" value={form.column} options={['backlog', 'ready'].map((value) => ({ value, label: value }))} onChange={(column) => set(fresh, { ...form, column })} />
-              <Row gap="xs">
-                <Button onPress={() => add(board.key, form, () => (set(fresh, null), set(adder, false)))}>Guardar</Button>
-                <Button variant="ghost" onPress={() => (set(fresh, null), set(freshError, ''))}>Cancelar</Button>
-              </Row>
-            </Stack>
-          )}
-        </Stack>
-      ) : (
-        <Button variant="ghost" onPress={() => set(adder, true)}>+ Nueva idea</Button>
-      )}
+      <Text muted>Pide cambios al agente de Orca</Text>
       <Input label="Buscar" value={q} onChange={(v) => set(query, v)} />
       {COLUMNS.map((column) => {
         const cards = shown.filter((c) => c.column === column)

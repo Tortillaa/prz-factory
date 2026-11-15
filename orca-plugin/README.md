@@ -10,7 +10,7 @@ an agent or the web board moved it. "Web board" opens the `factory serve` of tha
   folder to post `boards.changed`. It also feeds the `waiting` status bar item ("1 te espera", "N te esperan": cards in
   `blocked`); that item keeps the worker alive, since Orca stops an idle worker and its watchers with it.
 - `src/boards.ts`: discovery and reading, plain Node (mirrors `src/store.mjs#resolveBoardPath`).
-- `src/panel.tsx`: the panel (components UI). `src/protocol.ts`: the panel ↔ worker contract.
+- `src/panel.tsx`: the panel (components UI). `src/protocol.ts`: the panel ↔ worker contract. The card sheet reads, comments, moves (a refused move offers Forzar), edits title and body, and approves a held merge after a confirmation; each button is off while its request runs, and a late `card.get` for another card is dropped.
 
 It never writes `board.json`. Besides `boards.get`, the worker answers six card requests, each carrying
 the board's `key` (`BoardView.key`) and running that repo's CLI with `--json` (`src/actions.ts`:

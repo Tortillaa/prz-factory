@@ -8,6 +8,7 @@ import {
   Collapsible,
   EmptyState,
   host,
+  Input,
   List,
   Markdown,
   ListItem,
@@ -35,6 +36,13 @@ const opened = atom<{ board: string; id: number } | null>(null)
 const detail = atom<CardReply | null>(null)
 const draft = atom('')
 const failure = atom('')
+/** What the sheet is doing: a refused move (to offer Forzar), the edit in progress, an approval awaiting confirmation, its result. */
+const refused = atom<{ column: string; message: string } | null>(null)
+const editing = atom<{ title: string; body: string } | null>(null)
+const confirming = atom(false)
+const outcome = atom<{ merged: boolean; text: string } | null>(null)
+/** Actions in flight on this sheet: each button is disabled while its own request runs. */
+const busy = atom<string[]>([])
 
 type Sheet = {
   id: number
@@ -42,6 +50,7 @@ type Sheet = {
   column: string
   labels: string[]
   body: string
+  run?: { branch?: string; reviewedSha?: string }
   lint: { severity: string; message: string }[]
   unmet: number[]
   panel?: { lenses?: Record<string, { verdict?: string; worker?: string }> }
@@ -49,21 +58,87 @@ type Sheet = {
   history: { at: string; from?: string; to: string; by?: string }[]
 }
 
-function open(next: { board: string; id: number } | null): void {
+type At = { board: string; id: number }
+// A late answer must not land on another card: `sheetGen` changes with the open card, `loadGen` with every card.get.
+let sheetGen = 0
+let loadGen = 0
+let pending = new Set<string>()
+
+function load(at: At): Promise<void> {
+  const [sheet, mine] = [sheetGen, ++loadGen]
+  return plugin.request('card.get', at).then((card) => {
+    if (sheet !== sheetGen || mine !== loadGen || (!card.error && card.id !== at.id)) return
+    set(detail, card)
+  })
+}
+
+function open(next: At | null): void {
+  sheetGen++
+  pending = new Set()
   set(opened, next)
   set(detail, null)
   set(draft, '')
   set(failure, '')
-  if (next) void plugin.request('card.get', next).then((card) => set(detail, card))
+  set(refused, null)
+  set(editing, null)
+  set(confirming, false)
+  set(outcome, null)
+  set(busy, [])
+  if (next) void load(next)
 }
 
-async function comment(at: { board: string; id: number }, text: string): Promise<void> {
-  const reply = await plugin.request('card.comment', { ...at, text })
-  if (reply.error) return set(failure, reply.error)
-  set(failure, '')
-  set(draft, '')
-  set(detail, await plugin.request('card.get', at))
+/** Runs one request of the sheet at a time per button; `live()` is false once another card is open. */
+async function act(name: string, run: (live: () => boolean) => Promise<void>): Promise<void> {
+  const [mine, sheet] = [pending, sheetGen]
+  if (mine.has(name)) return
+  mine.add(name)
+  set(busy, [...mine])
+  try {
+    await run(() => sheet === sheetGen)
+  } finally {
+    mine.delete(name)
+    if (mine === pending) set(busy, [...mine])
+  }
 }
+
+const comment = (at: At, text: string) =>
+  act('comment', async (live) => {
+    const reply = await plugin.request('card.comment', { ...at, text })
+    if (!live()) return
+    if (reply.error) return set(failure, `No se pudo comentar: ${reply.error}`)
+    set(failure, '')
+    set(draft, '')
+    await load(at)
+  })
+
+const move = (at: At, column: string, force?: true) =>
+  act('move', async (live) => {
+    const reply = await plugin.request('card.move', force ? { ...at, column, force } : { ...at, column })
+    if (!live()) return
+    set(refused, reply.error ? { column, message: reply.error } : null)
+    if (!reply.error) await load(at)
+  })
+
+const save = (at: At, edit: { title: string; body: string }) =>
+  act('save', async (live) => {
+    const reply = await plugin.request('card.edit', { ...at, ...edit })
+    if (!live()) return
+    if (reply.error) return set(failure, `No se pudo guardar: ${reply.error}`)
+    set(failure, '')
+    set(editing, null)
+    await load(at)
+  })
+
+const approve = (at: At, sha: string) =>
+  act('approve', async (live) => {
+    const reply = await plugin.request('card.approve', { ...at, sha })
+    if (!live()) return
+    set(confirming, false)
+    if (reply.error) return set(failure, `No se pudo mergear: ${reply.error}`)
+    set(failure, '')
+    set(outcome, { merged: reply.status === 'merged', text: `${reply.status}: ${reply.message}` })
+    await load(at)
+  })
 
 const risk = (body: string) => body.match(/^## Risk\s*\n\s*(\w+)/m)?.[1] ?? 'sin riesgo'
 const lensMark = (v?: { verdict?: string; worker?: string }) => (v?.verdict === 'pass' ? '✓' : v?.verdict === 'fail' ? '✖' : v?.worker ? '…' : '·')
@@ -72,6 +147,11 @@ function CardSheet({ at }: { at: { board: string; id: number } }) {
   const card = read(detail)
   const text = read(draft)
   const error = read(failure)
+  const working = read(busy)
+  const refusal = read(refused)
+  const edit = read(editing)
+  const confirm = read(confirming)
+  const result = read(outcome)
   const back = (
     <Button size="sm" variant="ghost" icon="previous" onPress={() => open(null)}>
       Volver
@@ -81,6 +161,8 @@ function CardSheet({ at }: { at: { board: string; id: number } }) {
   if (card.error) return <Stack gap="md">{back}<Callout tone="danger" title={`No se pudo leer #${at.id}: ${card.error}`} /></Stack>
   const c = card as unknown as Sheet
   const lenses = Object.entries(c.panel?.lenses ?? {})
+  const sha = c.run?.reviewedSha
+  const canApprove = c.labels.includes('merge-approval') && !!c.run?.branch && !!sha
   return (
     <Stack gap="md">
       {back}
@@ -93,7 +175,39 @@ function CardSheet({ at }: { at: { board: string; id: number } }) {
       </Row>
       {c.column !== 'spec' && c.lint.map((i, n) => <Callout key={String(n)} tone={i.severity === 'error' ? 'danger' : 'warning'} title={i.message} />)}
       {lenses.length > 0 && <Text>{`Panel de revisión: ${lenses.map(([l, v]) => `${l} ${lensMark(v)}`).join(' · ')}`}</Text>}
-      <Markdown content={c.body || '(sin descripción)'} />
+      {edit ? (
+        <Stack gap="sm">
+          <Input label="Título" value={edit.title} onChange={(v) => set(editing, { ...edit, title: v })} />
+          <Textarea label="Cuerpo" value={edit.body} rows={12} onChange={(v) => set(editing, { ...edit, body: v })} />
+          <Row gap="xs">
+            <Button disabled={working.includes('save')} onPress={() => save(at, edit)}>Guardar</Button>
+            <Button variant="ghost" onPress={() => (set(editing, null), set(failure, ''))}>Cancelar</Button>
+          </Row>
+        </Stack>
+      ) : (
+        <>
+          <Markdown content={c.body || '(sin descripción)'} />
+          <Row gap="xs">
+            <Button size="sm" variant="ghost" onPress={() => set(editing, { title: c.title, body: c.body })}>Editar</Button>
+            <Select label="Mover a" value={c.column} options={COLUMNS.map((value) => ({ value, label: value }))} disabled={working.includes('move')} onChange={(column) => column !== c.column && move(at, column)} />
+          </Row>
+        </>
+      )}
+      {refusal && (
+        <Callout tone="danger" title={`No se pudo mover a ${refusal.column}: ${refusal.message}`}>
+          <Button size="sm" disabled={working.includes('move')} onPress={() => move(at, refusal.column, true)}>Forzar</Button>
+        </Callout>
+      )}
+      {canApprove && !confirm && <Button variant="ghost" onPress={() => set(confirming, true)}>Aprobar y mergear</Button>}
+      {canApprove && confirm && (
+        <Callout tone="warning" title={`¿Has revisado ${c.run!.branch} en ${sha!.slice(0, 8)}? El merge gate ejecutará verify y, si pasa, la mergeará en la rama base.`}>
+          <Row gap="xs">
+            <Button disabled={working.includes('approve')} onPress={() => approve(at, sha!)}>Confirmar merge</Button>
+            <Button variant="ghost" onPress={() => set(confirming, false)}>Cancelar</Button>
+          </Row>
+        </Callout>
+      )}
+      {result && <Callout tone={result.merged ? 'success' : 'warning'} title={result.text} />}
       <Collapsible title={`Comentarios (${c.comments.length})`} defaultOpen>
         {c.comments.map((m, n) => (
           <Card key={String(n)} title={`[${m.role}]`}>
@@ -106,8 +220,8 @@ function CardSheet({ at }: { at: { board: string; id: number } }) {
         {c.history.map((h, n) => <Text key={String(n)} size="xs">{`${h.from ? `${h.from} → ` : ''}${h.to}${h.by ? ` (${h.by})` : ''}`}</Text>)}
       </Collapsible>
       <Textarea label="Comentario" value={text} onChange={(v) => set(draft, v)} />
-      {error && <Callout tone="danger" title={`No se pudo comentar: ${error}`} />}
-      <Button disabled={!text.trim()} onPress={() => comment(at, text)}>Comentar</Button>
+      {error && <Callout tone="danger" title={error} />}
+      <Button disabled={!text.trim() || working.includes('comment')} onPress={() => comment(at, text)}>Comentar</Button>
     </Stack>
   )
 }

@@ -161,3 +161,116 @@ test('a failing card.get shows its error and Volver still works', async () => {
   assert.ok(view.find({ label: '#3 Mail sender' }))
   await view.unmount()
 })
+
+const held = (sha = 'abc1234def') => sheet({ column: 'blocked', labels: ['needs-you', 'merge-approval'], run: { branch: 'factory/3-x', reviewedSha: sha } })
+const actHost = (extra: Record<string, (i: any) => unknown>, get: () => object = () => sheet()) =>
+  mockHost({ requests: { 'boards.get': () => ({ boards: [board('shop')] }), 'card.get': get, ...extra } })
+const openSheet = async (host: ReturnType<typeof mockHost>) => {
+  const view = await mount(panel, { host })
+  await view.press({ label: '#3 Mail sender' })
+  return view
+}
+
+test('Mover a sends card.move once without force; a refusal shows its message and Forzar is the only way to force', async () => {
+  const sent: any[] = []
+  let reply: object = { error: 'blocked by #2' }
+  const view = await openSheet(actHost({ 'card.move': (i) => (sent.push(i), reply) }))
+  await view.select({ label: 'Mover a' }, 'done')
+  assert.deepEqual(sent, [{ board: '/r/shop/.git', id: 3, column: 'done' }])
+  assert.match(view.summary().join(' '), /blocked by #2/)
+  reply = {}
+  await view.press({ text: 'Forzar' })
+  assert.deepEqual(sent[1], { board: '/r/shop/.git', id: 3, column: 'done', force: true })
+  assert.equal(sent.length, 2)
+  assert.equal(view.find({ text: 'Forzar' }), null)
+  await view.unmount()
+})
+
+test('Editar sends title and body and shows them; Cancelar sends nothing', async () => {
+  const sent: any[] = []
+  let now = sheet()
+  const view = await openSheet(actHost({ 'card.edit': (i) => (sent.push(i), (now = sheet({ title: i.title, body: i.body })), {}) }, () => now))
+  await view.press({ text: 'Editar' })
+  await view.type({ label: 'Título' }, 'Otro')
+  await view.press({ text: 'Cancelar' })
+  assert.equal(sent.length, 0)
+  await view.press({ text: 'Editar' })
+  await view.type({ label: 'Título' }, 'Nuevo')
+  await view.type({ label: 'Cuerpo' }, 'Cuerpo nuevo')
+  await view.press({ text: 'Guardar' })
+  assert.deepEqual(sent, [{ board: '/r/shop/.git', id: 3, title: 'Mail senderNuevo', body: sheet().body + 'Cuerpo nuevo' }])
+  assert.match(view.summary().join(' ') + JSON.stringify(view.tree()), /#3 Mail senderNuevo[\s\S]*Cuerpo nuevo/)
+  await view.unmount()
+})
+
+test('Aprobar y mergear needs merge-approval, a branch and a sha, asks first, and reports a status that is not merged', async () => {
+  for (const card of [sheet(), held(''), sheet({ labels: ['merge-approval'] })]) {
+    const view = await openSheet(actHost({}, () => card))
+    assert.equal(view.find({ text: 'Aprobar y mergear' }), null)
+    await view.unmount()
+  }
+  const sent: any[] = []
+  const view = await openSheet(actHost({ 'card.approve': (i) => (sent.push(i), { status: 'verify-failed', message: 'npm test falló' }) }, () => held()))
+  await view.press({ text: 'Aprobar y mergear' })
+  assert.equal(sent.length, 0)
+  assert.match(view.summary().join(' '), /factory\/3-x en abc1234d/)
+  await view.press({ text: 'Confirmar merge' })
+  assert.deepEqual(sent, [{ board: '/r/shop/.git', id: 3, sha: 'abc1234def' }])
+  assert.match(view.summary().join(' '), /verify-failed: npm test falló/)
+  await view.unmount()
+})
+
+test('a CLI error in edit or approve is shown as it came and the sheet stays usable', async () => {
+  const view = await openSheet(actHost({ 'card.edit': () => ({ error: 'lint: falta Risk' }), 'card.approve': () => ({ error: 'sha moved' }) }, () => held()))
+  await view.press({ text: 'Editar' })
+  await view.press({ text: 'Guardar' })
+  assert.match(view.summary().join(' '), /lint: falta Risk/)
+  assert.ok(view.find({ text: 'Guardar' }))
+  await view.press({ text: 'Cancelar' })
+  await view.press({ text: 'Aprobar y mergear' })
+  await view.press({ text: 'Confirmar merge' })
+  assert.match(view.summary().join(' '), /sha moved/)
+  assert.ok(view.find({ text: 'Aprobar y mergear' }))
+  await view.unmount()
+})
+
+const tick = () => new Promise((r) => setTimeout(r, 5))
+
+test('a card.get that arrives late for another card is dropped, and actions use the card shown', { timeout: 5000 }, async () => {
+  const sent: any[] = []
+  const get = async (i: { id: number }) => {
+    if (i.id === 3) await tick(), await tick() // card 3's answer lands after card 4's
+    return sheet({ id: i.id, title: i.id === 3 ? 'Mail sender' : 'Pay' })
+  }
+  const view = await mount(panel, { host: actHost({ 'card.comment': (i) => (sent.push(i), {}) }, get as never) })
+  await Promise.all([
+    view.press({ label: '#3 Mail sender' }),
+    (async () => (await tick(), await view.press({ text: 'Volver' }), await view.press({ label: '#4 Pay' })))()
+  ])
+  await tick()
+  await tick()
+  const shown = view.summary().join(' ') + JSON.stringify(view.tree())
+  assert.match(shown, /#4 Pay/)
+  assert.doesNotMatch(shown, /#3 Mail sender"/)
+  await view.type({ label: 'Comentario' }, 'hola')
+  await view.press({ text: 'Comentar' })
+  assert.equal(sent[0].id, 4)
+  await view.unmount()
+})
+
+test('an answer for another card than the one open is never shown', { timeout: 5000 }, async () => {
+  const view = await mount(panel, { host: actHost({}, () => sheet({ id: 4, title: 'Pay' })) })
+  await view.press({ label: '#3 Mail sender' })
+  assert.ok(view.find({ text: /Cargando #3/ }))
+  assert.equal(view.find({ text: 'Comentar' }), null)
+  await view.unmount()
+})
+
+test('a button stays off while its request runs, so a double press sends once', { timeout: 5000 }, async () => {
+  const sent: any[] = []
+  const view = await openSheet(actHost({ 'card.comment': async (i) => (sent.push(i), await tick(), {}) }))
+  await view.type({ label: 'Comentario' }, 'hola')
+  await Promise.all([view.press({ text: 'Comentar' }), view.press({ text: 'Comentar' })])
+  assert.equal(sent.length, 1)
+  await view.unmount()
+})

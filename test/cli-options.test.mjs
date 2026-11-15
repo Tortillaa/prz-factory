@@ -103,3 +103,19 @@ test('factory serve writes serve.json next to the board and removes it on SIGTER
   // Windows kills the process without running handlers; there a stale file is told apart by its pid.
   if (process.platform !== 'win32') assert.ok(!fs.existsSync(info));
 });
+
+test('factory serve leaves serve.json alone when a newer serve rewrote it', { skip: process.platform === 'win32' }, async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-'));
+  const info = path.join(dir, 'serve.json');
+  const child = spawn(process.execPath, [CLI, 'serve', '--port', String(20000 + Math.floor(Math.random() * 20000))], {
+    env: { ...process.env, FACTORY_BOARD: path.join(dir, 'board.json') },
+    stdio: 'ignore',
+  });
+  t.after(() => child.kill());
+  for (let i = 0; i < 100 && !fs.existsSync(info); i++) await new Promise((r) => setTimeout(r, 100));
+  fs.writeFileSync(info, JSON.stringify({ port: 5050, pid: child.pid + 1 }));
+  const closed = new Promise((r) => child.on('close', r));
+  child.kill('SIGTERM');
+  await closed;
+  assert.ok(fs.existsSync(info));
+});

@@ -81,7 +81,7 @@ function reviewers(card: RawCard): string | null {
 export function serving(file: string): number | null {
   try {
     const { port, pid } = JSON.parse(fs.readFileSync(path.join(path.dirname(file), 'serve.json'), 'utf8'))
-    if (!Number.isInteger(port) || port < 1 || port > 65535 || !Number.isInteger(pid)) return null
+    if (!Number.isInteger(port) || port < 1 || port > 65535 || !Number.isInteger(pid) || pid < 1) return null
     process.kill(pid, 0)
     return port
   } catch {

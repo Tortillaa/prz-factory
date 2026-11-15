@@ -410,7 +410,7 @@ test('readBoard reports serve only for a valid port whose process is alive', () 
   const info = path.join(path.dirname(entry.file), 'serve.json')
   const dead = execFileSync(process.execPath, ['-p', 'process.pid'], { encoding: 'utf8' }).trim() // exited: pid is gone
   assert.equal(readBoard(entry).serve, null)
-  for (const body of [{ port: 5050, pid: Number(dead) }, { port: 0, pid: process.pid }, { port: 'abc', pid: process.pid }, { port: 70000, pid: process.pid }]) {
+  for (const body of [{ port: 5050, pid: Number(dead) }, { port: 0, pid: process.pid }, { port: 'abc', pid: process.pid }, { port: 70000, pid: process.pid }, { port: 5050, pid: 0 }]) {
     fs.writeFileSync(info, JSON.stringify(body))
     assert.equal(readBoard(entry).serve, null, JSON.stringify(body))
   }

@@ -42,7 +42,10 @@ never cuts what the task asks for.
 `../unslop/SKILL.md`) and run its passes in order, within the card's scope. The card's
 `Direction` is the confirmation unslop asks the user for: follow it and do not stop to ask again.
 With no Direction on a card that changes a screen, take it from the existing brand and do only
-light-slop polish. Render the screen to check it (at most three times, as unslop says). No story
+light-slop polish. **Render the screen and look at it** before you hand off (at most three times,
+as unslop says): in Orca, serve or open it and `orca tab create --url <url>` then `orca screenshot`;
+for the Orca plugin, `orca plugin dev load` a copy and `orca plugin shot`. Reading the code is not
+enough: unslop judges what people see. Run unslop's checklist on what you changed. No story
 video and no paid image generation unless the card asks for them. Where unslop and the card differ,
 the card wins; where unslop and ponytail differ inside the card's scope, unslop decides how the
 screen looks and ponytail decides how much code it takes.
@@ -99,7 +102,8 @@ factory verify --json
 ```
 
 It runs every `verify` command from `factory.config.json` in this worktree. All must pass before
-you hand off. Also run the tests you added on their own and keep their output for the comment.
+you hand off: never hand off with verify red and a fix "in the next commit", since the panel pins
+the head it reviews. Also run the tests you added on their own and keep their output for the comment.
 Leave the worktree clean (`git status` shows nothing to commit).
 
 ## 4 · Hand off
@@ -107,7 +111,9 @@ Leave the worktree clean (`git status` shows nothing to commit).
 Write the comment to a file (writing standard §2: one line per AC with the test that proves it,
 the verify result, `Head: <sha>`). Add ponytail's closing line as `Skipped:` — what you chose not
 to build or could not check, every `shortcut:` you left, and any risk the reviewers must know
-(`Skipped: nothing` when there is none). Then:
+(`Skipped: nothing` when there is none). A card that changes a screen also gets a `Design:` line:
+the unslop passes you applied against the card's Direction, how you rendered the screen, and any
+checklist item you could not check. Then:
 
 ```text
 factory handoff <id> review --lane build --as <your-worker-name> --text-file <comment.md> --json

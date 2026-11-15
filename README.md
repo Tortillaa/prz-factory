@@ -186,7 +186,7 @@ Cada rol es un worker de Orca en su propio worktree, y carga su skill solo, por 
 | **Coordinador**: lanza a los demás con `factory dispatch`, reconcilia el tablero y te trae cada solicitud. Nunca redacta, construye, revisa ni mergea | — | — | `factory-run` | el de tu sesión |
 | **Spec Writer** | `spec` | `handoff` a `ready` o `blocked` | `factory-spec` + `ponytail` | Claude Sonnet 5.5, con advisor Fable 5.2 |
 | **Builder** | `building` | `handoff` a `review` o `blocked` | `factory-build` + `ponytail` | Claude Sonnet 5.5, con advisor Fable 5.2 |
-| **Reviewers**, uno por lente | `review` | `verdict`: pass, fail o escalar | `factory-review` + `ponytail-review` | Grok 4.7, esfuerzo alto |
+| **Reviewers**, uno por lente | `review` | `verdict`: pass, fail o escalar | `factory-review` + `ponytail-review` | Claude Sonnet 5.5, esfuerzo alto (Grok 4.7 cuando tiene saldo) |
 | **Agente de merge** | `merge` | `merge`, o `handoff` a `blocked` | `factory-merge` | Claude Haiku 5.5 |
 | **QA**: solo para tarjetas con la etiqueta `qa`; prueba lo que ya está en la rama base | `qa` | `merge` (cierra la tarjeta) | `factory-qa` | Claude |
 

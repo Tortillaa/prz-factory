@@ -86,6 +86,9 @@ the codebase as written, and whether every line of it needs to exist.
 - **Screens:** when the diff changes a user interface, run the checklist at the end of the
   `unslop` skill (`../../unslop/SKILL.md`) over what changed, against the card's `Direction`. A
   sign of slop the card set out to remove is a Blocker; a new one the diff introduces is Should fix.
+  Look at the screen, do not judge it from the code alone: render it yourself (in Orca,
+  `orca tab create --url …` and `orca screenshot`, or `orca plugin shot` for the plugin) when you
+  can. A builder handoff with no `Design:` line on a card that changes a screen is Should fix.
 - **Readability:** would the next person understand why, six months from now?
 - **Commits:** in the format of the writing standard §1, each with `Card: #<id>`. The merge gate
   fast-forwards: these commits land as they are.

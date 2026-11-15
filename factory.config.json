@@ -32,8 +32,8 @@
       "model": "claude-haiku-5-5"
     },
     "review": {
-      "agent": "grok",
-      "model": "grok-4.7",
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
       "effort": "high"
     }
   },

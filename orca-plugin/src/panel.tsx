@@ -43,6 +43,11 @@ const confirming = atom(false)
 const outcome = atom<{ merged: boolean; text: string } | null>(null)
 /** Actions in flight on this sheet: each button is disabled while its own request runs. */
 const busy = atom<string[]>([])
+/** The new-work form above the columns: the idea text, and the full-card editor when open. */
+const idea = atom('')
+const fresh = atom<{ title: string; body: string; column: string } | null>(null)
+const freshError = atom('')
+let adding = false
 
 type Sheet = {
   id: number
@@ -139,6 +144,26 @@ const approve = (at: At, sha: string) =>
     set(outcome, { merged: reply.status === 'merged', text: `${reply.status}: ${reply.message}` })
     await load(at)
   })
+
+const add = async (board: string, input: { title: string; body?: string; column: string }, done: () => void) => {
+  if (adding) return
+  adding = true
+  try {
+    const reply = await plugin.request('card.add', { board, ...input })
+    if (reply.error) return set(freshError, reply.error)
+    set(freshError, '')
+    done()
+  } finally {
+    adding = false
+  }
+}
+
+async function openFresh(board: string): Promise<void> {
+  set(freshError, '')
+  const reply = await plugin.request('card.template', { board })
+  set(fresh, { title: '', body: reply.error ? '' : String(reply.template), column: 'backlog' })
+  if (reply.error) set(freshError, reply.error)
+}
 
 const risk = (body: string) => body.match(/^## Risk\s*\n\s*(\w+)/m)?.[1] ?? 'sin riesgo'
 const lensMark = (v?: { verdict?: string; worker?: string }) => (v?.verdict === 'pass' ? '✓' : v?.verdict === 'fail' ? '✖' : v?.worker ? '…' : '·')
@@ -252,6 +277,9 @@ export default function Panel() {
   const board = snap.boards.find((b) => b.key === pick) ?? snap.boards[0]
   const at = read(opened)
   if (at) return <CardSheet at={at} />
+  const text = read(idea)
+  const form = read(fresh)
+  const formError = read(freshError)
   const approve = board.cards.filter((c) => c.labels.includes('merge-approval') && c.sha)
   const answer = board.cards.filter((c) => c.labels.includes('needs-you') && !c.labels.includes('merge-approval'))
   return (
@@ -274,6 +302,23 @@ export default function Panel() {
           <Text muted>factory serve</Text>
         )}
       </Row>
+      <Textarea label="+ Nueva idea" value={text} onChange={(v) => set(idea, v)} />
+      <Row gap="xs">
+        <Button disabled={!text.trim()} onPress={() => add(board.key, { title: text, column: 'spec' }, () => set(idea, ''))}>Añadir idea</Button>
+        {!form && <Button variant="ghost" onPress={() => openFresh(board.key)}>Tarjeta completa</Button>}
+      </Row>
+      {form && (
+        <Stack gap="sm">
+          <Input label="Título" value={form.title} onChange={(v) => set(fresh, { ...form, title: v })} />
+          <Textarea label="Cuerpo" value={form.body} rows={12} onChange={(v) => set(fresh, { ...form, body: v })} />
+          <Select label="Guardar en" value={form.column} options={['backlog', 'ready'].map((value) => ({ value, label: value }))} onChange={(column) => set(fresh, { ...form, column })} />
+          {formError && <Callout tone="danger" title={formError} />}
+          <Row gap="xs">
+            <Button onPress={() => add(board.key, form, () => set(fresh, null))}>Guardar</Button>
+            <Button variant="ghost" onPress={() => (set(fresh, null), set(freshError, ''))}>Cancelar</Button>
+          </Row>
+        </Stack>
+      )}
       {snap.boards.filter((b) => b.error).map((b) => (
         <Callout key={b.key} tone="danger" title={`no se pudo leer el tablero de ${b.name}: ${b.error}`} />
       ))}

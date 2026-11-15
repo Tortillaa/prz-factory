@@ -620,3 +620,16 @@ test('card.edit with labels [] is an error, never an OK that cleared nothing', a
   assert.ok(t.calls()[0].argv.includes('--blocked-by='))
   await t.worker.deactivate()
 })
+
+test('card.template runs `template --json` in the repo, and an unknown board or a CLI failure comes back as an error', async () => {
+  const t = await actionWorker('prz')
+  assert.deepEqual(await t.worker.request('card.template', { board: t.key }), { ok: 'template' })
+  const [call] = t.calls()
+  assert.deepEqual(call.argv, ['template', '--json', '--'])
+  assert.equal(fs.realpathSync(call.cwd), t.repo)
+  assert.deepEqual(await t.worker.request('card.template', { board: '/nowhere/.git' }), { error: 'unknown board /nowhere/.git' })
+  await t.worker.deactivate()
+  const none = await actionWorker('none')
+  assert.match(String((await none.worker.request('card.template', { board: none.key })).error), /bin\/factory\.mjs/)
+  await none.worker.deactivate()
+})

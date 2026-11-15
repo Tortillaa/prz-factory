@@ -40,6 +40,8 @@ export async function runAction(board: { key: string; file: string }, req: CardA
   switch (req.action) {
     case 'get':
       return go('show', [], [id])
+    case 'template':
+      return go('template', [], [])
     case 'add':
       return go('add', [...opt('--body', req.body), ...flags('--label', req.labels), ...deps(req.blockedBy), ...opt('--column', req.column)], [req.title])
     case 'edit':

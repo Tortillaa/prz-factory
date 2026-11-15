@@ -122,5 +122,6 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   orca.panels.handle('card.move', (input) => act('move', input))
   orca.panels.handle('card.comment', (input) => act('comment', input))
   orca.panels.handle('card.approve', (input) => act('approve', input))
+  orca.panels.handle('card.template', (input) => act('template', input))
   await snapshot()
 }

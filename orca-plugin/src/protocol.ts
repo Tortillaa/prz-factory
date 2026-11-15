@@ -12,6 +12,8 @@ declare module 'orca' {
     'card.move': { input: CardInputs['move']; output: CardReply }
     'card.comment': { input: CardInputs['comment']; output: CardReply }
     'card.approve': { input: CardInputs['approve']; output: CardReply }
+    /** The card body template, asked of the CLI (`factory template --json`): { template } or { error }. */
+    'card.template': { input: CardInputs['template']; output: CardReply }
   }
   interface PluginPanelEvents {
     /** Posted to every open panel when a board file changes. */
@@ -61,6 +63,7 @@ export type CardAction =
   | ({ action: 'move' } & CardInputs['move'])
   | ({ action: 'comment' } & CardInputs['comment'])
   | ({ action: 'approve' } & CardInputs['approve'])
+  | ({ action: 'template' } & CardInputs['template'])
 
 export type CardInputs = {
   get: { board: string; id: number }
@@ -69,4 +72,5 @@ export type CardInputs = {
   move: { board: string; id: number; column: string; before?: number; force?: boolean }
   comment: { board: string; id: number; text: string }
   approve: { board: string; id: number; sha?: string }
+  template: { board: string }
 }

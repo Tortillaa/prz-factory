@@ -272,3 +272,135 @@ test('a slow boards.get that returns after workspace.removed answers with the ne
   assert.deepEqual(worker.refusals, [])
   await worker.deactivate()
 })
+
+// workspace.list answers in the order the test releases them, not the order they were asked: each call
+// takes the next scripted list and waits for its `release`.
+function scriptedList(host: ReturnType<typeof liveHost>, lists: string[][]) {
+  const turns = lists.map((paths) => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const reply = { workspaces: paths.map((p, i) => ({ id: `w${i}`, kind: 'worktree', name: 'shop', path: p, branch: 'main', hostId: null })), truncated: false }
+    return { release, gate, reply }
+  })
+  let next = 0
+  host.respond('workspace.list', async () => {
+    const turn = turns[next++]
+    await turn.gate
+    return turn.reply
+  })
+  return turns.map((t) => t.release)
+}
+// A request in flight holds worker.emit back, so mid-request refreshes come from the board file, as in real life.
+const touch = (repo: string) => fs.writeFileSync(path.join(repo, '.git', 'factory', 'board.json'), JSON.stringify({ version: 1, nextId: 9, cards }))
+const tick = () => wait(250) // past the 150 ms debounce
+const lastPost = (worker: Parameters<typeof boardsPosted>[0]) => (boardsPosted(worker).at(-1)?.payload as { boards: unknown[] } | undefined)?.boards.length
+
+test('arrival order slow-fast: the older list lands last and changes nothing', async () => {
+  const repo = repoWithBoard(cards)
+  const host = liveHost([repo])
+  const worker = await mountWorker(main, { host })
+  const [first, second] = scriptedList(host, [[repo], []])
+  const get = worker.request('boards.get') // list 1: still has the repo, slow
+  await tick()
+  touch(repo) // the repo closed: its list is the empty one
+  await tick() // list 2: empty
+  second()
+  await tick()
+  assert.equal(lastPost(worker), 0)
+  first()
+  assert.equal(((await get) as { boards: unknown[] }).boards.length, 0)
+  await tick()
+  assert.equal(boardsPosted(worker).length, 1)
+  fs.writeFileSync(path.join(repo, '.git', 'factory', 'board.json'), JSON.stringify({ version: 1, nextId: 9, cards: [] }))
+  await tick()
+  assert.equal(boardsPosted(worker).length, 1)
+  assert.deepEqual(worker.refusals, [])
+  await worker.deactivate()
+})
+
+test('arrival order fast-slow: the newer list lands first and the older one waits for it', async () => {
+  const repo = repoWithBoard(cards)
+  const host = liveHost([repo])
+  const worker = await mountWorker(main, { host })
+  const [first, second] = scriptedList(host, [[repo], []])
+  const get = worker.request('boards.get')
+  await tick()
+  touch(repo) // the repo closed: its list is the empty one
+  await tick()
+  first() // the older list lands first: it must not apply, nor answer yet with its own data
+  await tick()
+  assert.equal(boardsPosted(worker).length, 0)
+  second()
+  assert.equal(((await get) as { boards: unknown[] }).boards.length, 0)
+  await tick()
+  assert.equal(lastPost(worker), 0)
+  assert.equal(boardsPosted(worker).length, 1)
+  assert.deepEqual(worker.refusals, [])
+  await worker.deactivate()
+})
+
+test('three in a chain with workspace.removed in the middle: boards.get, the last post and the watchers agree', async () => {
+  const repo = repoWithBoard(cards)
+  const host = liveHost([repo])
+  const worker = await mountWorker(main, { host })
+  const [one, two, three] = scriptedList(host, [[repo], [repo], []])
+  const get = worker.request('boards.get') // 1: slow, repo open
+  await tick()
+  touch(repo)
+  await tick() // 2: slow, repo open
+  touch(repo) // the repo closed: its list is the empty one
+  await tick() // 3: empty
+  three()
+  await tick()
+  one()
+  two()
+  assert.equal(((await get) as { boards: unknown[] }).boards.length, 0)
+  await tick()
+  assert.equal(lastPost(worker), 0)
+  const before = boardsPosted(worker).length
+  fs.writeFileSync(path.join(repo, '.git', 'factory', 'board.json'), JSON.stringify({ version: 1, nextId: 9, cards: [] }))
+  await tick()
+  assert.equal(boardsPosted(worker).length, before)
+  assert.deepEqual(worker.refusals, [])
+  await worker.deactivate()
+})
+
+test('a refresh superseded by boards.get still posts boards.changed, once', async () => {
+  const repo = repoWithBoard(cards)
+  const host = liveHost([repo])
+  const worker = await mountWorker(main, { host })
+  const [first, second] = scriptedList(host, [[repo], [repo]])
+  await worker.emit('workspace.created', { workspaceId: 'x', kind: 'worktree', path: repo, branch: 'main' })
+  await tick() // refresh in flight (list 1)
+  const get = worker.request('boards.get') // supersedes it (list 2)
+  await tick()
+  first()
+  second()
+  assert.equal(((await get) as { boards: unknown[] }).boards.length, 1)
+  await tick()
+  assert.equal(boardsPosted(worker).length, 1)
+  assert.equal(lastPost(worker), 1)
+  await worker.deactivate()
+})
+
+test('deactivate in the middle: boards.get answers empty, nothing is posted, and a re-mount is not disturbed', async () => {
+  const repo = repoWithBoard(cards)
+  const host = liveHost([repo])
+  const worker = await mountWorker(main, { host })
+  const [first] = scriptedList(host, [[repo]])
+  const get = worker.request('boards.get')
+  await tick()
+  const stop = worker.deactivate()
+  const again = await mountWorker(main, { host: liveHost([repo]) }) // a new activation shares the watchers map
+  first() // the old list lands after the re-mount: it must neither watch nor post
+  assert.equal(((await get) as { boards: unknown[] }).boards.length, 0)
+  await tick()
+  assert.equal(boardsPosted(worker).length, 0)
+  fs.writeFileSync(path.join(repo, '.git', 'factory', 'board.json'), JSON.stringify({ version: 1, nextId: 9, cards: [] }))
+  await tick()
+  assert.equal(boardsPosted(worker).length, 0)
+  assert.equal(boardsPosted(again).length, 1) // only the new activation watches the repo
+  assert.deepEqual(worker.refusals, [])
+  await stop
+  await again.deactivate()
+})

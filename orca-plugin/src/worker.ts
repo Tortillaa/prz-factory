@@ -9,34 +9,46 @@ import type { BoardsSnapshot } from './protocol'
 
 const watchers = new Map<string, fs.FSWatcher>()
 let timer: ReturnType<typeof setTimeout> | undefined
-let stopped = false
+let life = 0 // bumped by activate and deactivate: an activation is dead once it no longer matches
 
 /** Orca awaits this before it stops the worker. */
 export function deactivate(): void {
-  stopped = true
+  life++
   clearTimeout(timer)
   for (const w of watchers.values()) w.close()
   watchers.clear()
 }
 
 export default async function activate(orca: OrcaWorkerApi): Promise<void> {
-  stopped = false
-  let seq = 0 // a newer snapshot supersedes one still waiting for workspace.list
-  let latest: Promise<BoardsSnapshot>
-  // A superseded call answers with the newest snapshot, so the panel never ends on stale data.
+  const born = ++life
+  const dead = () => born !== life
+  // One state, "the newest snapshot": only it applies anything (watchers, status bar, boards.changed),
+  // and a call that was superseded answers with that newest one, never with its own older read.
+  let seq = 0
+  let latest: Promise<BoardsSnapshot> = Promise.resolve({ boards: [] })
+  let owed = false // a board or workspace change wants a boards.changed from the next snapshot that applies
   function snapshot(): Promise<BoardsSnapshot> {
+    if (dead()) return Promise.resolve({ boards: [] })
     const mine = ++seq
-    const run = read(mine)
+    const run = read(mine).then((snap) => {
+      if (dead()) return { boards: [] }
+      if (mine !== seq) return latest // never itself: a superseded call is not the newest
+      if (owed) {
+        owed = false
+        orca.panels.post('boards.changed', snap)
+      }
+      return snap
+    })
     latest = run
-    return run.then((snap) => (mine === seq ? snap : latest))
+    return run
   }
   async function read(mine: number): Promise<BoardsSnapshot> {
     try {
       const { workspaces } = await orca.host.call('workspace.list', {})
-      if (stopped) return { boards: [] } // deactivated while the list was in flight: open no watcher
+      const current = () => !dead() && mine === seq
       const pending: string[] = []
       const found = discover(workspaces.filter((w) => !w.hostId || w.hostId === 'local').map((w) => w.path), undefined, pending)
-      if (mine === seq) watch([...found.map((b) => path.dirname(b.file)), ...pending])
+      if (current()) watch([...found.map((b) => path.dirname(b.file)), ...pending])
       const boards = found.flatMap((entry) => {
         try {
           return [readBoard(entry)]
@@ -45,7 +57,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
           return [{ ...entry, counts: {}, cards: [], unknown: [], error: (err as Error).message }]
         }
       })
-      if (mine === seq) await showWaiting(boards)
+      if (current()) await showWaiting(boards)
       return { boards }
     } catch (err) {
       return { boards: [], error: (err as Error).message }
@@ -69,11 +81,11 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
 
   // One debounced refresh for every trigger: a board change, a new folder, a workspace event.
   function refresh(): void {
+    if (dead()) return
     clearTimeout(timer)
-    timer = setTimeout(async () => {
-      const mine = seq + 1
-      const snap = await snapshot()
-      if (!stopped && mine === seq) orca.panels.post('boards.changed', snap)
+    timer = setTimeout(() => {
+      owed = true
+      void snapshot()
     }, 150)
   }
 

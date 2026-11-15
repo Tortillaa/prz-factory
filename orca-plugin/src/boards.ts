@@ -59,15 +59,22 @@ type RawCard = {
 type Config = { review?: { lenses?: string[]; light?: string[] }; merge?: { humanLabels?: string[] } }
 
 // Mirrors lensesFor/riskLevel (src/lanes.mjs, src/ticket.mjs): the plugin ships apart from the factory.
-function panelTotal(card: RawCard, config: Config | null): number {
+export function panelTotal(card: RawCard, config: Config | null): number {
   const slots = Object.keys(card.panel?.lenses ?? {})
   if (!config) return slots.length
   // Keys the file leaves out take loadConfig's defaults (src/config.mjs).
   const lenses = config.review?.lenses ?? ['qa', 'security', 'code', 'ops']
   const light = (config.review?.light ?? ['qa', 'code']).filter((l) => lenses.includes(l))
   const human = config.merge?.humanLabels ?? ['auth', 'payments', 'pricing', 'schema', 'ops', 'money', 'needs-human']
-  const risk = (card.body ?? '').split(/^## /m).find((s) => /^risk\s*\n/i.test(s)) ?? ''
-  const low = /^risk\s*\n\W*(low|bajo)\b/i.test(risk)
+  // Like parseSections: the last "## Risk" wins; the section runs to the next "## " heading.
+  let risk = ''
+  let inRisk = false
+  for (const line of (card.body ?? '').split(/\r?\n/)) {
+    const h = line.match(/^##\s+(.+?)\s*$/)
+    if (h) { inRisk = h[1].toLowerCase() === 'risk'; if (inRisk) risk = '' }
+    else if (inRisk) risk += line + '\n'
+  }
+  const low = /^(🟢|🟡|🔴|\*\*)?\s*\**\s*(low|bajo)\b/i.test(risk.trim())
   const business = (card.labels ?? []).some((l) => human.includes(l))
   return light.length && low && !business ? light.length : lenses.length
 }

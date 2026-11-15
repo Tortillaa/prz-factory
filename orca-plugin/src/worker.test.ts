@@ -5,7 +5,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { assert, hostError, mockHost, mountWorker, test } from 'orca/testing'
 import * as main from './worker'
-import { discover, readBoard } from './boards'
+import { discover, panelTotal, readBoard } from './boards'
 
 function repoWithBoard(cards: unknown[] | null) {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-plugin-')))
@@ -442,6 +442,29 @@ test('creating and deleting serve.json posts boards.changed with the new serve',
 })
 
 const risk = (level: string) => '## Risk' + String.fromCharCode(10) + level + ' · x'
+
+// Same table as test/panel-total.test.mjs, where lensesFor gives these totals: the plugin cannot import src/.
+test('panelTotal gives the totals lensesFor gives', () => {
+  const nl = String.fromCharCode(10)
+  const r = (...levels: string[]) => levels.map((l) => '## Risk' + nl + l + ' · y').join(nl)
+  const full = { review: { lenses: ['qa', 'security', 'code', 'ops'], light: ['qa', 'code'] }, merge: { humanLabels: ['auth', 'needs-human'] } }
+  const noLight = { ...full, review: { ...full.review, light: [] } }
+  const cases: [string, string, string[], typeof full, number][] = [
+    ['Low then High', r('Low', 'High'), [], full, 4],
+    ['High then Low', r('High', 'Low'), [], full, 2],
+    ['trailing spaces and CRLF', '## Risk   \r\nLow · x\r\n', [], full, 2],
+    ['emoji', r('🟢 Low'), [], full, 2],
+    ['bold', r('**Low**'), [], full, 2],
+    ['Medium', r('Medium'), [], full, 4],
+    ['no Risk section', '## Fix\nx', [], full, 4],
+    ['Low with auth', r('Low'), ['auth'], full, 4],
+    ['Low with needs-human', r('Low'), ['needs-human'], full, 4],
+    ['Low with empty light', r('Low'), [], noLight, 4],
+  ]
+  for (const [name, body, labels, config, total] of cases) {
+    assert.equal(panelTotal({ id: 1, body, labels }, config), total, name)
+  }
+})
 
 test('readBoard gives the review progress by the lenses of factory.config.json, and falls back without it', () => {
   const lenses = { qa: { worker: 'review-qa-7', verdict: 'pass' }, code: { verdict: 'pass' }, security: { worker: 'review-security-7' } }

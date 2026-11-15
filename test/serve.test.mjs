@@ -150,6 +150,9 @@ test('the page has #active and /api/board exposes the claims it counts', async (
     });
     const get = (p) => fetch(`http://127.0.0.1:${port}${p}`, { headers: { host: `localhost:${port}` } });
     assert.ok((await (await get('/')).text()).includes('id="active"'));
+    const mod = await get('/board-view.mjs');
+    assert.equal(mod.status, 200);
+    assert.match(mod.headers.get('content-type'), /^text\/javascript/);
     const { cards } = await (await get('/api/board')).json();
     assert.equal(cards.find((c) => c.id === 1).assignee, 'w1');
     assert.equal(cards.find((c) => c.id === 2).panel.lenses.code.worker, 'w2');

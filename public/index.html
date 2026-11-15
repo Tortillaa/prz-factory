@@ -6,111 +6,95 @@
 <title>prz-factory</title>
 <style>
   :root {
-    --bg: #f5f5f4; --col: #ebebe9; --card: #fff; --text: #1c1c1a; --muted: #6b6b66;
-    --border: #d8d8d4; --accent: #b45309; --on-accent: #fff; --drop: #f3e4cc; --err: #c93c3c; --warn: #a15c0a; --ok: #2f9e5b; --ask: #fbf1dc;
+    --bg: #f5f5f4; --card: #fff; --text: #1c1c1a; --muted: #6b6b66; --line: #d8d8d4;
+    --accent: #b45309; --on-accent: #fff; --ask: #fbf1dc; --err: #c93c3c;
     --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
-    --c-backlog: #8a919e; --c-spec: #c2569b; --c-ready: #3b6ef5; --c-building: #d98a1c; --c-qa: #8b5cf6;
-    --c-review: #0ea5a4; --c-merge: #14866d; --c-blocked: #dc4a4a; --c-done: #2f9e5b;
   }
   @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #151514; --col: #1d1d1b; --card: #262624; --text: #e8e8e4; --muted: #a0a09a;
-      --border: #363633; --accent: #f0a43a; --on-accent: #1c1c1a; --drop: #3a2f1d; --err: #ff7b7b; --warn: #e8b04a; --ok: #5fd08a; --ask: #332c1c;
-    }
+    :root { --bg: #151514; --card: #222220; --text: #e8e8e4; --muted: #a0a09a; --line: #363633; --accent: #f0a43a; --on-accent: #1c1c1a; --ask: #2c2618; --err: #ff7b7b; }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+  header { display: flex; align-items: baseline; gap: 16px; padding: 16px 24px; border-bottom: 1px solid var(--line); }
   header h1 { font-size: 16px; font-weight: 500; margin: 0; }
-  header .status { color: var(--muted); font-size: 12px; }
-  header #active { margin-left: auto; margin-right: 16px; font-variant-numeric: tabular-nums; }
-  .board { display: grid; grid-template-columns: repeat(9, minmax(200px, 1fr)); gap: 12px; padding: 16px 20px; overflow-x: auto; min-height: calc(100vh - 52px); }
-  .column { background: var(--col); border-radius: 12px; padding: 8px; display: flex; flex-direction: column; gap: 8px; min-height: 200px; }
-  .column.drop { background: var(--drop); }
-  .column h2 { font-size: 14px; font-weight: 500; margin: 4px 4px 4px; display: flex; gap: 8px; align-items: center; }
-  .column h2::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--dot); }
-  .column h2 .count { color: var(--muted); font-family: var(--mono); font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; cursor: grab; transition: border-color .15s; }
-  .card:hover { border-color: var(--muted); }
-  .card.over { box-shadow: 0 -4px 0 var(--accent); }
-  .card .id { color: var(--muted); font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
-  .meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
-  .tag { font-size: 12px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted); }
-  .tag.who { border-color: var(--accent); color: var(--accent); }
-  .tag.err { border-color: var(--err); color: var(--err); }
-  .tag.warn { border-color: var(--warn); color: var(--warn); }
-  .tag.ok { border-color: var(--ok); color: var(--ok); }
-  .requests { margin: 12px 20px 0; padding: 12px 16px; border: 1px solid var(--warn); border-radius: 12px; background: var(--ask); }
-  .requests h2 { font-size: 14px; font-weight: 500; margin: 0 0 8px; }
-  .request { display: flex; gap: 12px; align-items: baseline; padding: 4px 0; cursor: pointer; }
-  .request:hover .what { text-decoration: underline; }
-  .request .why { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .request .kind { flex: none; font-size: 12px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--warn); color: var(--warn); }
-  .request .what { flex: none; }
-  input, textarea { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px; width: 100%; }
-  textarea { font-family: var(--mono); font-size: 14px; min-height: 320px; resize: vertical; }
+  header .hint { margin-left: auto; }
+  .hint, .meta, .status { color: var(--muted); font-size: 12px; }
+  .status, .num { font-variant-numeric: tabular-nums; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 32px; padding: 24px; max-width: 1440px; margin: 0 auto; }
+  @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } header { flex-wrap: wrap; } header .hint { margin-left: 0; } }
+  section { margin-bottom: 32px; }
+  h2 { font-size: 14px; font-weight: 500; margin: 0 0 12px; display: flex; gap: 8px; align-items: baseline; }
+  h2 .count { color: var(--muted); font-family: var(--mono); font-size: 12px; font-weight: 400; }
+  .empty { color: var(--muted); margin: 0; }
+  .stack { display: grid; gap: 8px; }
+  .item { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; cursor: pointer; transition: border-color .15s; overflow-wrap: anywhere; }
+  .item:hover { border-color: var(--muted); }
+  .item .id { color: var(--muted); font-family: var(--mono); font-size: 12px; margin-right: 8px; }
+  .item.ask { background: var(--ask); border-color: var(--accent); }
+  .item .why { margin: 4px 0 0; color: var(--muted); font-size: 12px; white-space: pre-wrap; }
+  .flight { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: center; }
+  @media (max-width: 640px) { .flight { grid-template-columns: minmax(0, 1fr); } }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; }
+  .rail { display: grid; grid-template-columns: repeat(4, 1fr); font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .rail > span { border-top: 2px solid var(--line); padding-top: 8px; position: relative; }
+  .rail > .past { border-color: var(--muted); }
+  .rail > .now { border-color: var(--text); color: var(--text); }
+  .rail > .now::before { content: ""; position: absolute; top: -6px; left: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--text); }
+  .lenses { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+  .lens { display: flex; gap: 4px; align-items: center; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .lens::before { content: ""; width: 8px; height: 8px; border: 1px solid var(--muted); border-radius: 2px; }
+  .lens.pass { color: var(--text); } .lens.pass::before { background: var(--text); border-color: var(--text); }
+  .lens.fail { color: var(--err); } .lens.fail::before { background: var(--err); border-color: var(--err); }
+  .lens.active { color: var(--text); } .lens.active::before { border-width: 3px; border-color: var(--text); }
+  .row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+  input { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px; flex: 1; min-width: 0; }
   button { font: inherit; border: 0; border-radius: 8px; padding: 8px 12px; background: var(--accent); color: var(--on-accent); cursor: pointer; transition: opacity .15s; }
   button:hover { opacity: .88; }
-  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
-  .new { margin-top: auto; }
-  dialog { width: min(720px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 16px; background: var(--card); color: var(--text); padding: 20px; }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .list .item { padding: 8px 12px; }
+  details summary { cursor: pointer; font-weight: 500; margin-bottom: 12px; }
+  dialog { width: min(720px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 16px; background: var(--card); color: var(--text); padding: 20px; }
   dialog::backdrop { background: rgb(0 0 0 / .4); }
   dialog h3 { font-weight: 500; margin: 0 0 8px; padding-right: 28px; }
   dialog .body { white-space: pre-wrap; margin: 12px 0; font-family: var(--mono); font-size: 14px; }
-  dialog section h4 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 16px 0 8px; }
-  .lint li.error { color: var(--err); } .lint li.warn { color: var(--warn); }
-  .lint ul { margin: 0; padding-left: 20px; }
-  .comment { border-left: 4px solid var(--border); padding: 4px 12px; margin: 8px 0; white-space: pre-wrap; }
-  .comment .who, .history, .hint { color: var(--muted); font-size: 12px; }
-  .row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
-  label { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+  dialog h4 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 16px 0 8px; }
+  .comment { border-left: 4px solid var(--line); padding: 4px 12px; margin: 8px 0; white-space: pre-wrap; }
   .close { position: absolute; top: 12px; right: 12px; background: transparent; color: var(--muted); padding: 0 4px; font-size: 16px; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
-<header><h1>prz-factory</h1><button id="new-idea" title="Escribe lo que quieres; el Spec Writer la redacta y la fábrica la construye">Nueva idea</button><span class="status" id="active">0 en curso</span><span class="status" id="status">conectando…</span></header>
-<section class="requests" id="requests" hidden></section>
-<main class="board" id="board"></main>
+<header><h1>prz-factory</h1><span class="status" id="active">0 en curso · 0 te esperan</span><span class="status" id="status">conectando…</span><span class="hint">Pide cambios al agente de Orca</span></header>
+<div class="layout">
+  <main>
+    <section><h2>Te esperan <span class="count" id="n-waiting"></span></h2><div class="stack" id="waiting"></div></section>
+    <section><h2>En marcha <span class="count" id="n-flight"></span></h2><div class="stack" id="flight"></div></section>
+    <section><h2>Cola <span class="count" id="n-queue"></span></h2><div class="stack list" id="queue"></div></section>
+  </main>
+  <aside>
+    <section><h2>Hecho recientemente</h2><div class="stack list" id="done"></div></section>
+    <section><details><summary>Backlog <span class="count" id="n-backlog"></span></summary><div class="stack list" id="backlog"></div></details></section>
+  </aside>
+</div>
 
 <dialog id="detail">
   <button class="close" onclick="this.closest('dialog').close()" aria-label="Cerrar">×</button>
-
-  <div id="view">
-    <h3 id="v-title"></h3>
-    <div class="meta" id="v-meta"></div>
-    <section class="lint" id="v-lint"></section>
-    <section id="v-panel"></section>
-    <div class="body" id="v-body"></div>
-    <div class="row"><button id="v-edit">Editar</button><button id="v-approve" class="ghost" hidden>Aprobar y mergear</button><span id="v-approve-status" class="hint"></span></div>
-    <section><h4>Comentarios</h4><div id="v-comments"></div>
-      <form class="row" id="v-comment"><input name="text" placeholder="Añadir comentario" required><button>Enviar</button></form>
-    </section>
-    <section><h4>Historial</h4><div id="v-history" class="history"></div></section>
-  </div>
-
-  <form id="edit" hidden>
-    <h3 id="e-heading"></h3>
-    <p class="hint" id="e-idea" hidden>Escríbela con tus palabras: qué quieres y dónde. El Spec Writer lee el código, la convierte en una tarjeta completa y la pasa a Ready él solo. Si le falta una decisión, te la pregunta aquí.</p>
-    <label>Título <input name="title" required></label>
-    <div class="grid">
-      <label>Labels (qa, bug, feature…) <input name="labels" placeholder="feature"></label>
-      <label>Bloqueada por (ids) <input name="blockedBy" placeholder="3, 7"></label>
-    </div>
-    <label>Cuerpo <textarea name="body" spellcheck="false"></textarea></label>
-    <p class="hint" id="e-rules">Para pasar a Ready, la tarjeta necesita Problem, Fix, Acceptance Criteria (checklist "- [ ] …") y Risk (Low/Medium/High), sin huecos &lt;…&gt; ni TODO/etc.</p>
-    <div class="row"><button>Guardar</button><button type="button" class="ghost" id="e-cancel">Cancelar</button></div>
-  </form>
+  <h3 id="v-title"></h3>
+  <div class="meta" id="v-meta"></div>
+  <section id="v-panel"></section>
+  <div class="body" id="v-body"></div>
+  <div class="row"><button id="v-approve" hidden>Aprobar y mergear</button></div>
+  <h4>Comentarios</h4><div id="v-comments"></div>
+  <form class="row" id="v-comment"><input name="text" placeholder="Añadir comentario" required><button>Enviar</button></form>
+  <h4>Historial</h4><div id="v-history" class="meta"></div>
 </dialog>
 
-<script>
-const COLORS = { backlog: '--c-backlog', spec: '--c-spec', ready: '--c-ready', building: '--c-building', qa: '--c-qa', review: '--c-review', merge: '--c-merge', blocked: '--c-blocked', done: '--c-done' };
+<script type="module">
+import { groupBoard, lensStates, stationOf, STATIONS, ago, since, workersOf } from '/board-view.mjs';
+
 let state = { columns: [], lenses: [], cards: [] };
-let newColumn = 'backlog'; // where the card being created will be filed
-let openId = null;   // card shown in the dialog; 'new' while creating one
-let editing = false;
+let openId = null;
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => {
@@ -118,7 +102,6 @@ const el = (tag, props = {}, ...kids) => {
   n.append(...kids.filter((k) => k != null && k !== false));
   return n;
 };
-const list = (s) => s.split(/[\s,]+/).filter(Boolean);
 
 async function api(path, body) {
   const res = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
@@ -127,200 +110,99 @@ async function api(path, body) {
   return data;
 }
 
-function tags(card) {
-  const errors = card.lint.filter((i) => i.severity === 'error').length;
-  const warns = card.lint.length - errors;
-  const showLint = ['backlog', 'ready'].includes(card.column);
-  return el('div', { className: 'meta' },
-    ...card.labels.map((l) => el('span', { className: 'tag', textContent: l })),
-    card.assignee && el('span', { className: 'tag who', textContent: '@' + card.assignee }),
-    ...(card.column === 'review' ? panel(card) : []),
-    card.unmet.length > 0 && el('span', { className: 'tag warn', textContent: 'bloqueada por ' + card.unmet.map((d) => '#' + d).join(' '), title: 'Bloqueada por tarjetas sin terminar' }),
-    showLint && errors > 0 && el('span', { className: 'tag err', textContent: `${errors} ${errors === 1 ? 'error' : 'errores'}`, title: 'Errores de lint: no puede pasar a Ready' }),
-    showLint && !errors && warns > 0 && el('span', { className: 'tag warn', textContent: `${warns} ${warns === 1 ? 'aviso' : 'avisos'}`, title: 'Avisos de lint' }),
-    card.run.branch && el('span', { className: 'tag', textContent: 'rama ' + card.run.branch }),
-    card.source?.seen > 1 && el('span', { className: 'tag warn', textContent: `visto ${card.source.seen} veces`, title: `Encontrado ${card.source.seen} veces por factory-collect` }));
+const lensChips = (card) => lensStates(card, state.lenses).map((l) =>
+  el('span', { className: 'lens ' + l.state, textContent: l.lens, title: l.worker ? `${l.lens}: ${l.worker}` : `${l.lens}: ${l.state}` }));
+
+// The rail spec · build · review · merge: a dot where the card is, and a box per lens in review.
+function rail(card) {
+  const at = stationOf(card, state.lenses);
+  if (!at) return null;
+  const i = STATIONS.indexOf(at.station);
+  return el('div', { className: 'rail' },
+    ...STATIONS.map((s, j) => el('span', { className: j < i ? 'past' : j === i ? 'now' : '', textContent: s })),
+    at.lenses.length > 0 && el('div', { className: 'lenses' }, ...lensChips(card)));
 }
 
-// One chip per review lens: passed, failed, being reviewed, or waiting for a reviewer.
-function lensState(card, lens) {
-  const s = card.panel?.lenses?.[lens] || {};
-  if (s.verdict === 'pass') return { cls: 'ok', mark: 'ok', title: 'ha aprobado este commit' };
-  if (s.verdict === 'fail') return { cls: 'err', mark: 'fallo', title: 'ha encontrado un bloqueo' };
-  if (s.worker) return { cls: 'who', mark: '…', title: 'revisando: ' + s.worker };
-  return { cls: '', mark: '·', title: 'esperando reviewer' };
-}
-function panel(card) {
-  return (card.lenses || state.lenses).map((lens) => {
-    const st = lensState(card, lens);
-    return el('span', { className: 'tag ' + st.cls, textContent: `${lens} ${st.mark}`, title: `Reviewer ${lens}: ${st.title}` });
-  });
+const head = (c) => [el('span', { className: 'id', textContent: '#' + c.id }), c.title];
+const open = (node, c) => { node.onclick = () => openCard(c.id); return node; };
+
+function approve(c, btn) {
+  const sha = c.run.reviewedSha;
+  if (!confirm(`¿Has revisado ${c.run.branch} en ${sha.slice(0, 8)}?\n\nEl merge gate ejecutará verify y, si pasa, la mergeará en la rama base.`)) return;
+  btn.disabled = true;
+  api(`/api/cards/${c.id}/approve`, { sha })
+    .then((r) => alert(`${r.status}: ${r.message}`), (err) => alert(err.message))
+    .finally(() => { btn.disabled = false; });
 }
 
-// What waits for the user: merges the gate held (approve them) and cards a lane blocked (answer them).
-function renderRequests() {
-  const waiting = state.cards.filter((c) => c.column === 'blocked' && (c.labels.includes('merge-approval') || c.labels.includes('needs-you')));
-  document.title = waiting.length ? `(${waiting.length}) prz-factory` : 'prz-factory';
-  const box = $('requests');
-  box.hidden = waiting.length === 0;
-  if (!waiting.length) return;
-  const last = (c) => (c.comments.at(-1)?.text || '').split('\n').filter(Boolean).slice(0, 2).join(' · ');
-  box.replaceChildren(
-    el('h2', { textContent: `${waiting.length === 1 ? '1 solicitud espera' : waiting.length + ' solicitudes esperan'} tu respuesta` }),
-    ...waiting.map((c) => {
-      const approve = c.labels.includes('merge-approval');
-      const row = el('div', { className: 'request' },
-        el('span', { className: 'kind', textContent: approve ? 'aprobar merge' : 'responder' }),
-        el('span', { className: 'what', textContent: `#${c.id} ${c.title}` }),
-        el('span', { className: 'why', textContent: last(c) }));
-      row.onclick = () => openCard(c.id);
-      return row;
-    }));
+function waitingItem(c) {
+  const last = (c.comments.at(-1)?.text || '').split('\n').filter(Boolean).slice(0, 3).join('\n');
+  const canApprove = c.labels.includes('merge-approval') && c.run.branch && c.run.reviewedSha;
+  const btn = canApprove && el('button', { textContent: 'Aprobar y mergear' });
+  if (btn) btn.onclick = () => approve(c, btn);
+  const form = el('form', { className: 'row' }, el('input', { name: 'text', placeholder: 'Contestar', required: true }), el('button', { className: canApprove ? 'ghost' : '', textContent: 'Enviar' }));
+  form.onsubmit = (e) => { e.preventDefault(); comment(c.id, form); };
+  const item = el('div', { className: 'item ask' }, el('div', {}, ...head(c)), last && el('p', { className: 'why', textContent: last }), el('div', { className: 'row' }, btn, form));
+  // Clicks on the controls must not open the card.
+  item.onclick = (e) => { if (!e.target.closest('button, input')) openCard(c.id); };
+  return item;
 }
 
-async function move(id, column, before) {
-  try {
-    await api(`/api/cards/${id}/move`, { column, before });
-  } catch (err) {
-    if (confirm(`${err.message}\n\n¿Moverla igualmente?`)) await api(`/api/cards/${id}/move`, { column, before, force: true }).catch((e) => alert(e.message));
-  }
+function flightItem(c) {
+  return open(el('div', { className: 'item flight' },
+    el('div', {}, el('div', {}, ...head(c)),
+      el('div', { className: 'meta' }, el('span', { textContent: '@' + workersOf(c).join(' @') }), el('span', { className: 'num', textContent: ago(since(c)) }))),
+    rail(c)), c);
+}
+
+const listItem = (c, note) => open(el('div', { className: 'item' }, ...head(c), el('div', { className: 'meta' }, note)), c);
+const queueNote = (c) => c.unmet.length > 0 ? 'espera a ' + c.unmet.map((d) => '#' + d).join(' ') : c.column;
+
+function fill(id, cards, make, empty) {
+  $(id).replaceChildren(...(cards.length ? cards.map(make) : [el('p', { className: 'empty', textContent: empty })]));
 }
 
 function render() {
-  $('active').textContent = state.cards.filter((c) => c.assignee || Object.values(c.panel?.lenses || {}).some((l) => l.worker)).length + ' en curso';
-  $('board').replaceChildren(...state.columns.map((col) => {
-    const cards = state.cards.filter((c) => c.column === col);
-    const column = el('section', { className: 'column' },
-      el('h2', {}, col, el('span', { className: 'count', textContent: cards.length })),
-      ...cards.map((c) => {
-        const card = el('article', { className: 'card', draggable: true },
-          el('div', { className: 'id', textContent: '#' + c.id }), el('div', { textContent: c.title }), tags(c));
-        card.ondragstart = (e) => e.dataTransfer.setData('text/plain', c.id);
-        card.onclick = () => openCard(c.id);
-        // Dropping on a card places the dragged card before it.
-        card.ondragover = (e) => { e.preventDefault(); card.classList.add('over'); };
-        card.ondragleave = () => card.classList.remove('over');
-        card.ondrop = (e) => {
-          e.preventDefault(); e.stopPropagation(); card.classList.remove('over'); column.classList.remove('drop');
-          const id = Number(e.dataTransfer.getData('text/plain'));
-          if (id !== c.id) move(id, col, c.id);
-        };
-        return card;
-      }));
-    column.style.setProperty('--dot', `var(${COLORS[col]})`);
-    column.ondragover = (e) => { e.preventDefault(); column.classList.add('drop'); };
-    column.ondragleave = (e) => { if (!column.contains(e.relatedTarget)) column.classList.remove('drop'); };
-    column.ondrop = (e) => { e.preventDefault(); column.classList.remove('drop'); move(Number(e.dataTransfer.getData('text/plain')), col, null); };
-    if (col === 'backlog') column.append(el('button', { className: 'ghost new', textContent: 'Nueva tarjeta', onclick: () => newCard('backlog') }));
-    if (col === 'spec') column.append(el('button', { className: 'ghost new', textContent: 'Nueva idea', onclick: () => newCard('spec') }));
-    return column;
-  }));
-  renderRequests();
-  if (openId && openId !== 'new' && !editing) fillView();
+  const g = groupBoard(state);
+  $('active').textContent = `${g.inFlight.length} en curso · ${g.waiting.length} te esperan`;
+  document.title = g.waiting.length ? `(${g.waiting.length}) prz-factory` : 'prz-factory';
+  // Do not rebuild "Te esperan" while the person is typing a reply there.
+  const typing = $('waiting').contains(document.activeElement) && document.activeElement.value;
+  if (!typing) fill('waiting', g.waiting, waitingItem, 'Nada espera tu respuesta');
+  fill('flight', g.inFlight, flightItem, 'Ningún worker en marcha');
+  fill('queue', g.queue, (c) => listItem(c, queueNote(c)), 'La cola está vacía');
+  fill('done', g.done, (c) => listItem(c, [c.run.mergedSha?.slice(0, 7), ago(c.history.at(-1)?.at)].filter(Boolean).join(' · ')), 'Todavía nada');
+  fill('backlog', g.backlog, (c) => listItem(c, ''), 'Vacío');
+  for (const [id, n] of [['n-waiting', g.waiting], ['n-flight', g.inFlight], ['n-queue', g.queue], ['n-backlog', g.backlog]]) $(id).textContent = n.length;
+  if (openId && !$('detail').contains(document.activeElement)) fillView();
 }
 
-function showMode(edit) {
-  editing = edit;
-  $('view').hidden = edit;
-  $('edit').hidden = !edit;
-}
-
-function openCard(id) { openId = id; showMode(false); fillView(); $('detail').showModal(); }
-
-// column 'spec': a rough idea for the spec writer, free text. Otherwise a full card from the template.
-async function newCard(column = 'backlog') {
-  openId = 'new';
-  newColumn = column;
-  const idea = column === 'spec';
-  const f = $('edit');
-  f.reset();
-  f.body.value = idea ? '' : (await api('/api/template')).template;
-  f.body.placeholder = idea ? 'Qué quieres que cambie, dónde, y cualquier detalle que ya tengas decidido.' : '';
-  $('e-heading').textContent = idea ? 'Nueva idea para el Spec Writer' : 'Nueva tarjeta';
-  $('e-idea').hidden = !idea;
-  $('e-rules').hidden = idea;
-  showMode(true);
-  $('detail').showModal();
-  f.title.focus();
-}
-
-function startEdit() {
-  const c = state.cards.find((x) => x.id === openId);
-  const f = $('edit');
-  f.title.value = c.title;
-  f.labels.value = c.labels.join(', ');
-  f.blockedBy.value = c.blockedBy.join(', ');
-  f.body.value = c.body;
-  $('e-heading').textContent = `Editar #${c.id}`;
-  $('e-idea').hidden = true;
-  $('e-rules').hidden = c.column === 'spec';
-  showMode(true);
-}
+function openCard(id) { openId = id; fillView(); $('detail').showModal(); }
 
 function fillView() {
   const c = state.cards.find((x) => x.id === openId);
   if (!c) return $('detail').close();
   $('v-title').textContent = `#${c.id} ${c.title}`;
-  $('v-meta').replaceChildren(el('span', { className: 'tag', textContent: c.column }),
-    ...c.blockedBy.map((d) => el('span', { className: 'tag' + (c.unmet.includes(d) ? ' warn' : ''), textContent: `bloqueada por #${d}` })),
-    ...Object.entries(c.run).map(([k, v]) => el('span', { className: 'tag', textContent: `${k}: ${v}` })),
-    ...tags(c).childNodes);
-  $('v-lint').replaceChildren(...(c.lint.length && c.column !== 'spec' ? [el('h4', { textContent: 'Lint' }),
-    el('ul', {}, ...c.lint.map((i) => el('li', { className: i.severity, textContent: i.message })))] : []));
-  // The review panel: who passed this commit, who is still looking.
-  const lenses = c.panel?.head || c.column === 'review' ? c.lenses || state.lenses : [];
-  $('v-panel').replaceChildren(...(lenses.length ? [
-    el('h4', { textContent: `Panel de revisión${c.panel?.head ? ' · commit ' + c.panel.head.slice(0, 8) : ''}` }),
-    el('div', { className: 'meta' }, ...panel(c)),
-  ] : []));
+  $('v-meta').replaceChildren(el('span', { textContent: c.column }), ...c.labels.map((l) => el('span', { textContent: l })),
+    ...c.unmet.map((d) => el('span', { textContent: `espera a #${d}` })),
+    ...Object.entries(c.run).map(([k, v]) => el('span', { textContent: `${k}: ${v}` })));
+  const at = stationOf(c, state.lenses);
+  $('v-panel').replaceChildren(...(at ? [rail(c)] : []));
   $('v-body').textContent = c.body || '(sin descripción)';
-  // The merge gate handed this one to a person: they can approve the pinned commit from here.
   $('v-approve').hidden = !(c.labels.includes('merge-approval') && c.run.branch && c.run.reviewedSha);
   $('v-comments').replaceChildren(...c.comments.map((m) =>
-    el('div', { className: 'comment' }, el('div', { className: 'who', textContent: `[${m.role}] ${new Date(m.at).toLocaleString()}` }), m.text)));
+    el('div', { className: 'comment' }, el('div', { className: 'meta', textContent: `[${m.role}] ${new Date(m.at).toLocaleString()}` }), m.text)));
   $('v-history').replaceChildren(...c.history.map((h) =>
     el('div', { textContent: `${new Date(h.at).toLocaleString()} · ${h.from ? h.from + ' → ' : ''}${h.to}${h.by ? ' (' + h.by + ')' : ''}` })));
 }
 
-$('new-idea').onclick = () => newCard('spec');
-$('v-edit').onclick = startEdit;
-$('v-approve').onclick = async () => {
-  const c = state.cards.find((x) => x.id === openId);
-  const sha = c.run.reviewedSha;
-  if (!confirm(`¿Has revisado ${c.run.branch} en ${sha.slice(0, 8)}?\n\nEl merge gate ejecutará verify y, si pasa, la mergeará en la rama base.`)) return;
-  const btn = $('v-approve');
-  btn.disabled = true;
-  $('v-approve-status').textContent = 'ejecutando verify y merge…';
-  try {
-    const r = await api(`/api/cards/${c.id}/approve`, { sha });
-    $('v-approve-status').textContent = '';
-    alert(`${r.status}: ${r.message}`);
-  } catch (err) {
-    $('v-approve-status').textContent = '';
-    alert(err.message);
-  } finally {
-    btn.disabled = false;
-  }
-};
-$('e-cancel').onclick = () => (openId === 'new' ? $('detail').close() : (showMode(false), fillView()));
-$('detail').onclose = () => { openId = null; showMode(false); };
-$('edit').onsubmit = async (e) => {
-  e.preventDefault();
-  const f = e.target;
-  const data = { title: f.title.value, body: f.body.value, labels: list(f.labels.value), blockedBy: list(f.blockedBy.value).map((d) => Number(d.replace('#', ''))) };
-  try {
-    const card = openId === 'new' ? await api('/api/cards', { ...data, column: newColumn }) : await api(`/api/cards/${openId}`, data);
-    openId = card.id;
-    await refresh();
-    showMode(false);
-    fillView();
-  } catch (err) { alert(err.message); }
-};
-$('v-comment').onsubmit = async (e) => {
-  e.preventDefault();
-  await api(`/api/cards/${openId}/comments`, { text: e.target.text.value }).catch((err) => alert(err.message));
-  e.target.reset();
-};
+async function comment(id, form) {
+  await api(`/api/cards/${id}/comments`, { text: form.text.value }).then(() => form.reset(), (err) => alert(err.message));
+}
+
+$('v-approve').onclick = () => approve(state.cards.find((x) => x.id === openId), $('v-approve'));
+$('detail').onclose = () => { openId = null; };
+$('v-comment').onsubmit = (e) => { e.preventDefault(); comment(openId, e.target); };
 
 async function refresh() { state = await api('/api/board'); render(); }
 

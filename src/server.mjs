@@ -96,6 +96,9 @@ export function createServer({ boardFile, repoRoot = process.cwd() }) {
       if (req.method === 'GET' && url.pathname === '/') {
         return send(res, 200, fs.readFileSync(path.join(PUBLIC_DIR, 'index.html')), 'text/html; charset=utf-8');
       }
+      if (req.method === 'GET' && url.pathname === '/board-view.mjs') {
+        return send(res, 200, fs.readFileSync(path.join(PUBLIC_DIR, 'board-view.mjs')), 'text/javascript; charset=utf-8');
+      }
       if (req.method === 'GET' && url.pathname === '/api/board') {
         return send(res, 200, boardView(boardFile, repoRoot));
       }

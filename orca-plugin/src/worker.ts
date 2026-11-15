@@ -22,8 +22,15 @@ export function deactivate(): void {
 export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   stopped = false
   let seq = 0 // a newer snapshot supersedes one still waiting for workspace.list
-  async function snapshot(): Promise<BoardsSnapshot> {
+  let latest: Promise<BoardsSnapshot>
+  // A superseded call answers with the newest snapshot, so the panel never ends on stale data.
+  function snapshot(): Promise<BoardsSnapshot> {
     const mine = ++seq
+    const run = read(mine)
+    latest = run
+    return run.then((snap) => (mine === seq ? snap : latest))
+  }
+  async function read(mine: number): Promise<BoardsSnapshot> {
     try {
       const { workspaces } = await orca.host.call('workspace.list', {})
       if (stopped) return { boards: [] } // deactivated while the list was in flight: open no watcher

@@ -253,3 +253,22 @@ test('a slow workspace.list that returns after workspace.removed does not bring 
   assert.deepEqual(worker.refusals, [])
   await worker.deactivate()
 })
+
+test('a slow boards.get that returns after workspace.removed answers with the newer snapshot', async () => {
+  const repo = repoWithBoard(cards)
+  const host = liveHost([repo])
+  const worker = await mountWorker(main, { host })
+  const late = { workspaces: [{ id: 'w0', kind: 'worktree', name: 'shop', path: repo, branch: 'main', hostId: null }], truncated: false }
+  host.respond('workspace.list', async () => {
+    host.set([]) // the next call, from the removal refresh, sees no workspace
+    await wait(600)
+    return late
+  })
+  const get = worker.request('boards.get')
+  await wait(40)
+  await worker.emit('workspace.removed', { workspaceId: 'w0', kind: 'worktree', path: repo })
+  const snap = (await get) as { boards: unknown[] }
+  assert.equal(snap.boards.length, 0)
+  assert.deepEqual(worker.refusals, [])
+  await worker.deactivate()
+})

@@ -633,3 +633,11 @@ test('card.template runs `template --json` in the repo, and an unknown board or 
   assert.match(String((await none.worker.request('card.template', { board: none.key })).error), /bin\/factory\.mjs/)
   await none.worker.deactivate()
 })
+
+test('readBoard fills since, lastMerge and from, and survives a card with no history or comments', () => {
+  const held = { id: 1, title: 'A', column: 'blocked', labels: [], claimedAt: '2026-01-01T00:00:00.000Z', history: [{ to: 'building' }, { from: 'merge', to: 'blocked' }], comments: [{ role: 'merge', text: 'retenido' }, { role: 'user', text: 'ok' }] }
+  const bare = { id: 2, title: 'B', column: 'backlog' }
+  const [a, b] = readBoard(discover([repoWithBoard([held, bare])])[0]).cards
+  assert.deepEqual([a.since, a.lastMerge, a.from], ['2026-01-01T00:00:00.000Z', 'retenido', 'merge'])
+  assert.deepEqual([b.since, b.lastMerge, b.from], [null, null, null])
+})

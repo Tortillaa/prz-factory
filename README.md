@@ -218,7 +218,7 @@ Cada rol carga la suya (ver [Roles de agentes](#roles-de-agentes)): `factory-run
 
 ## Plugin para Orca
 
-Opcional: un panel en la barra lateral derecha de Orca con el tablero de cada repo abierto, en vivo. Es un cliente más del tablero, como la web: su worker atiende `card.get`, `card.add`, `card.edit`, `card.move`, `card.comment` y `card.approve` ejecutando el CLI de cada repo, así que el lint, los bloqueos y el merge gate siguen siendo los mismos y el plugin nunca escribe `board.json`.
+La forma principal de usar el tablero desde Orca: un panel en la barra lateral derecha con el tablero de cada repo abierto, en vivo. Arriba, **Te esperan** (aprobar un merge retenido, contestar a una tarjeta que pide algo) y **En curso** (quién tiene cada tarjeta, en qué lane, desde cuándo y cuántas lentes del panel han pasado), y debajo las columnas con un buscador. `factory serve` es la alternativa, en el navegador. El panel es un cliente más del tablero, como la web: su worker atiende `card.get`, `card.add`, `card.edit`, `card.move`, `card.comment` y `card.approve` ejecutando el CLI de cada repo, así que el lint, los bloqueos y el merge gate siguen siendo los mismos y el plugin nunca escribe `board.json`.
 
 Se instala una vez por máquina, desde cualquier proyecto que tenga la fábrica. Como el plugin ejecuta su propio proceso de Node, Orca pide tu aprobación: el primer comando enseña lo que podrá hacer y una huella `ap1-…`, y el segundo lo instala con esa huella.
 

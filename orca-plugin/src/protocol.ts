@@ -31,6 +31,12 @@ export type CardView = {
   /** run.reviewedSha: the commit a held merge would land. */
   sha: string | null
   lastComment: string | null
+  /** Text of the last comment by the merge agent: why a merge is held. */
+  lastMerge: string | null
+  /** The column the card was in before its last move to blocked. */
+  from: string | null
+  /** ISO time its worker (or its first reviewer) took it. */
+  since: string | null
   /** Only in review: lenses that passed, out of the lenses this panel has. */
   panel?: { passed: string[]; total: number }
 }

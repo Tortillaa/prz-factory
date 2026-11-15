@@ -48,6 +48,29 @@ const idea = atom('')
 const fresh = atom<{ title: string; body: string; column: string } | null>(null)
 const freshError = atom('')
 let adding = false
+/** The cover: search text, the card whose approval awaits confirmation, answers being typed, and the last worker error. */
+const query = atom('')
+const approving = atom<number | null>(null)
+const replies = atom<Record<number, string>>({})
+const coverError = atom('')
+
+/** Cover actions show the worker's error as it came. */
+async function cover(run: () => Promise<CardReply[]>): Promise<boolean> {
+  const failed = (await run()).find((r) => r.error)
+  set(coverError, failed?.error ?? '')
+  return !failed
+}
+
+const approveCard = (board: string, c: CardView) =>
+  cover(async () => [await plugin.request('card.approve', { board, id: c.id, sha: c.sha! })]).then(() => set(approving, null))
+
+async function answerCard(board: string, c: CardView, all: Record<number, string>): Promise<void> {
+  const sent = await plugin.request('card.comment', { board, id: c.id, text: all[c.id].trim() })
+  if (sent.error) return void set(coverError, sent.error)
+  if (await cover(async () => [await plugin.request('card.move', { board, id: c.id, column: c.from ?? 'spec' })])) set(replies, { ...all, [c.id]: '' })
+}
+
+const ago = (iso: string | null) => (iso ? <RelativeTime at={Date.parse(iso)} /> : null)
 
 type Sheet = {
   id: number
@@ -282,6 +305,10 @@ export default function Panel() {
   const formError = read(freshError)
   const approve = board.cards.filter((c) => c.labels.includes('merge-approval') && c.sha)
   const answer = board.cards.filter((c) => c.labels.includes('needs-you') && !c.labels.includes('merge-approval'))
+  const running = board.cards.filter((c) => c.assignee || c.panel)
+  const [q, confirmId, typed, coverErr] = [read(query), read(approving), read(replies), read(coverError)]
+  const needle = q.trim().toLowerCase()
+  const shown = needle ? board.cards.filter((c) => String(c.id) === needle.replace(/^#/, '') || c.title.toLowerCase().includes(needle)) : board.cards
   return (
     <Stack gap="md">
       {snap.boards.length > 1 && (
@@ -322,20 +349,50 @@ export default function Panel() {
       {snap.boards.filter((b) => b.error).map((b) => (
         <Callout key={b.key} tone="danger" title={`no se pudo leer el tablero de ${b.name}: ${b.error}`} />
       ))}
-      {approve.length > 0 && (
-        <Callout tone="warning" title="Aprobar merge" icon="warning">
-          {approve.map((c) => `#${c.id} ${c.title}: factory merge ${c.id} --sha ${c.sha!.slice(0, 7)} --human`).join(' · ')}
-        </Callout>
+      {coverErr && <Callout tone="danger" title={coverErr} />}
+      {(approve.length > 0 || answer.length > 0) && (
+        <Stack gap="sm">
+          <Text weight="semibold">Te esperan</Text>
+          {approve.map((c) => (
+            <Callout key={String(c.id)} tone="warning" title={`Aprobar #${c.id} ${c.title}`} icon="warning">
+              <Text>{c.lastMerge ?? c.lastComment ?? ''}</Text>
+              <Text size="xs">{c.sha!.slice(0, 7)}</Text>
+              {confirmId === c.id ? (
+                <Row gap="xs">
+                  <Button onPress={() => approveCard(board.key, c)}>Confirmar merge</Button>
+                  <Button variant="ghost" onPress={() => set(approving, null)}>Cancelar</Button>
+                </Row>
+              ) : (
+                <Button variant="ghost" onPress={() => set(approving, c.id)}>Aprobar y mergear</Button>
+              )}
+            </Callout>
+          ))}
+          {answer.map((c) => (
+            <Callout key={String(c.id)} tone="warning" title={`Contestar #${c.id} ${c.title}`} icon="warning">
+              <Text>{c.lastComment ?? ''}</Text>
+              <Textarea label="Respuesta" value={typed[c.id] ?? ''} onChange={(v) => set(replies, { ...typed, [c.id]: v })} />
+              <Button disabled={!(typed[c.id] ?? '').trim()} onPress={() => answerCard(board.key, c, typed)}>Contestar</Button>
+            </Callout>
+          ))}
+        </Stack>
       )}
-      {answer.length > 0 && (
-        <Callout tone="warning" title="Contestar" icon="warning">
-          {answer.map((c) => `#${c.id} ${c.title}${c.lastComment ? `: ${c.lastComment}` : ''}`).join(' · ')}
-        </Callout>
+      {running.length > 0 && (
+        <Stack gap="sm">
+          <Text weight="semibold">En curso</Text>
+          <List label="En curso">
+            {running.map((c) => (
+              <ListItem key={String(c.id)} title={`#${c.id} ${c.title}`} description={[c.assignee, c.column, c.panel && `review ${c.panel.passed.length}/${c.panel.total}`].filter(Boolean).join(' · ')} icon="agent" onPress={() => open({ board: board.key, id: c.id })}>
+                {ago(c.since)}
+              </ListItem>
+            ))}
+          </List>
+        </Stack>
       )}
+      <Input label="Buscar" value={q} onChange={(v) => set(query, v)} />
       {COLUMNS.map((column) => {
-        const cards = board.cards.filter((c) => c.column === column)
+        const cards = shown.filter((c) => c.column === column)
         return (
-          <Collapsible key={column} title={`${column} (${board.counts[column] ?? 0})`} defaultOpen={OPEN.has(column) && cards.length > 0}>
+          <Collapsible key={column} title={`${column} (${cards.length})`} defaultOpen={OPEN.has(column) && cards.length > 0}>
             {cards.length ? (
               <List label={column}>
                 {cards.map((c) => (

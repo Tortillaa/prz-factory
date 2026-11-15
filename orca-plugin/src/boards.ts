@@ -52,8 +52,10 @@ type RawCard = {
   blockedBy?: number[]
   body?: string
   run?: { reviewedSha?: string | null }
-  comments?: { text: string }[]
-  panel?: { lenses?: Record<string, { worker?: string | null; verdict?: string | null }> }
+  claimedAt?: string | null
+  history?: { from?: string; to: string }[]
+  comments?: { role?: string; text: string }[]
+  panel?: { lenses?: Record<string, { worker?: string | null; verdict?: string | null; claimedAt?: string | null }> }
 }
 
 type Config = { review?: { lenses?: string[]; light?: string[] }; merge?: { humanLabels?: string[] } }
@@ -98,6 +100,9 @@ export function readBoard(entry: { key: string; name: string; file: string }): B
     waitingOn: (c.blockedBy ?? []).filter((d) => column.get(d) !== 'done'),
     sha: c.run?.reviewedSha ?? null,
     lastComment: c.comments?.at(-1)?.text.trim() ?? null,
+    lastMerge: c.comments?.findLast((m) => m.role === 'merge')?.text.trim() ?? null,
+    from: c.history?.findLast((h) => h.to === 'blocked')?.from ?? null,
+    since: c.claimedAt ?? Object.values(c.panel?.lenses ?? {}).map((s) => s.claimedAt).filter(Boolean).sort()[0] ?? null,
     ...(c.column === 'review' && {
       panel: {
         passed: Object.entries(c.panel?.lenses ?? {}).filter(([, s]) => s.verdict === 'pass').map(([l]) => l),

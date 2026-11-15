@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-label="prz-factory — De una idea a main, con un equipo de agentes que redacta, construye, revisa y mergea.">
+  <style>
+    .bg { fill: #16130F; }
+    .grid { fill: #2A241C; }
+    .label { fill: #E8A33D; font: 600 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 3px; }
+    .title { fill: #F6E7C1; font: 800 84px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; letter-spacing: -1.5px; }
+    .dot { fill: #D9482B; }
+    .tag { fill: #CDBF9E; font: 400 28px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .chip { fill: none; stroke: #E8A33D; stroke-opacity: .55; stroke-width: 1.5; }
+    .chipText { fill: #F6E7C1; font: 500 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .rule { stroke: #E8A33D; stroke-width: 3; }
+    @media (prefers-color-scheme: light) {
+      .bg { fill: #FBF3E1; }
+      .grid { fill: #EADBB8; }
+      .label { fill: #B36A12; }
+      .title { fill: #1B1A17; }
+      .tag { fill: #5A5145; }
+      .chip { stroke: #B36A12; }
+      .chipText { fill: #1B1A17; }
+      .rule { stroke: #B36A12; }
+    }
+  </style>
+  <defs>
+    <pattern id="comal" width="22" height="22" patternUnits="userSpaceOnUse"><circle class="grid" cx="2" cy="2" r="1.4"/></pattern>
+    <radialGradient id="masa" cx="42%" cy="38%" r="70%">
+      <stop offset="0" stop-color="#F8DFA0"/><stop offset=".62" stop-color="#EBB65A"/><stop offset="1" stop-color="#C98A2E"/>
+    </radialGradient>
+    <clipPath id="frame"><rect width="1280" height="360" rx="20"/></clipPath>
+  </defs>
+  <g clip-path="url(#frame)">
+    <rect class="bg" width="1280" height="360"/>
+    <rect width="1280" height="360" fill="url(#comal)"/>
+    <g transform="translate(1110 180) rotate(-12)">
+      <circle r="196" fill="#000" opacity=".22" transform="translate(10 14)"/>
+      <circle r="196" fill="url(#masa)"/>
+      <circle r="168" fill="none" stroke="#B9782A" stroke-opacity=".35" stroke-width="2" stroke-dasharray="3 9"/>
+      <ellipse cx="-38" cy="-52" rx="15" ry="9" fill="#7A4317" opacity="0.55"/><ellipse cx="44" cy="-30" rx="10" ry="7" fill="#7A4317" opacity="0.45"/><ellipse cx="-12" cy="18" rx="19" ry="11" fill="#7A4317" opacity="0.5"/><ellipse cx="58" cy="40" rx="13" ry="8" fill="#7A4317" opacity="0.4"/><ellipse cx="-64" cy="46" rx="9" ry="6" fill="#7A4317" opacity="0.5"/><ellipse cx="18" cy="78" rx="15" ry="9" fill="#7A4317" opacity="0.35"/><ellipse cx="-86" cy="-6" rx="7" ry="5" fill="#7A4317" opacity="0.45"/><ellipse cx="86" cy="-78" rx="9" ry="6" fill="#7A4317" opacity="0.4"/><ellipse cx="6" cy="-96" rx="11" ry="6" fill="#7A4317" opacity="0.35"/><ellipse cx="-40" cy="98" rx="8" ry="5" fill="#7A4317" opacity="0.4"/><ellipse cx="100" cy="10" rx="7" ry="4" fill="#7A4317" opacity="0.35"/>
+    </g>
+    <line class="rule" x1="96" y1="66" x2="132" y2="66"/>
+    <text class="label" x="146" y="71">TORTILLAA · OPEN SOURCE</text>
+    <text class="title" x="92" y="150">prz-factory<tspan class="dot">.</tspan></text>
+    <text class="tag" x="96" y="206">De una idea a main, con un equipo de agentes</text>
+    <text class="tag" x="96" y="244">que redacta, construye, revisa y mergea.</text>
+    <g transform="translate(96 284)"><rect class="chip" width="150" height="34" rx="17"/><text class="chipText" x="75" y="22.5" text-anchor="middle">Claude Code</text></g>
+    <g transform="translate(258 284)"><rect class="chip" width="78" height="34" rx="17"/><text class="chipText" x="39" y="22.5" text-anchor="middle">Grok</text></g>
+    <g transform="translate(348 284)"><rect class="chip" width="78" height="34" rx="17"/><text class="chipText" x="39" y="22.5" text-anchor="middle">Orca</text></g>
+    <g transform="translate(438 284)"><rect class="chip" width="182" height="34" rx="17"/><text class="chipText" x="91" y="22.5" text-anchor="middle">0 dependencias</text></g>
+  </g>
+</svg>

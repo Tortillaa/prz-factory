@@ -30,8 +30,8 @@ Tú solo haces dos cosas: **mandar ideas** y **responder a las solicitudes** que
 
 | Quién | Qué hace | Qué no hace nunca |
 |---|---|---|
-| **Spec Writer** (Sonnet 5.5) | Lee el código, recorta la idea a la versión más pequeña que resuelve el problema, la convierte en una tarjeta completa, decide si toca el negocio y la pasa a Ready él solo. Si la tarjeta es difícil de redactar, pide ayuda a un subagente Opus 5.5 | Escribir código, inventarse una decisión de producto |
-| **Builder** (Sonnet 5.5) | Construye la tarjeta en su rama, con los tests primero y el mínimo código; para una parte difícil llama a un subagente Opus 5.5. Al entregar dice qué ha decidido no construir (`Skipped:`) | Mergear |
+| **Spec Writer** (Sonnet 5.5) | Lee el código, recorta la idea a la versión más pequeña que resuelve el problema, la convierte en una tarjeta completa, decide si toca el negocio y la pasa a Ready él solo. Si la tarjeta es difícil de redactar, consulta a su advisor (Fable 5.2) | Escribir código, inventarse una decisión de producto |
+| **Builder** (Sonnet 5.5) | Construye la tarjeta en su rama, con los tests primero y el mínimo código; para una parte difícil consulta a su advisor (Fable 5.2). Al entregar dice qué ha decidido no construir (`Skipped:`) | Mergear |
 | **Reviewers** (uno por lente) | Revisan el mismo commit en paralelo, cada uno con su especialidad, y devuelven el código que no debería existir | Arreglar el código, revisar fuera de su lente |
 | **Agente de merge** | Mira si el cambio toca el negocio, te explica qué cambia y cómo deshacerlo, y lanza el merge gate | Cambiar código, quitar una etiqueta de negocio o aprobar por ti |
 | **Merge gate** | Comprobación final automática: mergea, o deja la solicitud para ti | Mergear algo que no aprobó el panel entero |
@@ -41,20 +41,36 @@ Tú solo haces dos cosas: **mandar ideas** y **responder a las solicitudes** que
 
 ## Parte 1 · Preparar un proyecto (una sola vez)
 
-No hay que instalar nada antes. Solo necesitas Node 22 o superior, git, Orca, y acceso a GitHub (el repo de la fábrica es privado: basta con haber hecho `gh auth login`).
+No hay que instalar nada antes. Solo necesitas Node 22 o superior, git, Orca, y acceso a GitHub (el repo de la fábrica es público: no hacen falta credenciales).
+
+### Paso 0. Enseña a tus agentes a traer la fábrica (una vez por máquina)
+
+```sh
+git clone --depth 1 https://github.com/Tortillaa/prz-factory.git prz-factory-tmp
+node prz-factory-tmp/bin/factory.mjs install --user
+rm -rf prz-factory-tmp      # en PowerShell: Remove-Item -Recurse -Force prz-factory-tmp
+```
+
+Eso deja la skill `prz-factory-init` en `~/.claude/skills/`. Desde entonces, cualquier sesión de Claude Code en cualquier proyecto sabe instalar o actualizar la fábrica cuando se lo pides.
 
 ### Paso 1. Pídeselo a tu agente
 
-Abre el proyecto en Orca, arranca un agente (Claude Code o Grok) y escríbele:
+Abre el proyecto en Orca, arranca un agente y escríbele:
 
-> Instala prz-factory en este repositorio: ejecuta `npx -y github:Tortillaa/prz-factory install .` y después sigue la skill factory-onboard que se acaba de instalar.
+> inicializa prz-factory
 
-El agente descarga la fábrica de GitHub, la copia dentro del proyecto y te guía por el resto: comprueba que los tests del proyecto pasan, te pregunta la política de merge y escribe las reglas para los agentes.
+Si no hiciste el paso 0 (o el agente es Grok), dale la ruta completa:
+
+> Instala prz-factory en este repositorio: clona `https://github.com/Tortillaa/prz-factory.git` con `git clone --depth 1` en la carpeta `.prz-factory-src`, ejecuta `node .prz-factory-src/bin/factory.mjs install .`, borra `.prz-factory-src` y después sigue la skill factory-onboard que se acaba de instalar.
+
+El agente clona la fábrica de GitHub, la copia dentro del proyecto, borra el clon y te guía por el resto: comprueba que los tests del proyecto pasan, te pregunta la política de merge y escribe las reglas para los agentes.
 
 Si prefieres hacerlo tú, en la terminal del proyecto:
 
 ```sh
-npx -y github:Tortillaa/prz-factory install .
+git clone --depth 1 https://github.com/Tortillaa/prz-factory.git .prz-factory-src
+node .prz-factory-src/bin/factory.mjs install .
+rm -rf .prz-factory-src      # en PowerShell: Remove-Item -Recurse -Force .prz-factory-src
 ```
 
 ### Paso 2. Qué ha quedado en tu proyecto
@@ -68,7 +84,7 @@ npx -y github:Tortillaa/prz-factory install .
 
 A partir de aquí, el comando de la fábrica es `node .prz-factory/bin/factory.mjs`. En esta guía se escribe `factory` para abreviar: si quieres teclear solo `factory`, ejecuta `npm link` dentro de `.prz-factory`. Comprueba que todo está bien con `node .prz-factory/bin/factory.mjs doctor`.
 
-Para actualizar la fábrica a su última versión, repite la línea de `npx`: reemplaza `.prz-factory/` y las skills, y no toca tu configuración.
+Para actualizar la fábrica a su última versión, pide "actualiza prz-factory" o repite las tres líneas de la instalación: reemplaza `.prz-factory/` y las skills, y no toca tu configuración.
 
 ### Paso 2b. El panel dentro de Orca (opcional)
 
@@ -193,7 +209,7 @@ En el tablero verás la tarjeta moverse sola:
 4. **REVIEW → MERGE**, cuando los cuatro aprueban. El agente de merge lee el cambio y su comentario `[merge]` te dice qué cambia y, si te lo va a preguntar, por qué.
 5. **MERGE → DONE**, si el cambio es pequeño y no toca el negocio. Ya está en `main`. Si lo toca, pasa a **BLOCKED** con una solicitud de aprobación (paso 5).
 
-Si un reviewer encuentra un problema, la tarjeta vuelve a **BUILDING** con el hallazgo, el Builder lo arregla y el panel la revisa otra vez desde cero. A la cuarta vuelta sin converger, la fábrica para y te la manda a ti.
+Si un reviewer encuentra un problema, la tarjeta vuelve a **BUILDING** con el hallazgo, el Builder lo arregla y el panel la revisa otra vez desde cero. Si suma 10 rondas fallidas, la fábrica para y te la manda a ti.
 
 Qué mira cada reviewer:
 
@@ -276,7 +292,7 @@ factory cleanup --apply    # lo borra
 
 | Síntoma | Causa y solución |
 |---|---|
-| Una tarjeta rebota entre BUILDING y REVIEW | A la cuarta vuelta pasa sola a BLOCKED con una solicitud. Lee los hallazgos: suele faltar una decisión en la tarjeta. |
+| Una tarjeta rebota entre BUILDING y REVIEW | A la décima ronda fallida pasa sola a BLOCKED con una solicitud. Lee los hallazgos: suele faltar una decisión en la tarjeta. |
 | Una tarjeta está en BLOCKED y no sé por qué | Ábrela: el último comentario lo explica. |
 | Tu checkout de `main` tenía cambios sin commitear y la tarjeta pasó de MERGE a BLOCKED | Haz commit o stash y arrastra la tarjeta otra vez a MERGE: aterriza el mismo commit revisado. |
 | Un agente se ha quedado colgado | `factory status` marca los claims viejos con ⚠️. Di "status" al coordinador, o libérala con `factory reclaim <id>`. |

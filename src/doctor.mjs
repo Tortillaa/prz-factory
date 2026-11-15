@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, execSync } from 'node:child_process';
 import { loadConfig, repoRoot } from './config.mjs';
-import { listSkills, RUNTIME_DIR } from './install.mjs';
+import { listSkills, RUNTIME_DIR, prePushPath, prePushScript, PRE_PUSH_MARKER } from './install.mjs';
 import * as store from './store.mjs';
 
 // Runs a fixed command line. Goes through the shell so Windows .cmd shims (orca, factory) resolve.
@@ -46,7 +46,7 @@ export function doctor(cwd = process.cwd()) {
   // The CLI either lives in the repo (vendored by `factory install`) or is on PATH (npm link).
   const vendored = path.join(repoRoot(cwd), RUNTIME_DIR, 'bin', 'factory.mjs');
   const cliWhere = fs.existsSync(vendored) ? `${RUNTIME_DIR}/bin/factory.mjs (in the repo)` : factoryOnPath ? factoryOnPath.split(/\r?\n/)[0] : null;
-  add('factory CLI', !!cliWhere, cliWhere || 'not in the repo and not on PATH', 'run `npx -y github:Tortillaa/prz-factory install .` in the repo');
+  add('factory CLI', !!cliWhere, cliWhere || 'not in the repo and not on PATH', 'in the repo: git clone --depth 1 https://github.com/Tortillaa/prz-factory.git .prz-factory-src, then node .prz-factory-src/bin/factory.mjs install . and delete .prz-factory-src');
 
   try {
     const { file, exists, config } = loadConfig(root);
@@ -76,6 +76,10 @@ export function doctor(cwd = process.cwd()) {
   } catch {}
   const guardFile = fs.existsSync(path.join(root, '.claude', 'hooks', 'factory-guard.mjs'));
   add('guard hooks', guards.length >= 4 && guardFile, guardFile ? `${guards.length} guards wired` : 'factory-guard.mjs not installed', 'run `factory install` (without --no-hooks)');
+
+  const prePush = prePushPath(root);
+  const prePushOk = !!prePush && fs.existsSync(prePush) && fs.readFileSync(prePush, 'utf8').includes(PRE_PUSH_MARKER) && fs.existsSync(prePushScript(prePush));
+  add('pre-push hook', prePushOk, prePushOk ? prePush : 'no factory pre-push hook: force-pushes to protected branches are not stopped by git', 'run `factory install`');
 
   // Grok reads the same .claude/ skills, CLAUDE.md and guard hooks, but only in a folder it trusts,
   // and trusting the main checkout covers every worktree of the repo. Checked only when Grok is

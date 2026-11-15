@@ -1,0 +1,66 @@
+#!/usr/bin/env node
+// factory-managed: prz-factory git pre-push check. `factory install` copies it next to the repo's sh `pre-push`
+// wrapper (shared by every worktree). Self-contained on purpose: no imports from src/.
+// Git runs it after resolving the push, so no way of typing the command gets around it.
+// Denies by default any push to a protected branch that is not a fast-forward (or a new branch).
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const ZERO = /^0+$/;
+
+// lines: `<local ref> <local sha> <remote ref> <remote sha>`. Returns the refusals (empty = allowed).
+export function checkPush(lines, { protectedBranches, isAncestor, linked }) {
+  const out = [];
+  for (const line of lines) {
+    const [, local, remoteRef, remote] = line.trim().split(/\s+/);
+    const name = remoteRef?.replace(/^refs\/heads\//, '');
+    if (!remoteRef?.startsWith('refs/heads/') || !protectedBranches.includes(name)) continue;
+    if (linked) out.push(`${name}: workers never update a protected branch`);
+    else if (ZERO.test(local)) out.push(`deleting protected branch ${name}`);
+    else if (!ZERO.test(remote) && !isAncestor(remote, local)) out.push(`${name} would not be a fast-forward`);
+  }
+  return out;
+}
+
+// baseBranch is always protected: a mistaken edit of protectedBranches must not unprotect it.
+export function protectedFromConfig(cfg) {
+  const list = Array.isArray(cfg?.protectedBranches) ? cfg.protectedBranches : [];
+  const base = cfg?.baseBranch ? [cfg.baseBranch] : [];
+  return [...new Set([...(list.length || base.length ? list : ['main', 'master']), ...base])];
+}
+
+function readConfig() {
+  try {
+    const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
+    return JSON.parse(fs.readFileSync(path.join(root, 'factory.config.json'), 'utf8'));
+  } catch {
+    return { protectedBranches: ['main', 'master'] };
+  }
+}
+
+// A linked worktree (a worker's) has a git dir apart from the common one.
+const isLinked = () => {
+  const p = (flag) => fs.realpathSync(path.resolve(execFileSync('git', ['rev-parse', flag], { encoding: 'utf8' }).trim()));
+  return p('--git-dir') !== p('--git-common-dir');
+};
+
+const isAncestor = (a, b) => {
+  try {
+    execFileSync('git', ['merge-base', '--is-ancestor', a, b], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false; // not an ancestor, or the object is unknown here: refuse either way
+  }
+};
+
+// The sh wrapper sets FACTORY_PRE_PUSH so a path-spelling mismatch (drive case, symlink) cannot make the check a no-op.
+if (process.env.FACTORY_PRE_PUSH || (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url))) {
+  const lines = fs.readFileSync(0, 'utf8').split('\n').filter((l) => l.trim());
+  const refused = checkPush(lines, { protectedBranches: protectedFromConfig(readConfig()), isAncestor, linked: isLinked() });
+  if (refused.length) {
+    console.error(`prz-factory pre-push: refused: ${refused.join('; ')}. Protected branches only move forward, and never from a worker worktree; land code with \`factory merge\`.`);
+    process.exit(1);
+  }
+}

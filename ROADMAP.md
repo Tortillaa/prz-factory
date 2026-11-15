@@ -41,8 +41,8 @@ Un skill por lane, sobre tres comandos comunes: `factory start` (claim y checkou
 - [x] `factory-review`: primero su propia pasada (hipótesis antes de leer al builder), recuerda los hallazgos R1… de rondas anteriores y pasa por el merge gate. *Origen: `super-review`.*
 - [x] `factory merge <id> --sha <revisado>` (merge gate): mutex, tarjeta en Review, head = commit revisado, rama que contiene la base, política de merge humano (riesgo High, labels sensibles, diff > `merge.maxLines`), `verify` sobre ese commit exacto y fast-forward de la base (sigue el checkout donde esté la base). Mueve la tarjeta según el resultado; exit codes 0/6/7/8/9/10. *Origen: `super-board-merge-gate.sh`.*
 - [x] Formato de commits, comentarios de lane y tabla de hallazgos en `skills/factory-board/references/writing-standard.md`. *Origen: `writing-standard.md`.*
-- [x] Revisión: contador de rebotes en el store (la cuarta vuelta a building pasa a blocked con `needs-you`), las tarjetas `qa` se cierran por el gate sin merge, y el exit 10 libera la tarjeta.
-- [ ] Pendiente: aprobar merges humanos desde la web (Fase 6).
+- [x] Revisión: contador de rebotes en el store (la décima ronda fallida pasa a blocked con `needs-you`; antes era la cuarta, ver Fase 15), las tarjetas `qa` se cierran por el gate sin merge, y el exit 10 libera la tarjeta.
+- [x] Aprobar merges humanos desde la web: botón "Aprobar y mergear" y `POST /api/cards/:id/approve` (Fase 6).
 
 ## Fase 3 · Orquestador sobre Orca ✅
 
@@ -145,9 +145,9 @@ Para no gastar cuota de Claude en todo, cada lane puede correr en otro agente de
 
 La mecánica está probada (tests, CI, una tarjeta real, evals del agente de merge y del Builder). Falta demostrar el flujo completo con agentes reales y medir su coste antes de usarla sin supervisión en otros repos. Cada paso deja sus números en `docs/VALIDACION.md`.
 
-- [ ] **1 · Cerrar la #6.** Aprobarla en el tablero: primera prueba real del camino "te pide aprobación → apruebas → se mergea". Su rama salió de un `main` antiguo, así que el gate la devuelve al Builder para rebase y vuelve a recorrer el panel y el agente de merge antes de pedir la aprobación otra vez.
-- [ ] **2 · Una ejecución completa en este repo.** Dos o tres ideas pequeñas y reales con `/factory-run`: una inocente, que debe mergearse sola, y otra que toque una ruta sensible, que debe llegar como solicitud. Medir tiempo por paso, cuota y errores.
-- [ ] **2b · Las 5 evals pendientes con agentes reales:** `spec-empty-cart` y `spec-pricing-is-business` (Sonnet), `review-code-pass`, `review-ops-escalates-pricing` y `review-qa-missing-test` (Grok 4.7).
+- [x] **1 · Cerrar la #6.** Aprobada por la persona el 2026-11-14: el gate la rebasó él mismo sobre `main` (sin volver al Builder ni al panel, mismo `patch-id`) y aterrizó en `db63e8a`. Primer recorrido real de "pide aprobación → apruebas → se mergea". La #8 aterrizó igual (`5bd5ea0`). La #9 tenía conflictos: volvió al Builder, que la rebasó, el panel la aprobó en una ronda y aterrizó con aprobación en `a56ec49`.
+- [x] **2 · Una ejecución completa en este repo.** Dos o tres ideas pequeñas y reales con `/factory-run`: una inocente, que debe mergearse sola, y otra que toque una ruta sensible, que debe llegar como solicitud. Medir tiempo por paso, cuota y errores. Hecho el 2026-11-15: la #11 (riesgo Low, solo `public/index.html`) recorrió spec → build → panel ligero (qa, code) → merge y **el gate la mergeó sin persona** (`b7a0098`) en 12 min de punta a punta, con 5 workers y 14.7 min de worker. Las tarjetas sensibles (#9 y #10, `hooks/**`) llegaron como solicitud. El advisor no se llamó, como debía en una tarjeta fácil: falta verlo en una difícil.
+- [x] **2b · Las 5 evals pendientes con agentes reales** (las 8 pasan, ver `docs/VALIDACION.md`): `spec-empty-cart` y `spec-pricing-is-business` (Sonnet), `review-code-pass`, `review-ops-escalates-pricing` y `review-qa-missing-test` (Grok 4.7).
 - [ ] **3 · Piloto en un repo no crítico, con buenos tests**, en modo piloto: `"humanRisk": ["low", "medium", "high"]` en su `factory.config.json`, de modo que todos los merges pasan por una persona.
 - [ ] **4 · Decidir con datos.** Tras 10 o 20 tarjetas del piloto: cuántas se aprobarían tal cual, cuántas se rechazarían y cuánto cuesta cada una. Si salen las cuentas, quitar el modo piloto para que los cambios pequeños se mergeen solos.
 - [ ] **5 · Ajustar con lo que salga.** Candidatos: el reparto de modelos (por la cuota), `maxWorkers`, y avisos fuera del tablero si se escapan las solicitudes. Puntos flacos vistos en la ejecución del paso 2:
@@ -169,11 +169,37 @@ La mecánica está probada (tests, CI, una tarjeta real, evals del agente de mer
 La #8 (guard) y la #9 (hook `pre-push`) no convergían: cada ronda, el reviewer de seguridad encontraba otra forma de saltarse una barrera local (sintaxis de shell, alias, `--no-verify`, grafts, `send-pack`…). Todo lo que corre en la máquina se puede deshacer desde ella.
 
 - [x] **Modelo de amenaza decidido:** las barreras locales protegen contra errores, no contra un agente que se las salta a propósito. Escrito en las tarjetas #8, #9 y #10, en la lente `security` (un bypass deliberado no es un Blocker; se apunta como fuera de alcance) y en el Spec Writer (toda barrera de seguridad lleva su modelo de amenaza en Context).
+- [x] **Las tres barreras locales en `main`:** guard del force-push (#8, `5bd5ea0`), hook `pre-push` que deniega por defecto lo que no sea fast-forward sobre una rama protegida (#9, `a56ec49`) y rechazo de cualquier actualización de una rama protegida desde un worktree de worker, con `pushBase` empujando desde el checkout principal (#10, `2b23537`). La #10 pasó el panel en una sola ronda.
 - [x] **Garantía en el servidor:** el repo pasa a público y `main` queda protegida en GitHub contra force-push y borrado, también para administradores.
+
+## Fase 15 · Coste de la review
+
+Datos de `factory report` tras #8 y #9: 42 workers y 483 min, de los que la review se llevó 466 min (97 %) y 136 min en rondas ya cerradas. La #8 necesitó 10 rondas de panel y la #9, 4. El límite de vueltas (`MAX_BOUNCES`) no frena un bucle que pasa por blocked y vuelve.
+
+- [x] **Límite de rondas:** `store.MAX_ROUNDS = 10` (decisión del usuario, 2026-11-14). La décima ronda fallida pasa la tarjeta a blocked con `needs-you`, en vez de la cuarta vuelta de antes. Las rondas se cuentan sobre todo el historial, así que tras desbloquearla, el siguiente fallo vuelve a pararla.
+- [x] **Advisor en vez de subagente Opus** (decisión del usuario, 2026-11-15): Spec Writer y Builder siguen en Sonnet 5.5 y consultan a su advisor, Claude Fable 5.2 (`"advisorModel": "fable"` en `.claude/settings.json`, porque Orca no tiene flag para pasarlo por worker). Las skills dicen cuándo, y eso manda sobre el consejo del propio advisor de llamarlo en cada tarea. Ni el agente de merge ni el coordinador lo usan. En un proyecto sin `advisorModel` (`install` no lo pone, porque se factura aparte) vuelven al subagente Opus.
+- [ ] **Presupuesto en minutos:** `review.maxMinutes` en `factory.config.json`, por si 10 rondas resultan caras. Al superarlo, `plan` no despacha otra ronda y la tarjeta pasa a blocked con la pregunta "¿se recorta el alcance o se parte la tarjeta?".
+- [ ] **Revisión incremental:** cada lente guarda `lastPassSha`. En la ronda siguiente, el spec del reviewer le pide revisar solo `lastPassSha..head` y sus hallazgos anteriores. Todas las lentes siguen aprobando el mismo head.
+- [ ] **Medir antes de optimizar las rondas cerradas:** `factory report --since <fecha>` para saber si los 136 min son anteriores a la parada de huérfanos. Si persisten, el reviewer comprueba que su lente sigue reservada antes de cada paso caro.
+- [ ] **Esfuerzo por lente:** `agents.review.lenses.<lens>` (por ejemplo `high` solo en security). Solo si el informe lo justifica.
+- [ ] **Avisos de aprobación fuera del tablero:** el hook `SessionStart` dice cuántos merges esperan a la persona y la web pone el número en el título de la pestaña.
+- [ ] **Tokens en `factory report`:** sumar el `usage` de las sesiones de Claude Code (`~/.claude/projects/<worktree>/*.jsonl`) por worker según su worktree y su ventana de tiempo. Grok, si guarda sesiones con uso.
+
+## Fase 16 · Instalar desde GitHub con git clone
+
+- [x] El repo es público: la instalación ya no usa `npx` sino `git clone --depth 1 https://github.com/Tortillaa/prz-factory.git .prz-factory-src`, `node .prz-factory-src/bin/factory.mjs install .` y borrar el clon. El clon va dentro del proyecto para que el guard `delete-outside` deje borrarlo. Actualizados README, GUIA, la skill `factory-onboard`, el aviso de `doctor` y CLAUDE.md; `test/readme.test.mjs` comprueba el comando y que no quede `npx`. Probado en un proyecto vacío: `doctor` en verde y sin restos del clon.
+
+- [x] **Skill global `prz-factory-init`** (`user-skills/`): `factory install --user` la deja en `~/.claude/skills/` una vez por máquina, y en cualquier repo basta con decir "inicializa prz-factory" o "actualiza prz-factory". Probada con tests (instala, actualiza, respeta una skill propia, no llega a los proyectos) y la copia vendida en `.prz-factory/` también puede ejecutar `install --user`.
+
+## Fase 17 · Presentación pública
+
+- [x] README de proyecto público: badges (CI, licencia, Node, sin dependencias), por qué existe, diagrama del flujo, resultados reales con agentes, inicio rápido en tres pasos, y después la referencia (despliegue, plugin, reglas, roles, skills, uso diario, desarrollo).
+- [x] Archivo `LICENSE` (MIT): el README y `package.json` lo declaraban pero faltaba el archivo.
+- [x] `docs/VALIDACION.md` al día: cierre del paso 2 (#6, #8, #9, #10 y #11) y los problemas que quedaron arreglados.
 
 ## Pendiente fuera del código
 
 - [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.
-- [ ] Ejecutar todas las evals con un agente real: ver Fase 13, paso 2b.
+- [x] Ejecutar todas las evals con un agente real: ver Fase 13, paso 2b.
 - [ ] Instalar el plugin en Orca (ver "Plugin para Orca" en el README): es `trusted-worker` y requiere tu aprobación.
 - [x] Subir el repo a GitHub (PR #1).

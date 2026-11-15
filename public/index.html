@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>prz-factory board</title>
+<title>prz-factory</title>
 <style>
   :root {
     --bg: #f6f7f9; --col: #eceef2; --card: #fff; --text: #1d2129; --muted: #69707d;
@@ -156,6 +156,7 @@ function panel(card) {
 // What waits for the user: merges the gate held (approve them) and cards a lane blocked (answer them).
 function renderRequests() {
   const waiting = state.cards.filter((c) => c.column === 'blocked' && (c.labels.includes('merge-approval') || c.labels.includes('needs-you')));
+  document.title = waiting.length ? `(${waiting.length}) prz-factory` : 'prz-factory';
   const box = $('requests');
   box.hidden = waiting.length === 0;
   if (!waiting.length) return;

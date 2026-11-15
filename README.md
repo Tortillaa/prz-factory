@@ -1,47 +1,133 @@
-# prz-factory
+<p align="center">
+  <img src=".github/assets/banner.svg" alt="prz-factory — de una idea a main, con un equipo de agentes que redacta, construye, revisa y mergea" width="100%">
+</p>
 
-Una fábrica de software para agentes de código que corre en [Orca](https://www.onorca.dev/). Mandas una idea con tus palabras y la fábrica la devuelve construida, revisada y mergeada. Los cambios pequeños se mergean solos; los que tocan el negocio esperan tu aprobación en el tablero.
+<p align="center">
+  <a href="https://github.com/Tortillaa/prz-factory/actions/workflows/test.yml"><img src="https://github.com/Tortillaa/prz-factory/actions/workflows/test.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-E8A33D?style=flat-square&labelColor=16130F" alt="Licencia MIT"></a>
+  <img src="https://img.shields.io/badge/node-%E2%89%A5%2022-E8A33D?style=flat-square&labelColor=16130F" alt="Node ≥ 22">
+  <img src="https://img.shields.io/badge/dependencias-0-E8A33D?style=flat-square&labelColor=16130F" alt="0 dependencias">
+</p>
 
-Este repositorio es la fuente de tres cosas, y de las herramientas que las hacen cumplir:
+<p align="center"><b>Una fábrica de software para agentes de código.</b><br>Escribes una idea; un equipo de agentes la redacta, la construye, la revisa y la mergea.</p>
 
-| Apartado | Qué contiene | Dónde vive |
-|---|---|---|
-| [Reglas para los agentes](#reglas-para-los-agentes) | Lo que ningún agente puede hacer, y lo que comprueba cada regla | `hooks/`, `src/store.mjs`, `src/merge.mjs`, `src/agentsmd.mjs` |
-| [Roles de agentes](#roles-de-agentes) | Quién hace cada paso, con qué modelo y cómo termina | `src/lanes.mjs`, `src/run.mjs`, `factory.config.json` |
-| [Skills](#skills) | Las instrucciones que sigue cada rol | `skills/` |
+<p align="center">
+  <a href="#cómo-funciona">Cómo funciona</a> ·
+  <a href="#inicio-rápido">Inicio rápido</a> ·
+  <a href="#uso-diario">Uso diario</a> ·
+  <a href="#reglas-para-los-agentes">Reglas</a> ·
+  <a href="#desarrollo">Desarrollo</a>
+</p>
 
-Además: [Despliegue](#despliegue) · [Plugin para Orca](#plugin-para-orca) · [Uso diario](#uso-diario) · [Desarrollo](#desarrollo). La guía paso a paso para quien la usa está en [docs/GUIA.md](docs/GUIA.md).
+## En 30 segundos
 
-```text
- idea → Spec Writer → Builder → panel de reviewers → agente de merge → main
- spec  →   ready    → building →       review       →      merge      → done
-                                                            └→ blocked: te pide aprobación
+Los agentes de código ya escriben buen código. Lo que falta para dejarlos trabajar solos es todo lo de alrededor: saber exactamente qué hay que hacer, que alguien revise con criterio, que nada llegue a `main` sin pasar los tests y que una persona decida lo que importa.
+
+prz-factory pone eso en código. Un tablero kanban local reparte cada tarjeta entre agentes con un solo rol cada uno, y un merge gate decide qué llega a `main`: lo pequeño entra solo; lo que toca el negocio te espera con una explicación y un botón de aprobar. Corre dentro de [Orca](https://www.onorca.dev/), que da a cada agente su propio git worktree, y funciona con Claude Code y con Grok.
+
+## Cómo funciona
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#F6E7C1", "primaryTextColor": "#16130F", "primaryBorderColor": "#B36A12", "lineColor": "#E8A33D", "secondaryColor": "#E8A33D", "tertiaryColor": "#FBF3E1", "fontFamily": "ui-sans-serif, Segoe UI, Helvetica, Arial"}}}%%
+flowchart LR
+  idea([Idea]) --> spec[Spec Writer]
+  spec --> build[Builder]
+  build --> panel{{Panel de review}}
+  panel -- falla --> build
+  panel -- aprueba --> merge[Agente de merge]
+  merge --> gate[[Merge gate]]
+  gate -- seguro --> main([main])
+  gate -- negocio --> you([Tu aprobación])
+  you --> main
 ```
+
+Una tarjeta recorre el tablero (`spec → ready → building → review → merge → done`), y en cada columna trabaja un agente distinto, en su propio worktree:
+
+1. **Spec Writer.** Lee el código, recorta la idea a lo mínimo que resuelve el problema y la escribe como tarjeta, con criterios de aceptación que se puedan probar y su riesgo. Si falta una decisión de producto, te pregunta en vez de inventarla.
+2. **Builder.** Construye la tarjeta en su rama, con los tests primero.
+3. **Panel de review.** Cuatro reviewers revisan el mismo commit en paralelo, cada uno desde una lente: qa, seguridad, código y operaciones. Basta un fallo para que la tarjeta vuelva al Builder.
+4. **Agente de merge.** Comprueba si el cambio toca el negocio y te lo explica en lenguaje claro.
+5. **Merge gate.** Aterriza solo el commit exacto que aprobó el panel, con `verify` en verde y por fast-forward. Si el cambio es de riesgo alto, lleva una etiqueta de negocio, toca una ruta sensible o es grande, lo retiene hasta que lo apruebes.
+
+Ningún agente puede saltarse un paso. Lo impiden el código del tablero, el gate y unos guards que vigilan cada comando: ver [Reglas para los agentes](#reglas-para-los-agentes).
+
+## Resultados
+
+Validado con agentes reales en este mismo repositorio. El detalle está en [docs/VALIDACION.md](docs/VALIDACION.md).
+
+| Caso | Qué pasó |
+|---|---|
+| Cambio pequeño (#11, título de la pestaña) | De la idea a `main` en **12 minutos, sin intervención**: spec, build, panel ligero y merge automático |
+| Cambio sensible (#9 y #10, hooks de git) | Panel completo; el gate lo **retuvo para aprobación** con qué cambia, por qué pregunta y cómo deshacerlo |
+| Rama desfasada (#6 y #8) | El gate **rebasó él solo** y mergeó sin volver a revisar, porque el cambio era idéntico al aprobado |
+| Arreglo de seguridad incompleto (#8) | El reviewer de seguridad encontró, con pruebas en git, nueve formas de saltarse el guard antes de aprobarlo |
+| Evals de las skills | Las 8 pasaron con agentes reales (Sonnet, Grok y Haiku) el 12 de noviembre de 2026 |
+
+## Inicio rápido
+
+Necesitas Node 22 o superior, git, [Orca](https://www.onorca.dev/) y Claude Code. Si algún rol va a correr en Grok, también su CLI (`irm https://x.ai/cli/install.ps1 | iex` en Windows). No hay dependencias que instalar.
+
+**1. Una vez por máquina**, enseña a tus agentes a traer la fábrica. Esto instala la skill global `prz-factory-init`:
+
+```sh
+git clone --depth 1 https://github.com/Tortillaa/prz-factory.git prz-factory-tmp
+node prz-factory-tmp/bin/factory.mjs install --user
+rm -rf prz-factory-tmp      # en PowerShell: Remove-Item -Recurse -Force prz-factory-tmp
+```
+
+**2. En tu proyecto**, abre un agente y dile:
+
+> inicializa prz-factory
+
+El agente copia la fábrica dentro del proyecto y te guía por la configuración: comprueba que los tests pasan, te pregunta qué merges quieres aprobar tú y escribe las reglas en el `CLAUDE.md`.
+
+**3. Commitea** `.prz-factory/`, `.claude/` y `factory.config.json`. Cada agente trabaja en un worktree nuevo y los necesita.
+
+**4. Arranca:**
+
+```sh
+node .prz-factory/bin/factory.mjs serve     # el tablero, en http://localhost:4747
+```
+
+Escribe una idea con "+ Nueva idea" y, en una sesión de Claude Code dentro de Orca, pide `/factory-run` ("arranca la fábrica").
+
+## Uso diario
+
+A partir de aquí, `factory` es `node .prz-factory/bin/factory.mjs`. Para teclear solo `factory`, ejecuta `npm link` dentro de `.prz-factory`.
+
+| Para | Haz |
+|---|---|
+| Pedir un cambio | botón "+ Nueva idea", o `factory add "<idea>" --column spec` |
+| Poner la fábrica a trabajar | `/factory-run` en una sesión de Claude Code dentro de Orca |
+| Ver qué pasa | el tablero (`factory serve`), o `factory status` |
+| Aprobar un merge que te espera | la franja de solicitudes del tablero → "Aprobar y mergear", o `factory merge <id> --sha <sha> --human` |
+| Contestar una pregunta de un agente | un comentario en la tarjeta, y arrástrala de vuelta a su columna |
+| Ver cuánto ha costado | `factory report`: workers y minutos por rol, modelo y tarjeta |
+| Parar | pide "stop" al coordinador |
+| Limpiar worktrees y ramas de tarjetas terminadas | `factory cleanup --apply` |
+| Actualizar la fábrica | pide "actualiza prz-factory": reemplaza `.prz-factory/` y las skills, y no toca tu configuración |
+
+`factory --help` lista todos los comandos, y [docs/GUIA.md](docs/GUIA.md) explica el día a día paso a paso.
 
 ## Despliegue
 
-### Requisitos
+Lo que hace `prz-factory-init` por dentro, para instalar sin la skill, con Grok o a mano.
 
-- Node 22 o superior y git.
-- [Orca](https://www.onorca.dev/), para lanzar los agentes. El tablero y el CLI funcionan sin él.
-- Acceso a este repo en GitHub. Es privado: basta con `gh auth login` o tus credenciales de git.
-- Opcional: el CLI de Grok (`irm https://x.ai/cli/install.ps1 | iex` en Windows), si algún rol corre en Grok.
+### Instalar
 
-No hace falta clonar este repo ni instalar nada de forma global.
+Pídeselo al agente con la ruta completa:
 
-### Desplegar la fábrica en un proyecto
-
-Abre tu agente (Claude Code o Grok) en el repositorio del proyecto y pídele:
-
-> Instala prz-factory en este repositorio: ejecuta `npx -y github:Tortillaa/prz-factory install .` y después sigue la skill factory-onboard que se acaba de instalar.
+> Instala prz-factory en este repositorio: clona `https://github.com/Tortillaa/prz-factory.git` con `git clone --depth 1` en la carpeta `.prz-factory-src`, ejecuta `node .prz-factory-src/bin/factory.mjs install .`, borra `.prz-factory-src` y después sigue la skill factory-onboard que se acaba de instalar.
 
 O hazlo tú, en la terminal del proyecto:
 
 ```sh
-npx -y github:Tortillaa/prz-factory install .
+git clone --depth 1 https://github.com/Tortillaa/prz-factory.git .prz-factory-src
+node .prz-factory-src/bin/factory.mjs install .
+rm -rf .prz-factory-src      # en PowerShell: Remove-Item -Recurse -Force .prz-factory-src
 ```
 
-Eso deja la fábrica entera dentro del proyecto:
+El clon va dentro del proyecto para que el guard `delete-outside` deje borrarlo. Para actualizar, repite las mismas tres líneas. La instalación deja esto:
 
 | Carpeta o archivo | Qué es |
 |---|---|
@@ -50,51 +136,18 @@ Eso deja la fábrica entera dentro del proyecto:
 | `.claude/hooks/` y `.claude/settings.json` | Los guards de seguridad |
 | `factory.config.json` | La configuración del proyecto |
 
-Después:
+### Configurar
 
-1. **Configura** `factory.config.json`: los comandos de `verify`, las rutas sensibles (`merge.humanPaths`) y el modelo de cada rol (`agents`). La skill `factory-onboard` te lo pregunta paso a paso.
-2. **Escribe las reglas** en el `CLAUDE.md` del proyecto: `node .prz-factory/bin/factory.mjs agents-md`.
-3. **Comprueba**: `node .prz-factory/bin/factory.mjs doctor`. Todo debe salir en verde.
-4. **Commitea** `.prz-factory/`, `.claude/` y `factory.config.json`. Cada agente trabaja en un worktree nuevo y los necesita.
-5. Si algún rol corre en Grok, ejecuta una vez `grok --trust inspect` en la carpeta del proyecto.
+Es lo que hace la skill `factory-onboard`, paso a paso:
 
-En el resto de este README, `factory` es `node .prz-factory/bin/factory.mjs`. Para teclear solo `factory`, ejecuta `npm link` dentro de `.prz-factory`.
+1. En `factory.config.json`, los comandos de `verify`, las rutas sensibles (`merge.humanPaths`) y el modelo de cada rol (`agents`).
+2. Las reglas en el `CLAUDE.md` del proyecto: `factory agents-md`.
+3. La comprobación: `factory doctor`. Todo debe salir en verde.
+4. Si algún rol corre en Grok, `grok --trust inspect` una vez en la carpeta del proyecto.
 
-### Arrancar
+### Quitar
 
-```sh
-factory serve          # el tablero, en http://localhost:4747
-```
-
-Y en una sesión de Claude Code dentro de Orca, en el proyecto: `/factory-run` (o "arranca la fábrica").
-
-### Actualizar o quitar
-
-- **Actualizar** a la última versión: repite la línea de `npx`. Reemplaza `.prz-factory/` y las skills gestionadas; no toca tu configuración ni una skill tuya con el mismo nombre.
-- **Quitar**: borra `.prz-factory/`, las carpetas de `.claude/skills/` que tienen un archivo `.factory-managed`, `.claude/hooks/factory-guard.mjs`, las entradas de `factory-guard` en `.claude/settings.json`, el bloque `prz-factory` de `CLAUDE.md` y `factory.config.json`.
-
-### Publicar una versión de la fábrica
-
-Los cambios de este repo llegan a `main` por rama y pull request: el guard `protected-push` bloquea el push directo a `main` desde una sesión de agente. Una vez en `main`, cada proyecto la recibe al repetir la línea de `npx`.
-
-## Plugin para Orca
-
-Un panel en la barra lateral derecha de Orca con el tablero de cada repo abierto: las tarjetas por columna, quién tiene cada una y las que esperan a una persona. Se actualiza en vivo. Es de solo lectura: mover tarjetas sigue siendo cosa del CLI, de la web y de los agentes.
-
-Se instala una vez por máquina, desde cualquier proyecto que tenga la fábrica:
-
-```sh
-orca plugin install .prz-factory/orca-plugin
-```
-
-El plugin ejecuta su propio proceso de Node, así que Orca no lo activa sin tu aprobación. Ese comando no instala nada todavía: enseña lo que el plugin podrá hacer (ejecutar su código con tu usuario y leer la lista de workspaces) y una huella `ap1-…`. Si estás de acuerdo, repítelo con la huella:
-
-```sh
-orca plugin install .prz-factory/orca-plugin --approve ap1-<la huella que te ha dado>
-orca plugin open local.prz-factory-board --panel board
-```
-
-Desde un clon de este repo, la carpeta es `./orca-plugin`. Si actualizas la fábrica y el plugin ha cambiado, la huella cambia y Orca pide aprobarlo de nuevo. Más detalle en [orca-plugin/README.md](orca-plugin/README.md).
+Borra `.prz-factory/`, las carpetas de `.claude/skills/` que tienen un archivo `.factory-managed`, `.claude/hooks/factory-guard.mjs`, las entradas de `factory-guard` en `.claude/settings.json`, el bloque `prz-factory` de `CLAUDE.md` y `factory.config.json`.
 
 ## Reglas para los agentes
 
@@ -110,13 +163,14 @@ Cada regla la hace cumplir el código, no la buena voluntad del agente. `factory
 | Lo que toca el negocio lo aprueba una persona: riesgo High, etiquetas `auth`, `payments`, `pricing`, `schema`, `ops`, rutas sensibles o un diff grande | `src/merge.mjs`, `merge` en `factory.config.json` |
 | Un agente puede subir una tarjeta a revisión humana, nunca bajarla; nunca usa `--human` ni `--force` | skills; el gate solo acepta `--human` con la etiqueta `merge-approval`, que solo pone él |
 | Nada de `git merge`, commit o push sobre la rama base desde un worker | guard `protected-push` |
-| `main` no admite force-push ni borrado, se escriba como se escriba | protección de rama en GitHub (en el servidor) |
+| Ningún push que no sea fast-forward (ni borrado) a una rama protegida, se escriba como se escriba | hook de git `pre-push` (`hooks/factory-pre-push.mjs`, lo instala `factory install`); el guard `protected-push` veta `--no-verify` y `core.hooksPath` |
+| `main` no admite force-push ni borrado, ni siquiera saltándose lo anterior | protección de rama en GitHub (en el servidor) |
 | No leer `.env` ni archivos de claves; no escribir claves literales | guards `secrets` y `key-literals` |
 | Borrados recursivos solo dentro del proyecto | guard `delete-outside` |
 | No inventar una decisión de producto: la tarjeta va a `blocked` con la pregunta | skills `factory-spec`, `factory-build`, `factory-review` |
 | El mínimo código que resuelve la tarjeta; el que no debería existir se devuelve | skills `ponytail` y `ponytail-review` |
 | Commits y comentarios en un formato único, con evidencias | `skills/factory-board/references/writing-standard.md` |
-| A la cuarta vuelta al Builder, o al segundo worker caído, la tarjeta para y espera a una persona | `sendBack` en `src/store.mjs`, `reclaim` en `src/run.mjs` |
+| A la décima ronda fallida, o al segundo worker caído, la tarjeta para y espera a una persona | `sendBack` en `src/store.mjs`, `reclaim` en `src/run.mjs` |
 
 Los guards (`hooks/factory-guard.mjs`) funcionan igual con Claude Code y con Grok.
 
@@ -124,18 +178,18 @@ Los guards (`hooks/factory-guard.mjs`) funcionan igual con Claude Code y con Gro
 
 ## Roles de agentes
 
-Cada rol es un worker de Orca en su propio worktree. Carga su skill solo, por la tarea que recibe.
+Cada rol es un worker de Orca en su propio worktree, y carga su skill solo, por la tarea que recibe. El modelo de cada uno se elige en `agents` de `factory.config.json`; un proyecto recién instalado corre todos en Claude.
 
-| Rol | Trabaja en | Qué hace | Termina con | Skill | Modelo en este repo |
-|---|---|---|---|---|---|
-| **Coordinador** | — | Lanza a los demás con `factory dispatch`, para los que trabajan en una ronda cerrada, libera los terminales, reconcilia el tablero y te avisa de cada solicitud. Nunca redacta, construye, revisa ni mergea | — | `factory-run` | el de tu sesión |
-| **Spec Writer** | `spec` | Lee el código, recorta la idea, la redacta como tarjeta y clasifica su impacto en el negocio | `handoff` a `ready` o `blocked` | `factory-spec` + `ponytail` | Claude Sonnet 5.5; subagente Opus 5.5 si la tarjeta es difícil |
-| **Builder** | `building` | Construye la tarjeta en su rama, con los tests primero | `handoff` a `review` o `blocked` | `factory-build` + `ponytail` | Claude Sonnet 5.5; subagente Opus 5.5 para lo difícil |
-| **Reviewers**, uno por lente | `review` | Revisan el mismo commit en paralelo: `qa`, `security`, `code` y `ops`. Una tarjeta de riesgo Low sin etiqueta de negocio solo pasa por `qa` y `code` | `verdict`: pass, fail o escalar | `factory-review` + `ponytail-review` | Grok 4.7, esfuerzo alto |
-| **Agente de merge** | `merge` | Comprueba si el cambio toca el negocio, te lo explica y lanza el merge gate | `merge`, o `handoff` a `blocked` | `factory-merge` | Claude Haiku 5.5 |
-| **QA** | `qa` | Solo para tarjetas con la etiqueta `qa`: prueba lo que ya está en la rama base | `merge` (cierra la tarjeta) | `factory-qa` | Claude |
+| Rol | Trabaja en | Termina con | Skill | Modelo en este repo |
+|---|---|---|---|---|
+| **Coordinador**: lanza a los demás con `factory dispatch`, reconcilia el tablero y te trae cada solicitud. Nunca redacta, construye, revisa ni mergea | — | — | `factory-run` | el de tu sesión |
+| **Spec Writer** | `spec` | `handoff` a `ready` o `blocked` | `factory-spec` + `ponytail` | Claude Sonnet 5.5, con advisor Fable 5.2 |
+| **Builder** | `building` | `handoff` a `review` o `blocked` | `factory-build` + `ponytail` | Claude Sonnet 5.5, con advisor Fable 5.2 |
+| **Reviewers**, uno por lente | `review` | `verdict`: pass, fail o escalar | `factory-review` + `ponytail-review` | Grok 4.7, esfuerzo alto |
+| **Agente de merge** | `merge` | `merge`, o `handoff` a `blocked` | `factory-merge` | Claude Haiku 5.5 |
+| **QA**: solo para tarjetas con la etiqueta `qa`; prueba lo que ya está en la rama base | `qa` | `merge` (cierra la tarjeta) | `factory-qa` | Claude |
 
-Qué mira cada lente del panel (`skills/factory-review/references/lenses.md`):
+Qué mira cada lente del panel (`skills/factory-review/references/lenses.md`). Una tarjeta de riesgo Low sin etiqueta de negocio pasa solo por `qa` y `code`:
 
 | Lente | Su pregunta |
 |---|---|
@@ -144,64 +198,62 @@ Qué mira cada lente del panel (`skills/factory-review/references/lenses.md`):
 | `code` | ¿Es el cambio correcto, y hace falta cada línea? |
 | `ops` | ¿Qué le hace esto al negocio y al producto en marcha? |
 
-El modelo de cada rol se elige en `factory.config.json`. Un proyecto recién instalado corre todos los roles en Claude; esta es la configuración de este repo:
-
-```json
-"agents": {
-  "spec":   { "agent": "claude", "model": "claude-sonnet-5-5" },
-  "build":  { "agent": "claude", "model": "claude-sonnet-5-5" },
-  "review": { "agent": "grok",   "model": "grok-4.7", "effort": "high" },
-  "merge":  { "agent": "claude", "model": "claude-haiku-5-5" }
-}
-```
+El advisor es una herramienta de Claude Code: el modelo lo consulta en las partes difíciles y el advisor aconseja sin tocar archivos. Se activa con `"advisorModel": "fable"` en `.claude/settings.json`; sin él, el Spec Writer y el Builder recurren a un subagente Opus.
 
 ## Skills
 
 `skills/` es la fuente. `factory install` las copia a `.claude/skills/` de cada proyecto, y los agentes las eligen solos por su descripción: ninguna hay que invocarla a mano.
 
+Cada rol carga la suya (ver [Roles de agentes](#roles-de-agentes)): `factory-run`, `factory-spec`, `factory-build`, `factory-review`, `factory-merge` y `factory-qa`. Además:
+
 | Skill | Quién la usa | Para qué |
 |---|---|---|
-| `factory-run` | Coordinador | Vaciar el tablero lanzando un agente por tarjeta y paso |
-| `factory-spec` | Spec Writer | Convertir una idea en una tarjeta que se pueda construir |
-| `factory-build` | Builder | Construir una tarjeta con tests y entregarla al panel |
-| `factory-review` | Reviewers | Revisar un cambio por una lente y dar un veredicto |
-| `factory-merge` | Agente de merge | Decidir quién aterriza el cambio y lanzar el merge gate |
-| `factory-qa` | QA | Probar lo que ya está en la rama base |
 | `factory-board` | Todos | Leer y cambiar el tablero con el CLI; incluye el estándar de escritura |
 | `ponytail` | Spec Writer y Builder | El mínimo cambio que resuelve el problema entero |
 | `ponytail-review` | Reviewers | Revisar como quien recibirá el aviso cuando falle |
 | `factory-lint` | Tú, con un agente | Escribir o repasar tarjetas a mano |
 | `factory-collect` | Tú, con un agente | Buscar problemas en el código y convertirlos en tarjetas |
-| `factory-onboard` | Tú, con un agente | Instalar y configurar la fábrica en un proyecto |
+| `factory-onboard` | Tú, con un agente | Configurar la fábrica en un proyecto, o repararla si `doctor` falla |
+| `prz-factory-init` | Tú, con un agente, en cualquier repo | Traer la fábrica a un proyecto o actualizarla. Vive en `user-skills/` y se instala una vez por máquina con `factory install --user` |
 
-`ponytail` y `ponytail-review` son de [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) y van incluidas sin modificar, con su licencia.
+## Plugin para Orca
 
-## Uso diario
+Opcional: un panel en la barra lateral derecha de Orca con el tablero de cada repo abierto, en vivo. Es de solo lectura: mover tarjetas sigue siendo cosa del CLI, de la web y de los agentes.
 
-| Para | Haz |
-|---|---|
-| Ver el tablero | `factory serve` → http://localhost:4747, o el panel de Orca |
-| Pedir un cambio | botón "+ Nueva idea", o `factory add "<idea>" --column spec` |
-| Poner la fábrica a trabajar | `/factory-run` en una sesión de Claude Code dentro de Orca |
-| Ver qué pasa | `factory status` |
-| Ver cuánto ha costado | `factory report`: workers y minutos por rol, modelo y tarjeta |
-| Aprobar un merge que te espera | la franja de solicitudes del tablero → "Aprobar y mergear", o `factory merge <id> --sha <sha> --human` |
-| Contestar una pregunta de un agente | un comentario en la tarjeta, y arrástrala de vuelta a su columna |
-| Parar | pide "stop" al coordinador |
-| Limpiar worktrees y ramas de tarjetas terminadas | `factory cleanup --apply` |
+Se instala una vez por máquina, desde cualquier proyecto que tenga la fábrica. Como el plugin ejecuta su propio proceso de Node, Orca pide tu aprobación: el primer comando enseña lo que podrá hacer y una huella `ap1-…`, y el segundo lo instala con esa huella.
 
-`factory --help` lista todos los comandos.
+```sh
+orca plugin install .prz-factory/orca-plugin
+orca plugin install .prz-factory/orca-plugin --approve ap1-<la huella que te ha dado>
+orca plugin open local.prz-factory-board --panel board
+```
+
+Si actualizas la fábrica y el plugin ha cambiado, la huella cambia y Orca pide aprobarlo de nuevo. Más detalle en [orca-plugin/README.md](orca-plugin/README.md).
 
 ## Desarrollo
 
 ```sh
 npm test                                   # suite completa (Node test runner)
 node --test --test-name-pattern "<nombre>" "test/*.test.mjs"
-node bin/factory.mjs eval [caso]           # evals de skills con un agente real (usa tu cuenta)
 node bin/factory.mjs install .             # tras tocar skills/ u hooks/: refresca las copias de .claude/
+node bin/factory.mjs eval [caso]           # evals de skills con un agente real (usa tu cuenta)
 cd orca-plugin && orca plugin test .
 ```
 
-La arquitectura está en [CLAUDE.md](CLAUDE.md) y el plan, con su estado, en [ROADMAP.md](ROADMAP.md).
+Los cambios llegan a `main` por pull request; CI ejecuta `npm test` en Linux, macOS y Windows con Node 22 y 24. El guard `protected-push` impide el push directo a `main` desde una sesión de agente. Lo que se mergea en `main` es la versión que recibe cada proyecto al instalar o actualizar.
 
-Inspirada en [super-board](https://github.com/EricTechPro/super-board) (MIT), con tablero propio en `localhost` en lugar de GitHub Projects y merges locales por fast-forward. Licencia MIT.
+| Documento | Contenido |
+|---|---|
+| [CLAUDE.md](CLAUDE.md) | Arquitectura: tablero, lanes, merge gate, coordinador y guards |
+| [ROADMAP.md](ROADMAP.md) | El plan por fases, con su estado |
+| [docs/GUIA.md](docs/GUIA.md) | Guía de uso para quien trabaja con la fábrica |
+| [docs/VALIDACION.md](docs/VALIDACION.md) | Pruebas con agentes reales: tiempos, coste y fallos |
+
+## Licencia y créditos
+
+[MIT](LICENSE). Inspirada en [super-board](https://github.com/EricTechPro/super-board) (MIT), con tablero propio en `localhost` en lugar de GitHub Projects y merges locales por fast-forward. Incluye sin modificar [ponytail](https://github.com/DietrichGebert/ponytail) (MIT), con su licencia.
+
+<br>
+<p align="center">
+  <sub>Hecho a fuego lento por <a href="https://github.com/Tortillaa">Tortillaa</a></sub>
+</p>

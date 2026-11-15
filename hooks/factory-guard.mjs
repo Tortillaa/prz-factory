@@ -150,6 +150,50 @@ function protectedBranches(root) {
   return ['main', 'master'];
 }
 
+// Every git call in a command, wherever it starts: after env vars or wrappers (FOO=1 git, & git,
+// $(git, `git), or inside a quoted script (bash -c "git ...", powershell -Command '...').
+function gitCalls(command) {
+  return segments(command).flatMap((s) => s.flatMap((w, k) => {
+    if (/^(\$\(|`)?git(\.exe)?$/i.test(w.split(/[\\/]/).pop())) return [['git', ...s.slice(k + 1)]];
+    return /\s/.test(w) && /^-(c|command)$/i.test(s[k - 1] ?? '') ? gitCalls(w) : [];
+  }));
+}
+
+// Config that can rewrite what a push does: push.*, remote.*.push|mirror, alias.*, include*.
+const pushConfig = /^(push\.|remote\..*\.(push|mirror)(=|$)|alias\.|include)/i;
+
+// The [NAME, value] pairs a segment sets before its command: \`X=v git\`, \`export X=v\`, \`set X=v\`,
+// \`env X=v git\`, \`$env:X = v\` and \`Set-Item env:X v\`.
+function envSets(seg) {
+  const out = [];
+  const val = (v) => (v ?? '').replace(/['"]/g, '');
+  for (let k = 0; k < seg.length; k++) {
+    const w = seg[k];
+    let m;
+    if (/^(export|set|env)$/i.test(w)) continue;
+    if (/^(set-item|si)$/i.test(w)) {
+      const args = seg.slice(k + 1);
+      const n = args.findIndex((a) => /^env:\w+$/i.test(a));
+      const v = args.findIndex((a) => /^-value$/i.test(a));
+      if (n >= 0) out.push([args[n].slice(4), val(args[v >= 0 ? v + 1 : n + 1])]);
+      break;
+    }
+    if ((m = /^(?:\$env:)?(\w+)=(.*)$/i.exec(w))) out.push([m[1], val(m[2] || seg[++k])]);
+    else if (/^\$env:\w+$/i.test(w) && seg[k + 1] === '=') { out.push([w.slice(5), val(seg[k + 2])]); k += 2; }
+    else break;
+  }
+  return out;
+}
+
+// Does an instruction of the command set git config that can turn a plain push into a forced one:
+// a push, alias or include key, another config file, or another repo (GIT_DIR)?
+function forcingEnv(command) {
+  const segs = segments(command);
+  return segs.some((s) => envSets(s).some(([n, v]) => /^GIT_(CONFIG|CONFIG_GLOBAL|CONFIG_SYSTEM|DIR|WORK_TREE)$/i.test(n)
+      || (/^GIT_CONFIG_(PARAMETERS|KEY_\d+)$/i.test(n) && pushConfig.test(v))))
+    || segs.some((s) => s.some((w, k) => /\s/.test(w) && /^-(c|command)$/i.test(s[k - 1] ?? '') && forcingEnv(w)));
+}
+
 // ctx: { cwd, protectedBranches, linkedWorktree, currentBranch } (computed from git when not given).
 function isLinked(dir) {
   const gitDir = git(['rev-parse', '--path-format=absolute', '--git-dir'], dir);
@@ -201,7 +245,8 @@ export function guardProtectedPush(input, ctx = {}) {
   const session = input.cwd ?? process.cwd();
   // The repo the git commands act on: the session's, or the one a leading `cd X` / `git -C X` names.
   const cwd = ctx.cwd ?? commandDir(input.tool_input?.command || '', session);
-  const segs = segments(input.tool_input?.command || '').filter((s) => path.basename(s[0]).toLowerCase() === 'git');
+  const command = input.tool_input?.command || '';
+  const segs = gitCalls(command);
   if (!segs.length) return null;
   const root = git(['rev-parse', '--show-toplevel'], cwd) ?? cwd;
   const prot = ctx.protectedBranches ?? protectedBranches(root);
@@ -210,21 +255,51 @@ export function guardProtectedPush(input, ctx = {}) {
   const linked = ctx.linkedWorktree ?? (isLinked(cwd) || (sameRepo(cwd, session) && isLinked(session)));
   const current = ctx.currentBranch ?? git(['branch', '--show-current'], cwd);
   const isProt = (ref) => {
-    const r = String(ref).replace(/^\+/, '').replace(/^refs\/heads\//, '');
-    return prot.includes(r) || prot.some((b) => r.endsWith(`:${b}`) || r.endsWith(`:refs/heads/${b}`));
+    const r = String(ref).replace(/^\+/, '').replace(/^(refs\/)?heads\//, '');
+    return prot.includes(r) || prot.some((b) => r.endsWith(`:${b}`) || r.endsWith(`:refs/heads/${b}`) || r.endsWith(`:heads/${b}`));
   };
+  // Rather than spot every way to force a protected branch (+HEAD, globs, "+:", aliases...), a push
+  // that CAN force is allowed only when every destination is a plain, unprotected branch name.
+  const forceMsg = `Force-pushing is blocked unless every destination is a named branch other than ${prot.join(', ')} (no HEAD, @, globs or empty refspec).`;
+  const namedUnprotected = (spec) => {
+    const dst = /^\+?(?:[^:]*:)?([\w./-]+)$/.exec(spec)?.[1]; // the part after ":", or the whole refspec
+    const name = dst?.toLowerCase().replace(/^(refs\/)?heads\//, '');
+    return !!name && name !== 'head' && !prot.some((b) => b.toLowerCase() === name);
+  };
+  const envForces = forcingEnv(command);
 
   for (const seg of segs) {
-    // Skip global options (-C dir, -c k=v) to find the subcommand.
+    // Skip global options (-C dir, -c k=v...) to find the subcommand; remember the -c config.
     let i = 1;
-    while (i < seg.length && seg[i].startsWith('-')) i += seg[i] === '-C' || seg[i] === '-c' ? 2 : 1;
+    const config = [];
+    let gitDirOpt = false; // --git-dir / --work-tree point git at another repo, like GIT_DIR
+    while (i < seg.length && seg[i].startsWith('-')) {
+      if (/^(-c|--config-env)$/.test(seg[i])) config.push(seg[i + 1] ?? '');
+      else if (seg[i].startsWith('--config-env=')) config.push(seg[i].slice(13));
+      else if (/^--(git-dir|work-tree)(=|$)/.test(seg[i])) gitDirOpt = true;
+      i += /^(-C|-c|--config-env|--git-dir|--work-tree|--namespace)$/.test(seg[i]) ? 2 : 1;
+    }
     const sub = seg[i];
     const rest = seg.slice(i + 1);
-    const force = rest.some((w) => /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes)$/.test(w) || /^-\w*f/.test(w));
-    if (sub === 'push') {
-      const targets = rest.filter((w) => !w.startsWith('-'));
-      const touchesProt = targets.slice(1).some(isProt) || (targets.length <= 1 && prot.includes(current));
-      if (force && touchesProt) return `Force-pushing a protected branch (${prot.join(', ')}) is blocked.`;
+    // An alias or include can make any subcommand a push we cannot see.
+    if (sub !== 'push' && sub !== 'send-pack' && (envForces || gitDirOpt || config.some((c) => /^(alias|include)/i.test(c)))) return forceMsg;
+    if (sub === 'push' || sub === 'send-pack') {
+      // The git pre-push hook (factory install) is the real check: refuse every way of switching it off.
+      if (sub === 'push' && (rest.some((w) => /^--no-v(e(r(i(fy?)?)?)?)?$/.test(w)) || config.some((c) => /^core\.hookspath(=|$)/i.test(c)))) return 'The pre-push hook cannot be skipped: no --no-verify and no core.hooksPath override on a push.';
+      const flags = [];
+      const pos = [];
+      for (let j = 0; j < rest.length; j++) {
+        const w = rest[j].replace(/\\(.)|["']/g, '$1'); // +"main", +\main and +'ma'in all mean +main
+        if (w === '--') { pos.push(...rest.slice(j + 1).map((x) => x.replace(/\\(.)|["']/g, '$1'))); break; }
+        if (!w.startsWith('-')) pos.push(w);
+        else if (flags.push(w) && /^(-o|--push-option|--receive-pack|--exec)$/.test(w)) j++;
+      }
+      const refspecs = pos.slice(1); // pos[0] is the remote
+      const canForce = envForces || gitDirOpt || config.some((c) => pushConfig.test(c)) || pos.some((w) => w.startsWith('+'))
+        || flags.some((f) => /^(-[a-zA-Z]*f[a-zA-Z]*|--force.*|--all|--branches|--mirror)$/.test(f));
+      if (canForce && !(refspecs.length && refspecs.every(namedUnprotected))) return forceMsg;
+      const onCurrent = (w) => /^\+?(HEAD|@)$/i.test(w) && prot.includes(current); // HEAD and @ name the checked-out branch
+      const touchesProt = refspecs.some((w) => isProt(w) || onCurrent(w)) ||(!refspecs.length && prot.includes(current));
       if (linked && touchesProt) return `Workers never push ${prot.join(', ')}: only \`factory merge\` lands code on the base branch.`;
     }
     if (!linked) continue;

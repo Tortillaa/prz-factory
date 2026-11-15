@@ -133,7 +133,7 @@ After every reconcile, read `factory status --json` and tell the user, once per 
            factory merge 12 --sha <sha> --human
   ```
 
-- **`needsYou`** — something is stuck: a spec that needs a decision, a card that bounced three
+- **`needsYou`** — something is stuck: a spec that needs a decision, a card that failed ten
   times, a worker that failed twice. Quote the question or the reason from the last comment and
   say what unblocks it (answer in a comment and move the card back to `spec`, `ready` or `building`).
 
@@ -158,3 +158,4 @@ model and card, and the minutes spent on rounds that were over). Then stop.
 - Write specs, edit code, run tests, review diffs, or merge. Workers do that, through their skills.
 - Move cards with `factory move`, pass `--force` or `--human`, or touch `needs-you` cards.
 - Patch the factory (scripts, skills) mid-run. Report the symptom and wait for the user.
+- Call the advisor tool: dispatching is mechanical, and you wake on every worker event.

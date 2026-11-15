@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util';
 import * as store from '../src/store.mjs';
 import { TEMPLATE } from '../src/ticket.mjs';
 import { createServer } from '../src/server.mjs';
-import { install } from '../src/install.mjs';
+import { install, installUser } from '../src/install.mjs';
 import { doctor } from '../src/doctor.mjs';
 import { loadConfig, repoRoot } from '../src/config.mjs';
 import { startLane, handoff, verdict } from '../src/lanes.mjs';
@@ -80,6 +80,8 @@ Run (the coordinator; it dispatches, never builds)
 
 Setup
   install [target] [--no-hooks]          Copy skills and guard hooks into <target>/.claude, create factory.config.json
+  install --user                         Once per machine: the prz-factory-init skill in ~/.claude/skills,
+                                         so an agent in any repo can install the factory when asked
   eval [case...] [--agent cmd] [--keep] [--list]
                                          Run skill evals: a real agent on a throwaway repo, graded by checks
   pr <id>                                Push the card's branch and open or update its GitHub PR (optional mirror)
@@ -142,6 +144,7 @@ const { values: opts, positionals } = parseOptions({
     file: { type: 'string' },
     hint: { type: 'boolean' },
     'no-hooks': { type: 'boolean' },
+    user: { type: 'boolean' },
     agent: { type: 'string' },
     keep: { type: 'boolean' },
     list: { type: 'boolean' },
@@ -244,6 +247,7 @@ try {
       break;
     }
     case 'list': {
+      if (opts.column !== undefined) store.checkColumn(opts.column);
       const board = store.load(file);
       const cards = opts.column ? board.cards.filter((c) => c.column === opts.column) : board.cards;
       const text = store.COLUMNS.filter((col) => !opts.column || col === opts.column)
@@ -494,11 +498,18 @@ try {
       print({ file }, file);
       break;
     case 'install': {
+      if (opts.user) {
+        const report = installUser();
+        const lines = report.skills.map((s) => `  ${s.status.padEnd(9)} ${s.name}${s.reason ? ` (${s.reason})` : ''}`).join('\n');
+        print(report, `user skills → ${report.target}\n${lines}\n\nIn any repo, ask your agent: "inicializa prz-factory" (or "init prz-factory").`);
+        break;
+      }
       const report = install(args[0] || '.', { hooks: !opts['no-hooks'] });
       const skills = report.skills.map((s) => `  ${s.status.padEnd(9)} ${s.name}${s.reason ? ` (${s.reason})` : ''}`).join('\n');
       const rt = report.runtime;
+      const pp = report.prePush;
       const next = rt.status === 'skipped' ? '' : `\n\nNext:\n  1. Commit .claude/, ${path.basename(rt.dir)}/ and factory.config.json (worker worktrees need them).\n  2. Ask your agent: "onboard" (skill factory-onboard): it proves verify and sets the merge policy.\n  3. The CLI is now in the repo: node ${path.basename(rt.dir)}/bin/factory.mjs <command> (or \`factory\` if on PATH).`;
-      print(report, `skills → ${report.target}\n${skills}\nruntime: ${rt.status} ${rt.dir}${rt.reason ? ` (${rt.reason})` : ''}\nconfig: ${report.config.status} ${report.config.file}\nhooks: ${report.hooks ? report.hooks.file : 'skipped (--no-hooks)'}${next}`);
+      print(report, `skills → ${report.target}\n${skills}\nruntime: ${rt.status} ${rt.dir}${rt.reason ? ` (${rt.reason})` : ''}\nconfig: ${report.config.status} ${report.config.file}\nhooks: ${report.hooks ? report.hooks.file : 'skipped (--no-hooks)'}${pp ? `\npre-push: ${pp.status} ${pp.file}${pp.reason ? `\nWARNING: ${pp.reason}; force-pushes to protected branches are not stopped by git` : ''}` : ''}${next}`);
       break;
     }
     case 'doctor': {

@@ -17,7 +17,7 @@ const section = (title) => {
 
 test('README: the skills section lists every skill the factory ships', () => {
   const text = section('Skills');
-  for (const name of listSkills()) assert.ok(text.includes(`\`${name}\``), `skill ${name} is missing from the README`);
+  for (const name of [...listSkills(), ...listSkills(FACTORY_ROOT, 'user-skills')]) assert.ok(text.includes(`\`${name}\``), `skill ${name} is missing from the README`);
 });
 
 test('README: the roles section covers every lane, its skill and every review lens', () => {
@@ -30,6 +30,8 @@ test('README: the roles section covers every lane, its skill and every review le
 test('README: the rules section names every guard, and deploy and plugin instructions exist', () => {
   const text = section('Reglas para los agentes');
   for (const guard of Object.keys(GUARDS)) assert.ok(text.includes(`\`${guard}\``), `guard ${guard} is missing from the README`);
-  assert.match(section('Despliegue'), /npx -y github:Tortillaa\/prz-factory install \./);
+  assert.match(section('Despliegue'), /git clone --depth 1 https:\/\/github\.com\/Tortillaa\/prz-factory\.git \.prz-factory-src/);
+  assert.match(section('Despliegue'), /node \.prz-factory-src\/bin\/factory\.mjs install \./);
+  assert.doesNotMatch(section('Despliegue'), /npx/);
   assert.match(section('Plugin para Orca'), /orca plugin install \.prz-factory\/orca-plugin --approve/);
 });

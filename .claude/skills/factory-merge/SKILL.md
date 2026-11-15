@@ -89,3 +89,5 @@ factory merge <id> --sha <reviewedSha> --as <your-worker-name> --json
 - Change code, commit, rebase, or review the code again: the panel did that.
 - Merge with `git merge`, push to the base branch, or move a card to Done yourself.
 - Remove a label, lower the Risk, or pass `--human`.
+- Call the advisor tool: the gate and the panel already did the hard reasoning, and your job is to
+  read and explain.

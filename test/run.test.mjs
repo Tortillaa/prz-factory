@@ -248,14 +248,14 @@ test('a reviewer whose round another lens ended becomes an orphan to stop; the o
   assert.throws(() => store.forgetOrphan(b, 1, 'd-qa'), /no orphaned dispatch/);
 });
 
-test('the builder of a card that came back is told to bring in an Opus subagent', () => {
+test('the builder of a card that came back is told to call its advisor', () => {
   const b = board([{ column: 'ready' }]);
   const card = b.cards[0];
   assert.doesNotMatch(run.spec(card, 'build', 'build-1', ROOT), /has come back/);
   store.moveCard(b, 1, 'building');
   store.moveCard(b, 1, 'review', null, { force: true });
   store.sendBack(b, 1, { who: 'r', role: 'review:security', text: 'S1' });
-  assert.match(run.spec(card, 'build', 'build-1-r2', ROOT), /has come back 1 time from review[\s\S]*Claude Opus subagent/);
+  assert.match(run.spec(card, 'build', 'build-1-r2', ROOT), /has come back 1 time from review[\s\S]*call your\s+advisor/);
   assert.doesNotMatch(run.spec(card, 'spec', 'spec-1', ROOT), /has come back/, 'only the builder');
 });
 

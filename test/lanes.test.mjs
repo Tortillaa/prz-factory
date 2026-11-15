@@ -517,16 +517,16 @@ test('a qa-labelled card is tested on the base branch and closes through the gat
 });
 
 // Sends a card back from the panel four times. Returns the card after the fourth.
-function bounceFourTimes(env, id) {
+function failEveryRound(env, id) {
   const { file, wt, config } = env;
   startLane({ file, id, who: 'b', lane: 'build', cwd: wt.build, config });
   let head = commitIn(wt.build, 'a.txt');
   let last;
-  for (let round = 1; round <= 4; round++) {
+  for (let round = 1; round <= store.MAX_ROUNDS; round++) {
     handoff({ file, id, who: 'b', lane: 'build', to: 'review', text: 'built' });
     startReview(env, id, 'code');
     last = fail(env, id, 'code', head).card;
-    if (round < 4) {
+    if (round < store.MAX_ROUNDS) {
       assert.equal(last.column, 'building', `round ${round}`);
       startLane({ file, id, who: 'b', lane: 'build', cwd: wt.build, config });
       head = commitIn(wt.build, `round-${round}.txt`);
@@ -535,14 +535,15 @@ function bounceFourTimes(env, id) {
   return last;
 }
 
-test('the fourth send-back goes to blocked with needs-you', () => {
+test('the tenth failed round goes to blocked with needs-you', () => {
   const env = setup();
   const id = addReadyCard(env);
-  const c = bounceFourTimes(env, id);
+  const c = failEveryRound(env, id);
   assert.equal(c.column, 'blocked');
   assert.ok(c.labels.includes('needs-you'));
   assert.match(c.comments.at(-1).text, /sin converger/);
-  assert.equal(store.bounces(card(env, id)), 3);
+  assert.equal(store.MAX_ROUNDS, 10);
+  assert.equal(store.bounces(card(env, id)), 9);
 });
 
 test('a person approves a held merge from the web API, pinned to the reviewed commit', async () => {
@@ -622,7 +623,7 @@ test('only merges the gate held can be approved: a card blocked by bounces canno
   const env = setup();
   const { file, config } = env;
   const id = addReadyCard(env);
-  const blocked = bounceFourTimes(env, id);
+  const blocked = failEveryRound(env, id);
   assert.equal(blocked.column, 'blocked');
   assert.ok(blocked.labels.includes('needs-you'));
   assert.ok(!blocked.labels.includes('merge-approval'));

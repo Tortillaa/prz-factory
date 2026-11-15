@@ -210,6 +210,19 @@ Probado en un Orca real (1.4.259) con un plugin de diagnóstico: el panel instal
 - [ ] Backlog: #18 (dos `## Risk` y `lensesFor` duplicada), #19 (subir la versión del plugin), #20 ("1 te espera" en singular).
 - [ ] Afinar `factory-build`: el Builder no consultó al advisor en la #14 pese a ser concurrencia y volver cuatro veces ("cambio local a un único módulo"); solo lo hizo cuando se le pidió en la tarjeta.
 
+## Fase 19 · El panel de Orca sustituye a la web
+
+Decisión del usuario: el plugin deja de ser de solo lectura y pasa a ser un cliente más, como la web; toda escritura va por el CLI `factory` del repo, así que lint, bloqueos y merge gate siguen en un solo sitio.
+
+- [x] **#19, #20, #18** Versión del plugin obligatoria en cada cambio (test), "1 te espera" en singular, `panelTotal` alineado con `lensesFor` y test de paridad.
+- [x] **#21** Acciones del worker (ver, crear, editar, mover, comentar, aprobar) a través del CLI. High + `auth`: tres rondas del panel completo y aprobación del usuario tras probarlas contra el tablero real en Orca.
+- [x] **#22, #25** Ficha de tarjeta con comentarios, mover (con "Forzar"), editar y aprobar; una respuesta tardía de otra tarjeta se descarta y cada botón se bloquea mientras actúa.
+- [x] **#23** Crear una idea o una tarjeta completa desde el panel.
+- [x] **#24, #27** Portada: "Te esperan" (aprobar y contestar) y "En curso" primero, nueva idea plegada, buscador; estado por repo y tarjeta. Plugin 0.7.1 instalado.
+- [ ] Afinar `factory-build`: dos Builders entregaron con `verify` en rojo (#22, #24, por no subir la versión) y el advisor casi nunca se consulta por iniciativa propia.
+- [ ] El kit de tests de Orca ejecuta las acciones en serie: los tests de carreras tienen que provocar la carrera a mano (#25, #27). Documentarlo en el skill de build o en el README del plugin.
+- [ ] Volver a poner las revisiones en Grok cuando haya saldo (hoy en Claude Sonnet, `factory.config.json` sin commitear).
+
 ## Pendiente fuera del código
 
 - [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.

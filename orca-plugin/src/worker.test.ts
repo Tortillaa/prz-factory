@@ -103,3 +103,9 @@ test('a failing statusBar.update does not break boards.get', async () => {
   assert.equal(snap.boards.length, 1)
   await worker.deactivate()
 })
+
+test('the manifest declares the waiting status bar item that keeps the worker alive', () => {
+  const manifest = JSON.parse(fs.readFileSync(new URL('../orca-plugin.json', import.meta.url), 'utf8'))
+  assert.equal(manifest.engines.orca, '>=1.4.248')
+  assert.ok(manifest.contributes.statusBarItems.some((item: { id: string }) => item.id === 'waiting'))
+})

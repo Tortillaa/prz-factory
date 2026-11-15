@@ -34,23 +34,25 @@ export function setup(ctx: PanelContext): void {
 
 function describe(card: CardView): string {
   const parts = [...card.labels]
-  if (card.assignee) parts.push(`@${card.assignee}`)
-  if (card.waitingOn.length) parts.push(`waiting on ${card.waitingOn.map((d) => `#${d}`).join(' ')}`)
+  if (card.panel) parts.push(`review ${card.panel.passed.length}/${card.panel.total}${card.panel.passed.map((l) => ` ${l} ✓`).join('').replace(/^ /, ': ')}`)
+  else if (card.assignee) parts.push(`@${card.assignee}`)
+  if (card.waitingOn.length) parts.push(`esperando a ${card.waitingOn.map((d) => `#${d}`).join(' ')}`)
   return parts.join(' · ')
 }
 
 export default function Panel() {
   const snap = read(snapshot)
   const pick = read(chosen)
-  if (!snap) return <Text muted>Loading boards…</Text>
-  if (snap.error) return <Callout tone="danger" title="Could not read the boards">{snap.error}</Callout>
+  if (!snap) return <Text muted>Cargando tableros…</Text>
+  if (snap.error) return <Callout tone="danger" title="No se pudieron leer los tableros">{snap.error}</Callout>
   if (!snap.boards.length) {
     return (
-      <EmptyState title="No factory board" description="Open a repo set up with prz-factory (factory install), or add a card with factory add." icon="layers" />
+      <EmptyState title="Sin tablero de la fábrica" description="Abre un repo con prz-factory (factory install) o añade una tarjeta con factory add." icon="layers" />
     )
   }
   const board = snap.boards.find((b) => b.key === pick) ?? snap.boards[0]
-  const needsYou = board.cards.filter((c) => c.labels.includes('needs-you'))
+  const approve = board.cards.filter((c) => c.labels.includes('merge-approval') && c.sha)
+  const answer = board.cards.filter((c) => c.labels.includes('needs-you') && !c.labels.includes('merge-approval'))
   return (
     <Stack gap="md">
       {snap.boards.length > 1 && (
@@ -65,7 +67,7 @@ export default function Panel() {
         <Text weight="semibold">{board.name}</Text>
         {board.serve ? (
           <Button size="sm" variant="ghost" icon="open-external" onPress={() => host.call('shell.openExternal', { url: `http://localhost:${board.serve}` })}>
-            Web board
+            Tablero web
           </Button>
         ) : (
           <Text muted>factory serve</Text>
@@ -74,9 +76,14 @@ export default function Panel() {
       {snap.boards.filter((b) => b.error).map((b) => (
         <Callout key={b.key} tone="danger" title={`no se pudo leer el tablero de ${b.name}: ${b.error}`} />
       ))}
-      {needsYou.length > 0 && (
-        <Callout tone="warning" title={`${needsYou.length} need you`} icon="warning">
-          {needsYou.map((c) => `#${c.id} ${c.title}`).join(' · ')}
+      {approve.length > 0 && (
+        <Callout tone="warning" title="Aprobar merge" icon="warning">
+          {approve.map((c) => `#${c.id} ${c.title}: factory merge ${c.id} --sha ${c.sha!.slice(0, 7)} --human`).join(' · ')}
+        </Callout>
+      )}
+      {answer.length > 0 && (
+        <Callout tone="warning" title="Contestar" icon="warning">
+          {answer.map((c) => `#${c.id} ${c.title}${c.lastComment ? `: ${c.lastComment}` : ''}`).join(' · ')}
         </Callout>
       )}
       {COLUMNS.map((column) => {
@@ -90,14 +97,14 @@ export default function Panel() {
                 ))}
               </List>
             ) : (
-              <Text muted size="xs">Empty</Text>
+              <Text muted size="xs">Vacía</Text>
             )}
           </Collapsible>
         )
       })}
       {board.unknown.length > 0 && (
-        <Collapsible title={`unknown column (${board.unknown.length})`} defaultOpen>
-          <List label="unknown column">
+        <Collapsible title={`columna desconocida (${board.unknown.length})`} defaultOpen>
+          <List label="columna desconocida">
             {board.unknown.map((c) => (
               <ListItem key={String(c.id)} title={`#${c.id} ${c.title} · ${c.column}`} description={describe(c)} />
             ))}
@@ -105,8 +112,8 @@ export default function Panel() {
         </Collapsible>
       )}
       <Row gap="xs">
-        <Badge tone="accent">{`${board.cards.filter((c) => c.assignee).length} in flight`}</Badge>
-        <Badge tone="success">{`${board.counts.done ?? 0} done`}</Badge>
+        <Badge tone="accent">{`${board.cards.filter((c) => c.assignee).length} en curso`}</Badge>
+        <Badge tone="success">{`${board.counts.done ?? 0} hechas`}</Badge>
       </Row>
     </Stack>
   )

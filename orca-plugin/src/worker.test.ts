@@ -433,3 +433,22 @@ test('creating and deleting serve.json posts boards.changed with the new serve',
   assert.deepEqual(worker.refusals, [])
   await worker.deactivate()
 })
+
+const risk = (level: string) => '## Risk' + String.fromCharCode(10) + level + ' · x'
+
+test('readBoard gives the review progress by the lenses of factory.config.json, and falls back without it', () => {
+  const lenses = { qa: { worker: 'review-qa-7', verdict: 'pass' }, code: { verdict: 'pass' }, security: { worker: 'review-security-7' } }
+  const card = (body: string) => ({ id: 7, title: 'R', column: 'review', labels: [], body, panel: { lenses }, run: { reviewedSha: 'abc1234def' }, comments: [{ text: 'hola' }, { text: '¿Qué moneda?' }] })
+  const repo = repoWithBoard([card(risk('High')), { ...card(risk('Low')), id: 8 }])
+  const [entry] = discover([repo])
+  const none = readBoard(entry).cards[0]
+  assert.deepEqual(none.panel, { passed: ['qa', 'code'], total: 3 })
+  assert.equal(none.sha, 'abc1234def')
+  assert.equal(none.lastComment, '¿Qué moneda?')
+  fs.writeFileSync(path.join(repo, 'factory.config.json'), JSON.stringify({ review: { lenses: ['qa', 'security', 'code', 'ops'], light: ['qa', 'code'] }, merge: { humanLabels: ['auth'] } }))
+  const [high, low] = readBoard(entry).cards
+  assert.equal(high.panel?.total, 4)
+  assert.equal(low.panel?.total, 2)
+  fs.writeFileSync(path.join(repo, 'factory.config.json'), '{ broken')
+  assert.equal(readBoard(entry).cards[0].panel?.total, 3)
+})

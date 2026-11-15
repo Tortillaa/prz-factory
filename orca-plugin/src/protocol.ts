@@ -19,6 +19,11 @@ export type CardView = {
   labels: string[]
   assignee: string | null
   waitingOn: number[]
+  /** run.reviewedSha: the commit a held merge would land. */
+  sha: string | null
+  lastComment: string | null
+  /** Only in review: lenses that passed, out of the lenses this panel has. */
+  panel?: { passed: string[]; total: number }
 }
 
 export type BoardView = {

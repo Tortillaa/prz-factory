@@ -50,12 +50,34 @@ type RawCard = {
   labels?: string[]
   assignee?: string | null
   blockedBy?: number[]
-  panel?: { lenses?: Record<string, { worker?: string | null }> }
+  body?: string
+  run?: { reviewedSha?: string | null }
+  comments?: { text: string }[]
+  panel?: { lenses?: Record<string, { worker?: string | null; verdict?: string | null }> }
+}
+
+type Config = { review?: { lenses?: string[]; light?: string[] }; merge?: { humanLabels?: string[] } }
+
+// Mirrors lensesFor/riskLevel (src/lanes.mjs, src/ticket.mjs): the plugin ships apart from the factory.
+function panelTotal(card: RawCard, config: Config | null): number {
+  const slots = Object.keys(card.panel?.lenses ?? {})
+  const lenses = config?.review?.lenses
+  if (!lenses?.length) return slots.length
+  const light = (config.review?.light ?? []).filter((l) => lenses.includes(l))
+  const risk = (card.body ?? '').split(/^## /m).find((s) => /^risk\s*\n/i.test(s)) ?? ''
+  const low = /^risk\s*\n\W*(low|bajo)\b/i.test(risk)
+  const business = (card.labels ?? []).some((l) => (config.merge?.humanLabels ?? []).includes(l))
+  return light.length && low && !business ? light.length : lenses.length
 }
 
 export function readBoard(entry: { key: string; name: string; file: string }): BoardView {
   const raw = JSON.parse(fs.readFileSync(entry.file, 'utf8')) as { cards?: RawCard[] }
   const cards = raw.cards ?? []
+  // <repo>/.git/factory/board.json → <repo>/factory.config.json; a missing or broken file is no config.
+  let config: Config | null = null
+  try {
+    config = JSON.parse(fs.readFileSync(path.join(path.dirname(path.dirname(path.dirname(entry.file))), 'factory.config.json'), 'utf8'))
+  } catch {}
   const column = new Map(cards.map((c) => [c.id, c.column]))
   const views: CardView[] = cards.map((c) => ({
     id: c.id,
@@ -64,7 +86,15 @@ export function readBoard(entry: { key: string; name: string; file: string }): B
     labels: c.labels ?? [],
     // A card in review is held by its panel: one reviewer per lens, in parallel.
     assignee: c.assignee ?? reviewers(c),
-    waitingOn: (c.blockedBy ?? []).filter((d) => column.get(d) !== 'done')
+    waitingOn: (c.blockedBy ?? []).filter((d) => column.get(d) !== 'done'),
+    sha: c.run?.reviewedSha ?? null,
+    lastComment: c.comments?.at(-1)?.text.trim() ?? null,
+    ...(c.column === 'review' && {
+      panel: {
+        passed: Object.entries(c.panel?.lenses ?? {}).filter(([, s]) => s.verdict === 'pass').map(([l]) => l),
+        total: panelTotal(c, config)
+      }
+    })
   }))
   const counts = Object.fromEntries(COLUMNS.map((col) => [col, views.filter((c) => c.column === col).length]))
   return { ...entry, serve: serving(entry.file), counts, cards: views, unknown: views.filter((c) => !COLUMNS.includes(c.column)) }

@@ -2,10 +2,10 @@
   "manifestVersion": 2,
   "id": "prz-factory-board",
   "name": "prz-factory board",
-  "version": "0.1.0",
+  "version": "0.7.1",
   "description": "The prz-factory kanban board of each repo open in Orca, live in the sidebar.",
   "engines": {
-    "orca": ">=1.4.246"
+    "orca": ">=1.4.248"
   },
   "execution": "trusted-worker",
   "pluginApi": 1,
@@ -18,6 +18,17 @@
         "icon": "layers",
         "entry": "src/panel.tsx",
         "ui": "components"
+      }
+    ],
+    "events": [
+      { "on": "workspace.created" },
+      { "on": "workspace.removed" }
+    ],
+    "statusBarItems": [
+      {
+        "id": "waiting",
+        "text": "Sin esperas",
+        "icon": "layers"
       }
     ]
   },

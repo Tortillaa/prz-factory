@@ -197,9 +197,35 @@ Datos de `factory report` tras #8 y #9: 42 workers y 483 min, de los que la revi
 - [x] Archivo `LICENSE` (MIT): el README y `package.json` lo declaraban pero faltaba el archivo.
 - [x] `docs/VALIDACION.md` al día: cierre del paso 2 (#6, #8, #9, #10 y #11) y los problemas que quedaron arreglados.
 
+## Fase 18 · Plugin de Orca sólido
+
+Probado en un Orca real (1.4.259) con un plugin de diagnóstico: el panel instalado no mostraba ningún tablero. Seis tarjetas, construidas y revisadas por la fábrica, todas mergeadas solas:
+
+- [x] **#12** El worker descartaba los workspaces con `hostId: "local"`, que son todos los de esta máquina: el panel nunca mostraba nada.
+- [x] **#17** Orca para un worker inactivo a los ~6 min y con él los vigilantes: el panel se congelaba. Un elemento de barra de estado ("N te esperan") lo mantiene en marcha. Comprobado: 8 min sin parada y la barra cambia en vivo.
+- [x] **#13** Un `board.json` roto se muestra con su error en vez de "No factory board", y las columnas desconocidas salen aparte.
+- [x] **#14** Descubrimiento en vivo (`workspace.created`/`removed`, tableros que aparecen, vigilantes que sobran) con un único estado "último snapshot": cinco rondas parcheando carreras hasta escribir esa regla en la tarjeta; la sexta, con el advisor, convergió.
+- [x] **#15** `factory serve` escribe `serve.json` (puerto y pid); el botón abre el puerto real o enseña el comando. Comprobado con `--port 4799`.
+- [x] **#16** El panel separa "Aprobar merge" de "Contestar", muestra el progreso de cada lente y está en español.
+- [ ] Backlog: #18 (dos `## Risk` y `lensesFor` duplicada), #19 (subir la versión del plugin), #20 ("1 te espera" en singular).
+- [ ] Afinar `factory-build`: el Builder no consultó al advisor en la #14 pese a ser concurrencia y volver cuatro veces ("cambio local a un único módulo"); solo lo hizo cuando se le pidió en la tarjeta.
+
+## Fase 19 · El panel de Orca sustituye a la web
+
+Decisión del usuario: el plugin deja de ser de solo lectura y pasa a ser un cliente más, como la web; toda escritura va por el CLI `factory` del repo, así que lint, bloqueos y merge gate siguen en un solo sitio.
+
+- [x] **#19, #20, #18** Versión del plugin obligatoria en cada cambio (test), "1 te espera" en singular, `panelTotal` alineado con `lensesFor` y test de paridad.
+- [x] **#21** Acciones del worker (ver, crear, editar, mover, comentar, aprobar) a través del CLI. High + `auth`: tres rondas del panel completo y aprobación del usuario tras probarlas contra el tablero real en Orca.
+- [x] **#22, #25** Ficha de tarjeta con comentarios, mover (con "Forzar"), editar y aprobar; una respuesta tardía de otra tarjeta se descarta y cada botón se bloquea mientras actúa.
+- [x] **#23** Crear una idea o una tarjeta completa desde el panel.
+- [x] **#24, #27** Portada: "Te esperan" (aprobar y contestar) y "En curso" primero, nueva idea plegada, buscador; estado por repo y tarjeta. Plugin 0.7.1 instalado.
+- [ ] Afinar `factory-build`: dos Builders entregaron con `verify` en rojo (#22, #24, por no subir la versión) y el advisor casi nunca se consulta por iniciativa propia.
+- [ ] El kit de tests de Orca ejecuta las acciones en serie: los tests de carreras tienen que provocar la carrera a mano (#25, #27). Documentarlo en el skill de build o en el README del plugin.
+- [ ] Volver a poner las revisiones en Grok cuando haya saldo (hoy en Claude Sonnet, `factory.config.json` sin commitear).
+
 ## Pendiente fuera del código
 
 - [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.
 - [x] Ejecutar todas las evals con un agente real: ver Fase 13, paso 2b.
-- [ ] Instalar el plugin en Orca (ver "Plugin para Orca" en el README): es `trusted-worker` y requiere tu aprobación.
+- [x] Instalar el plugin en Orca (ver "Plugin para Orca" en el README): instalado y aprobado el 2026-11-15 (`local.prz-factory-board` 0.1.0, panel "Factory board" en marcha).
 - [x] Subir el repo a GitHub (PR #1).

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const CLI = path.join(import.meta.dirname, '..', 'bin', 'factory.mjs');
 
@@ -84,4 +84,38 @@ test('list still prints a known column, or every column, on an empty board', () 
   assert.deepEqual(all.stdout.trimEnd().split(/\r?\n/), [
     'BACKLOG (0)', 'SPEC (0)', 'READY (0)', 'BUILDING (0)', 'QA (0)', 'REVIEW (0)', 'MERGE (0)', 'BLOCKED (0)', 'DONE (0)',
   ]);
+});
+
+test('factory serve writes serve.json next to the board and removes it on SIGTERM', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-'));
+  const info = path.join(dir, 'serve.json');
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const child = spawn(process.execPath, [CLI, 'serve', '--port', String(port)], {
+    env: { ...process.env, FACTORY_BOARD: path.join(dir, 'board.json') },
+    stdio: 'ignore',
+  });
+  t.after(() => child.kill());
+  for (let i = 0; i < 100 && !fs.existsSync(info); i++) await new Promise((r) => setTimeout(r, 100));
+  assert.deepEqual(JSON.parse(fs.readFileSync(info, 'utf8')), { port, pid: child.pid });
+  const closed = new Promise((r) => child.on('close', r));
+  child.kill('SIGTERM');
+  await closed;
+  // Windows kills the process without running handlers; there a stale file is told apart by its pid.
+  if (process.platform !== 'win32') assert.ok(!fs.existsSync(info));
+});
+
+test('factory serve leaves serve.json alone when a newer serve rewrote it', { skip: process.platform === 'win32' }, async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-'));
+  const info = path.join(dir, 'serve.json');
+  const child = spawn(process.execPath, [CLI, 'serve', '--port', String(20000 + Math.floor(Math.random() * 20000))], {
+    env: { ...process.env, FACTORY_BOARD: path.join(dir, 'board.json') },
+    stdio: 'ignore',
+  });
+  t.after(() => child.kill());
+  for (let i = 0; i < 100 && !fs.existsSync(info); i++) await new Promise((r) => setTimeout(r, 100));
+  fs.writeFileSync(info, JSON.stringify({ port: 5050, pid: child.pid + 1 }));
+  const closed = new Promise((r) => child.on('close', r));
+  child.kill('SIGTERM');
+  await closed;
+  assert.ok(fs.existsSync(info));
 });

@@ -86,3 +86,78 @@ test('Tablero web opens the port each repo serves on, and is replaced by a hint 
   assert.deepEqual(urls, ['http://localhost:4747', 'http://localhost:5050'])
   await view.unmount()
 })
+
+const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString()
+const sheet = (extra: object = {}) => ({
+  id: 3, title: 'Mail sender', column: 'building', labels: ['feature'], body: '## Problem\nNo manda correos\n\n## Risk\nLow · solo cliente', lint: [], unmet: [], comments: [], history: [], ...extra
+})
+const sheetHost = (get: () => object, comment: (i: unknown) => object = () => ({})) =>
+  mockHost({ requests: { 'boards.get': () => ({ boards: [board('shop')] }), 'card.get': get, 'card.comment': comment } })
+
+test('a card opens its sheet instead of the list, and Volver returns to it', async () => {
+  const host = sheetHost(() => sheet())
+  const view = await mount(panel, { host })
+  await view.press({ label: '#3 Mail sender' })
+  const text = view.summary().join(' ') + JSON.stringify(view.tree())
+  assert.match(text, /#3 Mail sender/)
+  assert.match(text, /building/)
+  assert.match(text, /feature/)
+  assert.match(text, /riesgo Low/)
+  assert.match(text, /No manda correos/)
+  assert.equal(view.find({ label: '#4 Pay' }), null)
+  await view.press({ text: 'Volver' })
+  assert.ok(view.find({ label: '#4 Pay' }))
+  assert.deepEqual(view.errors, [])
+  await view.unmount()
+})
+
+test('the sheet shows lint, blockers, comments with their age, history and the review panel', async () => {
+  const host = sheetHost(() =>
+    sheet({
+      column: 'review',
+      lint: [{ severity: 'error', message: 'falta Risk' }],
+      unmet: [2],
+      panel: { lenses: { qa: { verdict: 'pass' }, code: { worker: 'review-code-3' } } },
+      comments: [{ at: ago(5), role: 'user', text: 'ojo con esto' }],
+      history: [{ at: ago(9), from: 'ready', to: 'building', by: 'build-3' }]
+    })
+  )
+  const view = await mount(panel, { host })
+  await view.press({ label: '#3 Mail sender' })
+  const text = view.summary().join(' ') + JSON.stringify(view.tree())
+  assert.match(text, /falta Risk/)
+  assert.match(text, /bloqueada por #2/)
+  assert.match(text, /ojo con esto/)
+  assert.match(text, /ready → building \(build-3\)/)
+  assert.match(text, /qa ✓ · code …/)
+  assert.match(text, /"RelativeTime","props":{"at":\d+}/)
+  await view.unmount()
+})
+
+test('Comentar sends one request, keeps the text when it fails, and reloads the sheet when it works', async () => {
+  let reply: object = { error: 'card #3 not found' }
+  const sent: unknown[] = []
+  const host = sheetHost(() => sheet(), (input) => (sent.push(input), reply))
+  const view = await mount(panel, { host })
+  await view.press({ label: '#3 Mail sender' })
+  await view.type({ label: 'Comentario' }, 'hola')
+  await view.press({ text: 'Comentar' })
+  assert.deepEqual(sent, [{ board: '/r/shop/.git', id: 3, text: 'hola' }])
+  assert.match(view.summary().join(' '), /card #3 not found/)
+  assert.equal(view.valueOf({ label: 'Comentario' }), 'hola')
+  reply = {}
+  await view.press({ text: 'Comentar' })
+  assert.equal(sent.length, 2)
+  assert.equal(view.valueOf({ label: 'Comentario' }), '')
+  await view.unmount()
+})
+
+test('a failing card.get shows its error and Volver still works', async () => {
+  const host = sheetHost(() => ({ error: 'boom' }))
+  const view = await mount(panel, { host })
+  await view.press({ label: '#3 Mail sender' })
+  assert.match(view.summary().join(' '), /boom/)
+  await view.press({ text: 'Volver' })
+  assert.ok(view.find({ label: '#3 Mail sender' }))
+  await view.unmount()
+})

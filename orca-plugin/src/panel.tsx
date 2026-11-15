@@ -4,21 +4,25 @@ import {
   Badge,
   Button,
   Callout,
+  Card,
   Collapsible,
   EmptyState,
   host,
   List,
+  Markdown,
   ListItem,
   plugin,
   read,
+  RelativeTime,
   Row,
   Select,
   set,
   Stack,
   Text,
+  Textarea,
   type PanelContext
 } from 'orca'
-import type { BoardsSnapshot, CardView } from './protocol'
+import type { BoardsSnapshot, CardReply, CardView } from './protocol'
 
 const COLUMNS = ['backlog', 'spec', 'ready', 'building', 'qa', 'review', 'merge', 'blocked', 'done']
 /** Columns opened by default: where work is happening or waiting for a person. */
@@ -26,6 +30,87 @@ const OPEN = new Set(['spec', 'building', 'qa', 'review', 'merge', 'blocked'])
 
 const snapshot = atom<BoardsSnapshot | null>(null)
 const chosen = atom('board', '', { persist: 'plugin' })
+/** The open card sheet: which card, what `card.get` returned (or its error), and the comment being written. */
+const opened = atom<{ board: string; id: number } | null>(null)
+const detail = atom<CardReply | null>(null)
+const draft = atom('')
+const failure = atom('')
+
+type Sheet = {
+  id: number
+  title: string
+  column: string
+  labels: string[]
+  body: string
+  lint: { severity: string; message: string }[]
+  unmet: number[]
+  panel?: { lenses?: Record<string, { verdict?: string; worker?: string }> }
+  comments: { at: string; role: string; text: string }[]
+  history: { at: string; from?: string; to: string; by?: string }[]
+}
+
+function open(next: { board: string; id: number } | null): void {
+  set(opened, next)
+  set(detail, null)
+  set(draft, '')
+  set(failure, '')
+  if (next) void plugin.request('card.get', next).then((card) => set(detail, card))
+}
+
+async function comment(at: { board: string; id: number }, text: string): Promise<void> {
+  const reply = await plugin.request('card.comment', { ...at, text })
+  if (reply.error) return set(failure, reply.error)
+  set(failure, '')
+  set(draft, '')
+  set(detail, await plugin.request('card.get', at))
+}
+
+const risk = (body: string) => body.match(/^## Risk\s*\n\s*(\w+)/m)?.[1] ?? 'sin riesgo'
+const lensMark = (v?: { verdict?: string; worker?: string }) => (v?.verdict === 'pass' ? '✓' : v?.verdict === 'fail' ? '✖' : v?.worker ? '…' : '·')
+
+function CardSheet({ at }: { at: { board: string; id: number } }) {
+  const card = read(detail)
+  const text = read(draft)
+  const error = read(failure)
+  const back = (
+    <Button size="sm" variant="ghost" icon="previous" onPress={() => open(null)}>
+      Volver
+    </Button>
+  )
+  if (!card) return <Stack gap="md">{back}<Text muted>{`Cargando #${at.id}…`}</Text></Stack>
+  if (card.error) return <Stack gap="md">{back}<Callout tone="danger" title={`No se pudo leer #${at.id}: ${card.error}`} /></Stack>
+  const c = card as unknown as Sheet
+  const lenses = Object.entries(c.panel?.lenses ?? {})
+  return (
+    <Stack gap="md">
+      {back}
+      <Text weight="semibold">{`#${c.id} ${c.title}`}</Text>
+      <Row gap="xs" wrap>
+        <Badge>{c.column}</Badge>
+        {c.labels.map((l) => <Badge key={l} tone="accent">{l}</Badge>)}
+        <Badge>{`riesgo ${risk(c.body)}`}</Badge>
+        {c.unmet.map((d) => <Badge key={String(d)} tone="warning">{`bloqueada por #${d}`}</Badge>)}
+      </Row>
+      {c.column !== 'spec' && c.lint.map((i, n) => <Callout key={String(n)} tone={i.severity === 'error' ? 'danger' : 'warning'} title={i.message} />)}
+      {lenses.length > 0 && <Text>{`Panel de revisión: ${lenses.map(([l, v]) => `${l} ${lensMark(v)}`).join(' · ')}`}</Text>}
+      <Markdown content={c.body || '(sin descripción)'} />
+      <Collapsible title={`Comentarios (${c.comments.length})`} defaultOpen>
+        {c.comments.map((m, n) => (
+          <Card key={String(n)} title={`[${m.role}]`}>
+            <RelativeTime at={Date.parse(m.at)} />
+            <Text>{m.text}</Text>
+          </Card>
+        ))}
+      </Collapsible>
+      <Collapsible title={`Historial (${c.history.length})`}>
+        {c.history.map((h, n) => <Text key={String(n)} size="xs">{`${h.from ? `${h.from} → ` : ''}${h.to}${h.by ? ` (${h.by})` : ''}`}</Text>)}
+      </Collapsible>
+      <Textarea label="Comentario" value={text} onChange={(v) => set(draft, v)} />
+      {error && <Callout tone="danger" title={`No se pudo comentar: ${error}`} />}
+      <Button disabled={!text.trim()} onPress={() => comment(at, text)}>Comentar</Button>
+    </Stack>
+  )
+}
 
 export function setup(ctx: PanelContext): void {
   ctx.subscriptions.push(plugin.on('boards.changed', (next) => set(snapshot, next)))
@@ -51,6 +136,8 @@ export default function Panel() {
     )
   }
   const board = snap.boards.find((b) => b.key === pick) ?? snap.boards[0]
+  const at = read(opened)
+  if (at) return <CardSheet at={at} />
   const approve = board.cards.filter((c) => c.labels.includes('merge-approval') && c.sha)
   const answer = board.cards.filter((c) => c.labels.includes('needs-you') && !c.labels.includes('merge-approval'))
   return (
@@ -93,7 +180,7 @@ export default function Panel() {
             {cards.length ? (
               <List label={column}>
                 {cards.map((c) => (
-                  <ListItem key={String(c.id)} title={`#${c.id} ${c.title}`} description={describe(c)} icon={c.assignee ? 'agent' : undefined} />
+                  <ListItem key={String(c.id)} title={`#${c.id} ${c.title}`} description={describe(c)} icon={c.assignee ? 'agent' : undefined} onPress={() => open({ board: board.key, id: c.id })} />
                 ))}
               </List>
             ) : (

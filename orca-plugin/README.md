@@ -7,7 +7,8 @@ an agent or the web board moved it. "Web board" opens `factory serve` (`http://l
 
 - `src/worker.ts`: the plugin's worker. Lists Orca's workspaces (`workspace:read`), finds each repo's
   `<git common dir>/factory/board.json`, answers the panel's `boards.get`, and watches each board's
-  folder to post `boards.changed`.
+  folder to post `boards.changed`. It also feeds the `waiting` status bar item ("N te esperan": cards in
+  `blocked`); that item keeps the worker alive, since Orca stops an idle worker and its watchers with it.
 - `src/boards.ts`: discovery and reading, plain Node (mirrors `src/store.mjs#resolveBoardPath`).
 - `src/panel.tsx`: the panel (components UI). `src/protocol.ts`: the panel ↔ worker contract.
 

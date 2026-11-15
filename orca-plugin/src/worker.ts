@@ -17,7 +17,7 @@ export function deactivate(): void {
   watchers.clear()
 }
 
-export default function activate(orca: OrcaWorkerApi): void {
+export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   async function snapshot(): Promise<BoardsSnapshot> {
     try {
       const { workspaces } = await orca.host.call('workspace.list', {})
@@ -30,9 +30,25 @@ export default function activate(orca: OrcaWorkerApi): void {
           return [] // mid-write or broken: skip it this round
         }
       })
+      await showWaiting(boards)
       return { boards }
     } catch (err) {
       return { boards: [], error: (err as Error).message }
+    }
+  }
+
+  // The status bar item keeps this worker alive (Orca reaps an idle one, and the watchers with it).
+  async function showWaiting(boards: BoardsSnapshot['boards']): Promise<void> {
+    const n = boards.reduce((sum, b) => sum + (b.counts.blocked ?? 0), 0)
+    try {
+      await orca.host.call('statusBar.update', {
+        id: 'waiting',
+        text: n ? `${n} te esperan` : 'Sin esperas',
+        tone: n ? 'warning' : 'neutral',
+        tooltip: 'Tarjetas de la fábrica en blocked, esperando a una persona'
+      })
+    } catch {
+      // a status bar failure must not break the snapshot
     }
   }
 
@@ -55,4 +71,5 @@ export default function activate(orca: OrcaWorkerApi): void {
   }
 
   orca.panels.handle('boards.get', () => snapshot())
+  await snapshot()
 }

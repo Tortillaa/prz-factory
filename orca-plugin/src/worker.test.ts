@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { assert, mockHost, mountWorker, test } from 'orca/testing'
+import { assert, hostError, mockHost, mountWorker, test } from 'orca/testing'
 import * as main from './worker'
 import { discover, readBoard } from './boards'
 
@@ -59,3 +59,47 @@ for (const [hostId, expected] of [[null, 1], ['local', 1], ['ssh:devbox', 0], ['
     await worker.deactivate()
   })
 }
+
+function hostFor(repo: string) {
+  return mockHost({
+    results: { 'workspace.list': { workspaces: [{ id: 'w1', kind: 'worktree', name: 'shop', path: repo, branch: 'main', hostId: null }], truncated: false } }
+  })
+}
+const waiting = (host: ReturnType<typeof mockHost>) => host.calls.filter((c) => c.method === 'statusBar.update').map((c) => c.params as Record<string, unknown>)
+
+test('the status bar item shows the blocked cards as soon as the worker mounts', async () => {
+  const host = hostFor(repoWithBoard(cards))
+  const worker = await mountWorker(main, { host })
+  assert.deepEqual(waiting(host)[0], { id: 'waiting', text: '1 te esperan', tone: 'warning', tooltip: waiting(host)[0].tooltip })
+  await worker.deactivate()
+})
+
+test('the status bar item is neutral when nobody is waiting', async () => {
+  const host = hostFor(repoWithBoard(cards.slice(0, 3)))
+  const worker = await mountWorker(main, { host })
+  assert.equal(waiting(host)[0].text, 'Sin esperas')
+  assert.equal(waiting(host)[0].tone, 'neutral')
+  await worker.deactivate()
+})
+
+test('the status bar item follows the board when a card moves', async () => {
+  const repo = repoWithBoard(cards.slice(0, 3))
+  const host = hostFor(repo)
+  const worker = await mountWorker(main, { host })
+  fs.writeFileSync(path.join(repo, '.git', 'factory', 'board.json'), JSON.stringify({ version: 1, nextId: 9, cards }))
+  await new Promise((resolve) => setTimeout(resolve, 400))
+  assert.equal(waiting(host).at(-1)?.text, '1 te esperan')
+  await worker.deactivate()
+})
+
+test('a failing statusBar.update does not break boards.get', async () => {
+  const repo = repoWithBoard(cards)
+  const host = mockHost({
+    results: { 'workspace.list': { workspaces: [{ id: 'w1', kind: 'worktree', name: 'shop', path: repo, branch: 'main', hostId: null }], truncated: false } },
+    requests: { 'statusBar.update': () => { throw hostError('internal', 'boom') } }
+  })
+  const worker = await mountWorker(main, { host })
+  const snap = await worker.request('boards.get')
+  assert.equal(snap.boards.length, 1)
+  await worker.deactivate()
+})

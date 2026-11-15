@@ -197,6 +197,19 @@ Datos de `factory report` tras #8 y #9: 42 workers y 483 min, de los que la revi
 - [x] Archivo `LICENSE` (MIT): el README y `package.json` lo declaraban pero faltaba el archivo.
 - [x] `docs/VALIDACION.md` al día: cierre del paso 2 (#6, #8, #9, #10 y #11) y los problemas que quedaron arreglados.
 
+## Fase 18 · Plugin de Orca sólido
+
+Probado en un Orca real (1.4.259) con un plugin de diagnóstico: el panel instalado no mostraba ningún tablero. Seis tarjetas, construidas y revisadas por la fábrica, todas mergeadas solas:
+
+- [x] **#12** El worker descartaba los workspaces con `hostId: "local"`, que son todos los de esta máquina: el panel nunca mostraba nada.
+- [x] **#17** Orca para un worker inactivo a los ~6 min y con él los vigilantes: el panel se congelaba. Un elemento de barra de estado ("N te esperan") lo mantiene en marcha. Comprobado: 8 min sin parada y la barra cambia en vivo.
+- [x] **#13** Un `board.json` roto se muestra con su error en vez de "No factory board", y las columnas desconocidas salen aparte.
+- [x] **#14** Descubrimiento en vivo (`workspace.created`/`removed`, tableros que aparecen, vigilantes que sobran) con un único estado "último snapshot": cinco rondas parcheando carreras hasta escribir esa regla en la tarjeta; la sexta, con el advisor, convergió.
+- [x] **#15** `factory serve` escribe `serve.json` (puerto y pid); el botón abre el puerto real o enseña el comando. Comprobado con `--port 4799`.
+- [x] **#16** El panel separa "Aprobar merge" de "Contestar", muestra el progreso de cada lente y está en español.
+- [ ] Backlog: #18 (dos `## Risk` y `lensesFor` duplicada), #19 (subir la versión del plugin), #20 ("1 te espera" en singular).
+- [ ] Afinar `factory-build`: el Builder no consultó al advisor en la #14 pese a ser concurrencia y volver cuatro veces ("cambio local a un único módulo"); solo lo hizo cuando se le pidió en la tarjeta.
+
 ## Pendiente fuera del código
 
 - [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.

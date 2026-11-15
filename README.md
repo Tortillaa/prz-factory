@@ -89,7 +89,7 @@ El agente copia la fábrica dentro del proyecto y te guía por la configuración
 node .prz-factory/bin/factory.mjs serve     # el tablero, en http://localhost:4747
 ```
 
-Escribe una idea con "+ Nueva idea" y, en una sesión de Claude Code dentro de Orca, pide `/factory-run` ("arranca la fábrica").
+Pide un cambio al agente del IDE en el chat (skill `factory-intake`) y, en una sesión de Claude Code dentro de Orca, pide `/factory-run` ("arranca la fábrica").
 
 ## Uso diario
 
@@ -97,7 +97,7 @@ A partir de aquí, `factory` es `node .prz-factory/bin/factory.mjs`. Para teclea
 
 | Para | Haz |
 |---|---|
-| Pedir un cambio | botón "+ Nueva idea", o `factory add "<idea>" --column spec` |
+| Pedir un cambio | díselo al agente del IDE en el chat: la skill `factory-intake` redacta la tarjeta, te pregunta lo que el código no decide y la crea en Ready |
 | Poner la fábrica a trabajar | `/factory-run` en una sesión de Claude Code dentro de Orca |
 | Ver qué pasa | el tablero (`factory serve`), o `factory status` |
 | Aprobar un merge que te espera | la franja de solicitudes del tablero → "Aprobar y mergear", o `factory merge <id> --sha <sha> --human` |
@@ -185,7 +185,8 @@ Cada rol es un worker de Orca en su propio worktree, y carga su skill solo, por 
 | Rol | Trabaja en | Termina con | Skill | Modelo en este repo |
 |---|---|---|---|---|
 | **Coordinador**: lanza a los demás con `factory dispatch`, reconcilia el tablero y te trae cada solicitud. Nunca redacta, construye, revisa ni mergea | — | — | `factory-run` | el de tu sesión |
-| **Spec Writer** | `spec` | `handoff` a `ready` o `blocked` | `factory-spec` + `ponytail` | Claude Sonnet 5.5, con advisor Fable 5.2 |
+| **Recepción**: el agente del IDE; convierte lo que pides en el chat en tarjetas. Nunca construye ni revisa | chat | `factory add` a `ready` (o `backlog`) | `factory-intake` + `factory-spec` + `ponytail` | el de tu sesión |
+| **Spec Writer**: para las ideas que dejas en `spec` sin redactar | `spec` | `handoff` a `ready` o `blocked` | `factory-spec` + `ponytail` | Claude Sonnet 5.5, con advisor Fable 5.2 |
 | **Builder** | `building` | `handoff` a `review` o `blocked` | `factory-build` + `ponytail` | Claude Sonnet 5.5, con advisor Fable 5.2 |
 | **Reviewers**, uno por lente | `review` | `verdict`: pass, fail o escalar | `factory-review` + `ponytail-review` | Claude Sonnet 5.5, esfuerzo alto (Grok 4.7 cuando tiene saldo) |
 | **Agente de merge** | `merge` | `merge`, o `handoff` a `blocked` | `factory-merge` | Claude Haiku 5.5 |
@@ -211,6 +212,7 @@ Cada rol carga la suya (ver [Roles de agentes](#roles-de-agentes)): `factory-run
 | Skill | Quién la usa | Para qué |
 |---|---|---|
 | `factory-board` | Todos | Leer y cambiar el tablero con el CLI; incluye el estándar de escritura |
+| `factory-intake` | El agente del IDE (Recepción) | Convertir lo que pides en el chat en tarjetas, con preguntas en el chat y creadas en Ready |
 | `ponytail` | Spec Writer y Builder | El mínimo cambio que resuelve el problema entero |
 | `ponytail-review` | Reviewers | Revisar como quien recibirá el aviso cuando falle |
 | `unslop` | Spec Writer, Builder y la lente `code`, cuando la tarjeta cambia una pantalla | Auditar la interfaz, fijar una dirección propia del producto y corregirla en nueve pasadas (espaciado, color, iconos, textos, tipografía, maquetación, detalles, visuales y movimiento) |

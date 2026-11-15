@@ -166,12 +166,11 @@ Déjalo abierto. Se actualiza solo cuando los agentes mueven tarjetas.
 
 ### Paso 2. Manda una idea
 
-En el tablero, pulsa **"+ Nueva idea"** (arriba a la izquierda) y escríbela con tus palabras: qué quieres y, si lo sabes, dónde.
+Pídeselo al agente del IDE, en el chat, con tus palabras: qué quieres y, si lo sabes, dónde. La skill `factory-intake` redacta la tarjeta completa, te pregunta en el chat lo que el código no decide y la crea en **READY** (o en BACKLOG si prefieres aparcarla).
 
-> **Título:** el carrito pierde los productos
-> **Cuerpo:** si cierro la pestaña y vuelvo, el carrito está vacío. Quiero que se conserve.
+> Quiero que el carrito conserve los productos: si cierro la pestaña y vuelvo, ahora está vacío.
 
-No hace falta formato ni detalle técnico. La tarjeta aparece en la columna **SPEC**.
+No hace falta formato ni detalle técnico. Si prefieres dejar una idea sin redactar, `factory add "<idea>" --column spec` la deja en **SPEC** para el Spec Writer.
 
 Desde la terminal es lo mismo:
 

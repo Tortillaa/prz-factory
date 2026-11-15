@@ -118,6 +118,7 @@ test('the managed block describes the pipeline, the panel and the business rule'
   const text = block({ ...DEFAULTS, verify: ['npm test'], merge: { ...DEFAULTS.merge, humanPaths: ['migrations/**'] } });
   assert.match(text, /spec \(an idea\) → ready → building → review/);
   assert.match(text, /factory-spec/);
+  assert.match(text, /\| Ask for a change \| ask the IDE agent in the chat: `factory-intake`/);
   assert.match(text, /\| Review panel \| qa · security · code · ops/);
   assert.match(text, /labels auth, payments, pricing, schema, ops, money, needs-human · paths `migrations\/\*\*` · diff > 400 lines/);
 });

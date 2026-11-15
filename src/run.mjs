@@ -122,7 +122,9 @@ export function spec(card, lane, worker, repoRoot, lens = null) {
     : '';
   const craftLine = craft
     ? `\n   Then load the \`${craft.skill}\` skill too, before you start (if it is not installed, read
-   ${path.join(FACTORY_ROOT, 'skills', craft.skill, 'SKILL.md')}): ${craft.use}.`
+   ${path.join(FACTORY_ROOT, 'skills', craft.skill, 'SKILL.md')}): ${craft.use}.
+   If the card changes a screen (HTML, CSS, components, a panel), also load \`unslop\` (or read
+   ${path.join(FACTORY_ROOT, 'skills', 'unslop', 'SKILL.md')}), as your lane's skill says.`
     : '';
   return `You are a prz-factory ${lane}${lens ? ` (${lens})` : ''} worker. Your worker name is ${worker}.
 

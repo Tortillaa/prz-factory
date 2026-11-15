@@ -6,68 +6,72 @@
 <title>prz-factory</title>
 <style>
   :root {
-    --bg: #f6f7f9; --col: #eceef2; --card: #fff; --text: #1d2129; --muted: #69707d;
-    --border: #d9dde4; --accent: #3b6ef5; --drop: #dfe7fd; --err: #c93c3c; --warn: #b7791f; --ok: #2f9e5b; --ask: #fff4d6;
+    --bg: #f5f5f4; --col: #ebebe9; --card: #fff; --text: #1c1c1a; --muted: #6b6b66;
+    --border: #d8d8d4; --accent: #b45309; --on-accent: #fff; --drop: #f3e4cc; --err: #c93c3c; --warn: #a15c0a; --ok: #2f9e5b; --ask: #fbf1dc;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
     --c-backlog: #8a919e; --c-spec: #c2569b; --c-ready: #3b6ef5; --c-building: #d98a1c; --c-qa: #8b5cf6;
     --c-review: #0ea5a4; --c-merge: #14866d; --c-blocked: #dc4a4a; --c-done: #2f9e5b;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #14161a; --col: #1c1f25; --card: #252931; --text: #e6e8ec; --muted: #9aa1ad;
-      --border: #333844; --accent: #7196ff; --drop: #26304a; --err: #ff7b7b; --warn: #e8b04a; --ok: #5fd08a; --ask: #3a321c;
+      --bg: #151514; --col: #1d1d1b; --card: #262624; --text: #e8e8e4; --muted: #a0a09a;
+      --border: #363633; --accent: #f0a43a; --on-accent: #1c1c1a; --drop: #3a2f1d; --err: #ff7b7b; --warn: #e8b04a; --ok: #5fd08a; --ask: #332c1c;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
-  header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
-  header h1 { font-size: 16px; margin: 0; }
-  header .status { margin-left: auto; color: var(--muted); font-size: 12px; }
-  .board { display: grid; grid-template-columns: repeat(9, minmax(200px, 1fr)); gap: 12px; padding: 16px 20px; overflow-x: auto; min-height: calc(100vh - 54px); }
-  .column { background: var(--col); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 200px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 16px; font-weight: 500; margin: 0; }
+  header .status { color: var(--muted); font-size: 12px; }
+  header #active { margin-left: auto; margin-right: 16px; font-variant-numeric: tabular-nums; }
+  .board { display: grid; grid-template-columns: repeat(9, minmax(200px, 1fr)); gap: 12px; padding: 16px 20px; overflow-x: auto; min-height: calc(100vh - 52px); }
+  .column { background: var(--col); border-radius: 12px; padding: 8px; display: flex; flex-direction: column; gap: 8px; min-height: 200px; }
   .column.drop { background: var(--drop); }
-  .column h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; margin: 2px 4px 4px; display: flex; gap: 8px; align-items: center; }
+  .column h2 { font-size: 14px; font-weight: 500; margin: 4px 4px 4px; display: flex; gap: 8px; align-items: center; }
   .column h2::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--dot); }
-  .column h2 .count { color: var(--muted); font-weight: 400; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; cursor: grab; }
-  .card:hover { border-color: var(--accent); }
-  .card.over { box-shadow: 0 -3px 0 var(--accent); }
-  .card .id { color: var(--muted); font-size: 12px; }
-  .meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-  .tag { font-size: 11px; padding: 1px 6px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); }
+  .column h2 .count { color: var(--muted); font-family: var(--mono); font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; cursor: grab; transition: border-color .15s; }
+  .card:hover { border-color: var(--muted); }
+  .card.over { box-shadow: 0 -4px 0 var(--accent); }
+  .card .id { color: var(--muted); font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .tag { font-size: 12px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted); }
   .tag.who { border-color: var(--accent); color: var(--accent); }
   .tag.err { border-color: var(--err); color: var(--err); }
   .tag.warn { border-color: var(--warn); color: var(--warn); }
   .tag.ok { border-color: var(--ok); color: var(--ok); }
-  .requests { margin: 12px 20px 0; padding: 10px 14px; border: 1px solid var(--warn); border-radius: 10px; background: var(--ask); }
-  .requests h2 { font-size: 13px; margin: 0 0 6px; }
-  .request { display: flex; gap: 10px; align-items: baseline; padding: 4px 0; cursor: pointer; }
+  .requests { margin: 12px 20px 0; padding: 12px 16px; border: 1px solid var(--warn); border-radius: 12px; background: var(--ask); }
+  .requests h2 { font-size: 14px; font-weight: 500; margin: 0 0 8px; }
+  .request { display: flex; gap: 12px; align-items: baseline; padding: 4px 0; cursor: pointer; }
   .request:hover .what { text-decoration: underline; }
   .request .why { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .request .kind { flex: none; font-size: 11px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--warn); color: var(--warn); }
+  .request .kind { flex: none; font-size: 12px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--warn); color: var(--warn); }
   .request .what { flex: none; }
-  input, textarea { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; width: 100%; }
-  textarea { font-family: ui-monospace, Consolas, monospace; font-size: 13px; min-height: 320px; resize: vertical; }
-  button { font: inherit; border: 0; border-radius: 6px; padding: 6px 12px; background: var(--accent); color: #fff; cursor: pointer; }
+  input, textarea { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px; width: 100%; }
+  textarea { font-family: var(--mono); font-size: 14px; min-height: 320px; resize: vertical; }
+  button { font: inherit; border: 0; border-radius: 8px; padding: 8px 12px; background: var(--accent); color: var(--on-accent); cursor: pointer; transition: opacity .15s; }
+  button:hover { opacity: .88; }
   button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
   .new { margin-top: auto; }
-  dialog { width: min(720px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); padding: 20px; }
+  dialog { width: min(720px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 16px; background: var(--card); color: var(--text); padding: 20px; }
   dialog::backdrop { background: rgb(0 0 0 / .4); }
-  dialog h3 { margin: 0 0 6px; padding-right: 28px; }
-  dialog .body { white-space: pre-wrap; margin: 12px 0; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
-  dialog section h4 { font-size: 12px; text-transform: uppercase; color: var(--muted); margin: 16px 0 6px; }
+  dialog h3 { font-weight: 500; margin: 0 0 8px; padding-right: 28px; }
+  dialog .body { white-space: pre-wrap; margin: 12px 0; font-family: var(--mono); font-size: 14px; }
+  dialog section h4 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 16px 0 8px; }
   .lint li.error { color: var(--err); } .lint li.warn { color: var(--warn); }
-  .lint ul { margin: 0; padding-left: 18px; }
-  .comment { border-left: 3px solid var(--border); padding: 2px 10px; margin: 6px 0; white-space: pre-wrap; }
+  .lint ul { margin: 0; padding-left: 20px; }
+  .comment { border-left: 4px solid var(--border); padding: 4px 12px; margin: 8px 0; white-space: pre-wrap; }
   .comment .who, .history, .hint { color: var(--muted); font-size: 12px; }
   .row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
   label { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
-  .close { position: absolute; top: 14px; right: 14px; background: transparent; color: var(--muted); padding: 0 4px; font-size: 18px; }
+  .close { position: absolute; top: 12px; right: 12px; background: transparent; color: var(--muted); padding: 0 4px; font-size: 16px; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
-<header><h1>prz-factory</h1><button id="new-idea" title="Escribe lo que quieres; el Spec Writer la redacta y la fábrica la construye">+ Nueva idea</button><span class="status" id="status">conectando…</span></header>
+<header><h1>prz-factory</h1><button id="new-idea" title="Escribe lo que quieres; el Spec Writer la redacta y la fábrica la construye">Nueva idea</button><span class="status" id="active">0 en curso</span><span class="status" id="status">conectando…</span></header>
 <section class="requests" id="requests" hidden></section>
 <main class="board" id="board"></main>
 
@@ -131,18 +135,18 @@ function tags(card) {
     ...card.labels.map((l) => el('span', { className: 'tag', textContent: l })),
     card.assignee && el('span', { className: 'tag who', textContent: '@' + card.assignee }),
     ...(card.column === 'review' ? panel(card) : []),
-    card.unmet.length > 0 && el('span', { className: 'tag warn', textContent: '⛓ ' + card.unmet.map((d) => '#' + d).join(' '), title: 'Bloqueada por tarjetas sin terminar' }),
-    showLint && errors > 0 && el('span', { className: 'tag err', textContent: `✖ ${errors}`, title: 'Errores de lint: no puede pasar a Ready' }),
-    showLint && !errors && warns > 0 && el('span', { className: 'tag warn', textContent: `⚠ ${warns}`, title: 'Avisos de lint' }),
+    card.unmet.length > 0 && el('span', { className: 'tag warn', textContent: 'bloqueada por ' + card.unmet.map((d) => '#' + d).join(' '), title: 'Bloqueada por tarjetas sin terminar' }),
+    showLint && errors > 0 && el('span', { className: 'tag err', textContent: `${errors} ${errors === 1 ? 'error' : 'errores'}`, title: 'Errores de lint: no puede pasar a Ready' }),
+    showLint && !errors && warns > 0 && el('span', { className: 'tag warn', textContent: `${warns} ${warns === 1 ? 'aviso' : 'avisos'}`, title: 'Avisos de lint' }),
     card.run.branch && el('span', { className: 'tag', textContent: 'rama ' + card.run.branch }),
-    card.source?.seen > 1 && el('span', { className: 'tag warn', textContent: `🔁 ${card.source.seen}`, title: `Encontrado ${card.source.seen} veces por factory-collect` }));
+    card.source?.seen > 1 && el('span', { className: 'tag warn', textContent: `visto ${card.source.seen} veces`, title: `Encontrado ${card.source.seen} veces por factory-collect` }));
 }
 
 // One chip per review lens: passed, failed, being reviewed, or waiting for a reviewer.
 function lensState(card, lens) {
   const s = card.panel?.lenses?.[lens] || {};
-  if (s.verdict === 'pass') return { cls: 'ok', mark: '✓', title: 'ha aprobado este commit' };
-  if (s.verdict === 'fail') return { cls: 'err', mark: '✖', title: 'ha encontrado un bloqueo' };
+  if (s.verdict === 'pass') return { cls: 'ok', mark: 'ok', title: 'ha aprobado este commit' };
+  if (s.verdict === 'fail') return { cls: 'err', mark: 'fallo', title: 'ha encontrado un bloqueo' };
   if (s.worker) return { cls: 'who', mark: '…', title: 'revisando: ' + s.worker };
   return { cls: '', mark: '·', title: 'esperando reviewer' };
 }
@@ -162,7 +166,7 @@ function renderRequests() {
   if (!waiting.length) return;
   const last = (c) => (c.comments.at(-1)?.text || '').split('\n').filter(Boolean).slice(0, 2).join(' · ');
   box.replaceChildren(
-    el('h2', { textContent: `🙋 ${waiting.length === 1 ? '1 solicitud espera' : waiting.length + ' solicitudes esperan'} tu respuesta` }),
+    el('h2', { textContent: `${waiting.length === 1 ? '1 solicitud espera' : waiting.length + ' solicitudes esperan'} tu respuesta` }),
     ...waiting.map((c) => {
       const approve = c.labels.includes('merge-approval');
       const row = el('div', { className: 'request' },
@@ -183,6 +187,7 @@ async function move(id, column, before) {
 }
 
 function render() {
+  $('active').textContent = state.cards.filter((c) => c.assignee || Object.values(c.panel?.lenses || {}).some((l) => l.worker)).length + ' en curso';
   $('board').replaceChildren(...state.columns.map((col) => {
     const cards = state.cards.filter((c) => c.column === col);
     const column = el('section', { className: 'column' },
@@ -206,8 +211,8 @@ function render() {
     column.ondragover = (e) => { e.preventDefault(); column.classList.add('drop'); };
     column.ondragleave = (e) => { if (!column.contains(e.relatedTarget)) column.classList.remove('drop'); };
     column.ondrop = (e) => { e.preventDefault(); column.classList.remove('drop'); move(Number(e.dataTransfer.getData('text/plain')), col, null); };
-    if (col === 'backlog') column.append(el('button', { className: 'ghost new', textContent: '+ Nueva tarjeta', onclick: () => newCard('backlog') }));
-    if (col === 'spec') column.append(el('button', { className: 'ghost new', textContent: '+ Nueva idea', onclick: () => newCard('spec') }));
+    if (col === 'backlog') column.append(el('button', { className: 'ghost new', textContent: 'Nueva tarjeta', onclick: () => newCard('backlog') }));
+    if (col === 'spec') column.append(el('button', { className: 'ghost new', textContent: 'Nueva idea', onclick: () => newCard('spec') }));
     return column;
   }));
   renderRequests();
@@ -289,7 +294,7 @@ $('v-approve').onclick = async () => {
   try {
     const r = await api(`/api/cards/${c.id}/approve`, { sha });
     $('v-approve-status').textContent = '';
-    alert(`${r.status === 'merged' ? '✅' : '✖'} ${r.status}: ${r.message}`);
+    alert(`${r.status}: ${r.message}`);
   } catch (err) {
     $('v-approve-status').textContent = '';
     alert(err.message);

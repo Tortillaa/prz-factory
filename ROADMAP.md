@@ -219,9 +219,20 @@ Decisión del usuario: el plugin deja de ser de solo lectura y pasa a ser un cli
 - [x] **#22, #25** Ficha de tarjeta con comentarios, mover (con "Forzar"), editar y aprobar; una respuesta tardía de otra tarjeta se descarta y cada botón se bloquea mientras actúa.
 - [x] **#23** Crear una idea o una tarjeta completa desde el panel.
 - [x] **#24, #27** Portada: "Te esperan" (aprobar y contestar) y "En curso" primero, nueva idea plegada, buscador; estado por repo y tarjeta. Plugin 0.7.1 instalado.
-- [ ] Afinar `factory-build`: dos Builders entregaron con `verify` en rojo (#22, #24, por no subir la versión) y el advisor casi nunca se consulta por iniciativa propia.
+- [x] `factory-build` prohíbe entregar con `verify` en rojo y "el arreglo en el siguiente commit" (#22, #24).
+- [ ] El advisor casi nunca se consulta por iniciativa propia: revisar los criterios de `factory-build`.
 - [ ] El kit de tests de Orca ejecuta las acciones en serie: los tests de carreras tienen que provocar la carrera a mano (#25, #27). Documentarlo en el skill de build o en el README del plugin.
-- [ ] Volver a poner las revisiones en Grok cuando haya saldo (hoy en Claude Sonnet, `factory.config.json` sin commitear).
+- [ ] Volver a poner las revisiones en Grok cuando haya saldo. Hoy `agents.review` es Claude Sonnet 5.5 con esfuerzo alto (commiteado, con README, CLAUDE.md y el bloque gestionado al día).
+
+## Fase 20 · Diseño de interfaz con unslop
+
+- [x] `skills/unslop` copiada sin modificar de [heydamir/unslop](https://github.com/heydamir/unslop) (CC BY 4.0, commit `620163e`, con su `LICENSE` y el crédito a Damir Sokolovsky en el README). Scripts revisados antes de distribuirlos: un servidor solo en 127.0.0.1 y borrados limitados a su carpeta de fotogramas.
+- [x] Conectada a la cadena cuando una tarjeta cambia una pantalla: el Spec Writer audita y escribe la dirección (o bloquea si es un rediseño sin elegir), el Builder la aplica en sus nueve pasadas sin volver a preguntar y la lente `code` pasa su checklist. `run.spec` lo recuerda a spec, build y review; tests de ambas cosas.
+- [x] Probada con dos tarjetas reales de la web del tablero (2026-11-16). **Spec Writer: sí.** En la #28, una idea corriente sin una palabra de diseño ("contador de tarjetas en curso en la cabecera"), escribió solo la `Direction` de cinco líneas y decidió pulido ligero sin salirse del alcance; en la #29 ("parece hecha por IA") auditó con `signs.md` (emojis, mayúsculas con tracking, acento por defecto, espaciado fuera de la rejilla), eligió pulir sin rediseñar y no bloqueó, con criterios comprobables. **Builder y lente `code`: a medias.** El resultado de la #28 respeta la dirección, pero ni el Builder ni la lente miraron la pantalla ni citaron unslop.
+- [x] Corregido en las skills: el Builder renderiza la pantalla (`orca tab create` + `orca screenshot`, o `orca plugin shot`) y entrega con una línea `Design:`; la lente `code` la mira ella misma y trata la falta de `Design:` como Should fix. Falta volver a probarlo: la #28 está en review (code aprobó, qa pendiente) y la #29 en ready.
+- [x] **La #29 lo confirmó: no era la tarjeta.** Con las skills ya corregidas, el Builder aplicó el contenido de unslop (acento único, sin emojis ni mayúsculas, rejilla de 4, ids en mono) pero otra vez ni renderizó ni escribió `Design:`, y se saltó dos criterios de aceptación visuales. Las lentes sí lo hicieron: `code` renderizó la rama y anotó la falta de `Design:`; `qa` comprobó a mano AC4 y AC5 en claro y oscuro y midió el contraste.
+- [x] **Arreglo en el código, como `Card: #N`:** `ui.paths` en la config detecta los cambios de pantalla por el diff; `factory handoff` rechaza la entrega sin `Design:` y sin `--screenshot` (que guarda como evidencia del head) salvo `--no-screenshot "<motivo>"`, y `factory verdict` rechaza un `pass` de la lente `code` sin `Design:`. Tests en `test/lanes.test.mjs`.
+- [ ] Ver la regla en una tarjeta real de pantalla con un Builder que la cumpla, y mostrar las capturas de evidencia en la ficha de la web y del panel.
 
 ## Pendiente fuera del código
 

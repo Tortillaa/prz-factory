@@ -169,6 +169,8 @@ Cada regla la hace cumplir el código, no la buena voluntad del agente. `factory
 | Borrados recursivos solo dentro del proyecto | guard `delete-outside` |
 | No inventar una decisión de producto: la tarjeta va a `blocked` con la pregunta | skills `factory-spec`, `factory-build`, `factory-review` |
 | El mínimo código que resuelve la tarjeta; el que no debería existir se devuelve | skills `ponytail` y `ponytail-review` |
+| Una pantalla no sale con aspecto de "hecha por IA" (degradados morados, brillos, emojis, textos que gritan): sigue la dirección de la tarjeta | skill `unslop`, en el Spec Writer, el Builder y la lente `code` |
+| Un cambio de pantalla se entrega con una línea `Design:` y una captura de lo que se vio (o `--no-screenshot` y el motivo), y la lente `code` lo aprueba diciendo cómo lo miró | `handoff` y `verdict` en `src/lanes.mjs`, `ui.paths` en `factory.config.json` |
 | Commits y comentarios en un formato único, con evidencias | `skills/factory-board/references/writing-standard.md` |
 | A la décima ronda fallida, o al segundo worker caído, la tarjeta para y espera a una persona | `sendBack` en `src/store.mjs`, `reclaim` en `src/run.mjs` |
 
@@ -185,7 +187,7 @@ Cada rol es un worker de Orca en su propio worktree, y carga su skill solo, por 
 | **Coordinador**: lanza a los demás con `factory dispatch`, reconcilia el tablero y te trae cada solicitud. Nunca redacta, construye, revisa ni mergea | — | — | `factory-run` | el de tu sesión |
 | **Spec Writer** | `spec` | `handoff` a `ready` o `blocked` | `factory-spec` + `ponytail` | Claude Sonnet 5.5, con advisor Fable 5.2 |
 | **Builder** | `building` | `handoff` a `review` o `blocked` | `factory-build` + `ponytail` | Claude Sonnet 5.5, con advisor Fable 5.2 |
-| **Reviewers**, uno por lente | `review` | `verdict`: pass, fail o escalar | `factory-review` + `ponytail-review` | Grok 4.7, esfuerzo alto |
+| **Reviewers**, uno por lente | `review` | `verdict`: pass, fail o escalar | `factory-review` + `ponytail-review` | Claude Sonnet 5.5, esfuerzo alto (Grok 4.7 cuando tiene saldo) |
 | **Agente de merge** | `merge` | `merge`, o `handoff` a `blocked` | `factory-merge` | Claude Haiku 5.5 |
 | **QA**: solo para tarjetas con la etiqueta `qa`; prueba lo que ya está en la rama base | `qa` | `merge` (cierra la tarjeta) | `factory-qa` | Claude |
 
@@ -211,6 +213,7 @@ Cada rol carga la suya (ver [Roles de agentes](#roles-de-agentes)): `factory-run
 | `factory-board` | Todos | Leer y cambiar el tablero con el CLI; incluye el estándar de escritura |
 | `ponytail` | Spec Writer y Builder | El mínimo cambio que resuelve el problema entero |
 | `ponytail-review` | Reviewers | Revisar como quien recibirá el aviso cuando falle |
+| `unslop` | Spec Writer, Builder y la lente `code`, cuando la tarjeta cambia una pantalla | Auditar la interfaz, fijar una dirección propia del producto y corregirla en nueve pasadas (espaciado, color, iconos, textos, tipografía, maquetación, detalles, visuales y movimiento) |
 | `factory-lint` | Tú, con un agente | Escribir o repasar tarjetas a mano |
 | `factory-collect` | Tú, con un agente | Buscar problemas en el código y convertirlos en tarjetas |
 | `factory-onboard` | Tú, con un agente | Configurar la fábrica en un proyecto, o repararla si `doctor` falla |
@@ -251,7 +254,7 @@ Los cambios llegan a `main` por pull request; CI ejecuta `npm test` en Linux, ma
 
 ## Licencia y créditos
 
-[MIT](LICENSE). Inspirada en [super-board](https://github.com/EricTechPro/super-board) (MIT), con tablero propio en `localhost` en lugar de GitHub Projects y merges locales por fast-forward. Incluye sin modificar [ponytail](https://github.com/DietrichGebert/ponytail) (MIT), con su licencia.
+[MIT](LICENSE). Inspirada en [super-board](https://github.com/EricTechPro/super-board) (MIT), con tablero propio en `localhost` en lugar de GitHub Projects y merges locales por fast-forward. Incluye sin modificar [ponytail](https://github.com/DietrichGebert/ponytail) (MIT) y [unslop](https://github.com/heydamir/unslop), de Damir Sokolovsky ([@heydamir](https://x.com/heydamir)) (CC BY 4.0), cada una con su licencia.
 
 <br>
 <p align="center">

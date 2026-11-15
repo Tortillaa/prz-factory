@@ -38,6 +38,15 @@ line → the minimum code that works. Where this skill and ponytail differ, this
 card's Acceptance Criteria and the tests that prove them are what the task asks for, and ponytail
 never cuts what the task asks for.
 
+**When the card changes a screen**, load the `unslop` skill too (if it is not installed, read
+`../unslop/SKILL.md`) and run its passes in order, within the card's scope. The card's
+`Direction` is the confirmation unslop asks the user for: follow it and do not stop to ask again.
+With no Direction on a card that changes a screen, take it from the existing brand and do only
+light-slop polish. Render the screen to check it (at most three times, as unslop says). No story
+video and no paid image generation unless the card asks for them. Where unslop and the card differ,
+the card wins; where unslop and ponytail differ inside the card's scope, unslop decides how the
+screen looks and ponytail decides how much code it takes.
+
 1. **Rebase first if the card came back for it**: `git rebase <base>` (base from `factory.config.json`).
    Resolve conflicts within the card's scope; if that needs a product decision, block (step 4).
 2. **Test first.** For each Acceptance Criterion, write the test that asserts it, run it, see it

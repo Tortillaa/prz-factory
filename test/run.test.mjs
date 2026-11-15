@@ -207,6 +207,14 @@ test('plan dispatches the merge agent first, in the card worktree, on its own mo
   assert.deepEqual(actions[0].placement, { worktree: `path:${wt}` });
   assert.match(run.spec(b.cards[1], 'merge', 'merge-2', ROOT), /factory-merge[\s\S]*factory start 2 --lane merge --as merge-2[\s\S]*`factory merge`/);
   assert.doesNotMatch(run.spec(b.cards[1], 'merge', 'merge-2', ROOT), /ponytail/, 'the merge agent writes no code');
+  assert.doesNotMatch(run.spec(b.cards[1], 'merge', 'merge-2', ROOT), /unslop/, 'nor designs screens');
+});
+
+test('spec, build and review workers are told to load unslop when the card changes a screen', () => {
+  const card = board([{ column: 'ready' }]).cards[0];
+  for (const [lane, worker, lens] of [['spec', 'spec-1'], ['build', 'build-1'], ['review', 'review-code-1', 'code']]) {
+    assert.match(run.spec(card, lane, worker, ROOT, lens), /changes a screen[\s\S]*`unslop`[\s\S]*skills[\\/]unslop[\\/]SKILL\.md/, lane);
+  }
 });
 
 test('worker names carry the round after the first: a leftover worker cannot act under the new claim', () => {

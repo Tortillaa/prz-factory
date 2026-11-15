@@ -223,6 +223,12 @@ Decisión del usuario: el plugin deja de ser de solo lectura y pasa a ser un cli
 - [ ] El kit de tests de Orca ejecuta las acciones en serie: los tests de carreras tienen que provocar la carrera a mano (#25, #27). Documentarlo en el skill de build o en el README del plugin.
 - [ ] Volver a poner las revisiones en Grok cuando haya saldo (hoy en Claude Sonnet, `factory.config.json` sin commitear).
 
+## Fase 20 · Diseño de interfaz con unslop
+
+- [x] `skills/unslop` copiada sin modificar de [heydamir/unslop](https://github.com/heydamir/unslop) (CC BY 4.0, commit `620163e`, con su `LICENSE` y el crédito a Damir Sokolovsky en el README). Scripts revisados antes de distribuirlos: un servidor solo en 127.0.0.1 y borrados limitados a su carpeta de fotogramas.
+- [x] Conectada a la cadena cuando una tarjeta cambia una pantalla: el Spec Writer audita y escribe la dirección (o bloquea si es un rediseño sin elegir), el Builder la aplica en sus nueve pasadas sin volver a preguntar y la lente `code` pasa su checklist. `run.spec` lo recuerda a spec, build y review; tests de ambas cosas.
+- [ ] Probarla con una tarjeta real de pantalla, por ejemplo la web del tablero (`public/index.html`) o el panel de Orca.
+
 ## Pendiente fuera del código
 
 - [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.

@@ -83,6 +83,9 @@ the codebase as written, and whether every line of it needs to exist.
   - *merge:* near-copies that must change together. *split:* one function doing unrelated jobs
     (split by job, never by line count).
   End your comment with `Lean: -<N> lines possible` when there are lean findings.
+- **Screens:** when the diff changes a user interface, run the checklist at the end of the
+  `unslop` skill (`../../unslop/SKILL.md`) over what changed, against the card's `Direction`. A
+  sign of slop the card set out to remove is a Blocker; a new one the diff introduces is Should fix.
 - **Readability:** would the next person understand why, six months from now?
 - **Commits:** in the format of the writing standard §1, each with `Card: #<id>`. The merge gate
   fast-forwards: these commits land as they are.

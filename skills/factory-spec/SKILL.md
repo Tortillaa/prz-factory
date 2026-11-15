@@ -86,6 +86,17 @@ data loss, security, accessibility, anything the user explicitly asked for. Writ
 out, and why, in one `- **Not doing:**` line under Context, so the builder and the reviewers do
 not add it back.
 
+**When the card changes a screen** (HTML, CSS, components, the board web page or the Orca panel),
+also load the `unslop` skill (if it is not installed, read `../unslop/SKILL.md`) and do its first
+steps for the builder, who will not stop to ask: audit the screen with `references/signs.md` and
+decide how much it needs (heavy slop, light slop or none). Then write unslop's five-line direction
+(Product, Character, World, Moments, Signature) under Context as `- **Direction:** …`, taken from
+the product and its existing brand. Unslop waits for the user before editing; in the factory that
+wait is yours: for light slop or a screen with an existing brand, the direction follows from what is
+there and the card goes on. For heavy slop, or a new look nobody chose yet, the direction is a product
+decision: block (step 6) with the audit and the proposed direction as the question. A story video or
+a generated image is in scope only when the idea asks for it.
+
 `factory template` prints the format. Fill every section:
 
 - **Title:** the outcome, in the imperative ("Return 0 for the average of an empty cart").

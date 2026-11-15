@@ -169,6 +169,7 @@ Cada regla la hace cumplir el código, no la buena voluntad del agente. `factory
 | Borrados recursivos solo dentro del proyecto | guard `delete-outside` |
 | No inventar una decisión de producto: la tarjeta va a `blocked` con la pregunta | skills `factory-spec`, `factory-build`, `factory-review` |
 | El mínimo código que resuelve la tarjeta; el que no debería existir se devuelve | skills `ponytail` y `ponytail-review` |
+| Una pantalla no sale con aspecto de "hecha por IA" (degradados morados, brillos, emojis, textos que gritan): sigue la dirección de la tarjeta | skill `unslop`, en el Spec Writer, el Builder y la lente `code` |
 | Commits y comentarios en un formato único, con evidencias | `skills/factory-board/references/writing-standard.md` |
 | A la décima ronda fallida, o al segundo worker caído, la tarjeta para y espera a una persona | `sendBack` en `src/store.mjs`, `reclaim` en `src/run.mjs` |
 
@@ -211,6 +212,7 @@ Cada rol carga la suya (ver [Roles de agentes](#roles-de-agentes)): `factory-run
 | `factory-board` | Todos | Leer y cambiar el tablero con el CLI; incluye el estándar de escritura |
 | `ponytail` | Spec Writer y Builder | El mínimo cambio que resuelve el problema entero |
 | `ponytail-review` | Reviewers | Revisar como quien recibirá el aviso cuando falle |
+| `unslop` | Spec Writer, Builder y la lente `code`, cuando la tarjeta cambia una pantalla | Auditar la interfaz, fijar una dirección propia del producto y corregirla en nueve pasadas (espaciado, color, iconos, textos, tipografía, maquetación, detalles, visuales y movimiento) |
 | `factory-lint` | Tú, con un agente | Escribir o repasar tarjetas a mano |
 | `factory-collect` | Tú, con un agente | Buscar problemas en el código y convertirlos en tarjetas |
 | `factory-onboard` | Tú, con un agente | Configurar la fábrica en un proyecto, o repararla si `doctor` falla |
@@ -251,7 +253,7 @@ Los cambios llegan a `main` por pull request; CI ejecuta `npm test` en Linux, ma
 
 ## Licencia y créditos
 
-[MIT](LICENSE). Inspirada en [super-board](https://github.com/EricTechPro/super-board) (MIT), con tablero propio en `localhost` en lugar de GitHub Projects y merges locales por fast-forward. Incluye sin modificar [ponytail](https://github.com/DietrichGebert/ponytail) (MIT), con su licencia.
+[MIT](LICENSE). Inspirada en [super-board](https://github.com/EricTechPro/super-board) (MIT), con tablero propio en `localhost` en lugar de GitHub Projects y merges locales por fast-forward. Incluye sin modificar [ponytail](https://github.com/DietrichGebert/ponytail) (MIT) y [unslop](https://github.com/heydamir/unslop), de Damir Sokolovsky ([@heydamir](https://x.com/heydamir)) (CC BY 4.0), cada una con su licencia.
 
 <br>
 <p align="center">

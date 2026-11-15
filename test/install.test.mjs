@@ -111,7 +111,11 @@ test('every skill is picked by the task: model-invocable, with a task-driven des
     assert.ok(fm, `${name}: no frontmatter`);
     assert.match(fm[1], new RegExp(`^name: ${name}$`, 'm'), `${name}: name must match the folder`);
     assert.doesNotMatch(fm[1], /disable-model-invocation:\s*true/, `${name}: must not be manual-only`);
-    const desc = fm[1].split(/\r?\n/).slice(fm[1].split(/\r?\n/).findIndex((l) => l.startsWith('description:')) + 1).filter((l) => /^\s/.test(l)).join(' ').replace(/\s+/g, ' ').trim();
+    // A description is folded (`description: >-` and indented lines) or inline, as in unslop.
+    const lines = fm[1].split(/\r?\n/);
+    const at = lines.findIndex((l) => l.startsWith('description:'));
+    const inline = lines[at].slice('description:'.length).trim();
+    const desc = (/^[>|]/.test(inline) ? lines.slice(at + 1).filter((l) => /^\s/.test(l)).join(' ') : inline).replace(/\s+/g, ' ').trim();
     assert.ok(desc.length > 80 && desc.length <= 1024, `${name}: description is ${desc.length} chars (Claude Code reads up to 1024)`);
     if (name.startsWith('factory-') || folder === 'user-skills') {
       assert.match(desc, /Use (whenever|when)/, `${name}: say when it applies`);

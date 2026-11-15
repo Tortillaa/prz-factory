@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util';
 import * as store from '../src/store.mjs';
 import { TEMPLATE } from '../src/ticket.mjs';
 import { createServer } from '../src/server.mjs';
-import { install } from '../src/install.mjs';
+import { install, installUser } from '../src/install.mjs';
 import { doctor } from '../src/doctor.mjs';
 import { loadConfig, repoRoot } from '../src/config.mjs';
 import { startLane, handoff, verdict } from '../src/lanes.mjs';
@@ -80,6 +80,8 @@ Run (the coordinator; it dispatches, never builds)
 
 Setup
   install [target] [--no-hooks]          Copy skills and guard hooks into <target>/.claude, create factory.config.json
+  install --user                         Once per machine: the prz-factory-init skill in ~/.claude/skills,
+                                         so an agent in any repo can install the factory when asked
   eval [case...] [--agent cmd] [--keep] [--list]
                                          Run skill evals: a real agent on a throwaway repo, graded by checks
   pr <id>                                Push the card's branch and open or update its GitHub PR (optional mirror)
@@ -142,6 +144,7 @@ const { values: opts, positionals } = parseOptions({
     file: { type: 'string' },
     hint: { type: 'boolean' },
     'no-hooks': { type: 'boolean' },
+    user: { type: 'boolean' },
     agent: { type: 'string' },
     keep: { type: 'boolean' },
     list: { type: 'boolean' },
@@ -495,6 +498,12 @@ try {
       print({ file }, file);
       break;
     case 'install': {
+      if (opts.user) {
+        const report = installUser();
+        const lines = report.skills.map((s) => `  ${s.status.padEnd(9)} ${s.name}${s.reason ? ` (${s.reason})` : ''}`).join('\n');
+        print(report, `user skills → ${report.target}\n${lines}\n\nIn any repo, ask your agent: "inicializa prz-factory" (or "init prz-factory").`);
+        break;
+      }
       const report = install(args[0] || '.', { hooks: !opts['no-hooks'] });
       const skills = report.skills.map((s) => `  ${s.status.padEnd(9)} ${s.name}${s.reason ? ` (${s.reason})` : ''}`).join('\n');
       const rt = report.runtime;

@@ -17,7 +17,7 @@ const section = (title) => {
 
 test('README: the skills section lists every skill the factory ships', () => {
   const text = section('Skills');
-  for (const name of listSkills()) assert.ok(text.includes(`\`${name}\``), `skill ${name} is missing from the README`);
+  for (const name of [...listSkills(), ...listSkills(FACTORY_ROOT, 'user-skills')]) assert.ok(text.includes(`\`${name}\``), `skill ${name} is missing from the README`);
 });
 
 test('README: the roles section covers every lane, its skill and every review lens', () => {

@@ -43,18 +43,32 @@ Las 8 pasan: `spec-empty-cart` y `spec-pricing-is-business` (Sonnet), `build-emp
 | Workers con el mismo nombre en rondas distintas | Un reviewer de la ronda 2 registró su veredicto con la reserva de la ronda 3 | Arreglado: el nombre lleva la ronda (`review-qa-8-r3`) |
 | Terminales y worktrees acumulados en Orca | 14 terminales y 5 worktrees de más | Arreglado: el coordinador libera siempre y limpia tras cada merge |
 | El Builder no pedía ayuda a Opus aunque la tarjeta volviera | Dos rondas más de la #8 | Arreglado: el spec del Builder lo exige cuando la tarjeta ha vuelto |
-| Cada merge obliga a rebase y revisión completa de las demás tarjetas | La #6 y la #8 se quedaron atrás al mergearse la #7 | Abierto |
-| El panel no cabe con `maxWorkers: 4` si hay Builders trabajando | El panel de la #7 tardó 13 min en vez de unos 5 | Abierto |
-| El gate mergea sobre el checkout de la persona | Una edición sin commitear bloqueó la aprobación de la #6 | Abierto |
-| Arreglos de seguridad por lista negra | Tres rondas de la #8 tapando sintaxis de git | Abierto: el Spec Writer debería pedir de entrada un diseño que bloquee por defecto |
+| Cada merge obliga a rebase y revisión completa de las demás tarjetas | La #6 y la #8 se quedaron atrás al mergearse la #7 | Arreglado: el gate rebasa él mismo si el `patch-id` no cambia (#6 y #8 aterrizaron así el 14-nov) |
+| El panel no cabe con `maxWorkers: 4` si hay Builders trabajando | El panel de la #7 tardó 13 min en vez de unos 5 | Arreglado: panel ligero para riesgo Low y `maxWorkers` por agente |
+| El gate mergea sobre el checkout de la persona | Una edición sin commitear bloqueó la aprobación de la #6 | Arreglado: solo bloquea si el merge toca esos archivos |
+| Arreglos de seguridad por lista negra | Tres rondas de la #8 tapando sintaxis de git | Arreglado: "denegar por defecto" y modelo de amenaza en cada tarjeta de seguridad (Fase 14) |
 | Cuota de Claude | Un Builder se paró a mitad de ronda | El coordinador ya sabe reintentar la misma tarea |
-| Formato de commits | El reviewer `code` vio commits sin `Card: #N` | Abierto: nada lo comprueba |
+| Formato de commits | El reviewer `code` vio commits sin `Card: #N` | Arreglado: el handoff del Builder lo rechaza |
 
 ### Cifras
 
 - **41 workers lanzados** para 3 tarjetas: 2 Spec Writers, 8 Builders (6 solo para la #8), 28 reviewers, 2 agentes de merge y 1 reintento por cuota.
 - **28 de los 41 fueron reviewers**: el panel de cuatro lentes es la parte que más agentes consume, sobre todo cuando una tarjeta rebota.
 - **Coste por tarjeta:** no se puede medir todavía. Orca no da el consumo por worker; solo vemos que la cuota de Claude se agotó una vez con 4 workers en marcha. Para el paso 4 hará falta una forma de medirlo.
+
+## Paso 2 · Cierre (14 y 15 de noviembre de 2026)
+
+| Tarjeta | Qué es | Camino | Resultado |
+|---|---|---|---|
+| #6 | `list --column` avisa de una columna inexistente | Aprobación de una persona | ✅ El gate la rebasó solo sobre `main` (mismo `patch-id`) y aterrizó en `db63e8a` |
+| #8 | Guard contra el force-push | Aprobación de una persona | ✅ Convergió en la ronda 10 con el modelo de amenaza; aterrizó en `5bd5ea0` |
+| #9 | Hook `pre-push` que deniega por defecto | Aprobación de una persona | ✅ Conflicto de rebase → el Builder la rebasó → panel en 1 ronda → `a56ec49` |
+| #10 | Ningún worker actualiza una rama protegida | Aprobación de una persona | ✅ Panel completo en 1 ronda, sin hallazgos → `2b23537` |
+| #11 | Título de la pestaña con las solicitudes pendientes | Merge automático | ✅ **Se mergeó sola** en `b7a0098`: 12 min de la idea a `main`, 5 workers, panel ligero (qa, code) |
+
+Cifras acumuladas de `factory report` (desde el 12-nov): 59 workers, unos 600 min de worker, de los que la review se lleva el 96 %. Las tarjetas de seguridad (#8, #9) concentran casi todo; las demás cierran el panel en una ronda. Para frenar los bucles, una tarjeta pasa a `blocked` tras 10 rondas fallidas.
+
+Cambio de configuración: Spec Writer y Builder consultan al advisor de Claude Code (Fable 5.2) en lugar de un subagente Opus. En la #11 no lo llamaron, como debían en una tarjeta fácil: falta verlo en una difícil.
 
 ## Paso 3 · Piloto
 

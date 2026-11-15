@@ -43,9 +43,23 @@ Tú solo haces dos cosas: **mandar ideas** y **responder a las solicitudes** que
 
 No hay que instalar nada antes. Solo necesitas Node 22 o superior, git, Orca, y acceso a GitHub (el repo de la fábrica es público: no hacen falta credenciales).
 
+### Paso 0. Enseña a tus agentes a traer la fábrica (una vez por máquina)
+
+```sh
+git clone --depth 1 https://github.com/Tortillaa/prz-factory.git prz-factory-tmp
+node prz-factory-tmp/bin/factory.mjs install --user
+rm -rf prz-factory-tmp      # en PowerShell: Remove-Item -Recurse -Force prz-factory-tmp
+```
+
+Eso deja la skill `prz-factory-init` en `~/.claude/skills/`. Desde entonces, cualquier sesión de Claude Code en cualquier proyecto sabe instalar o actualizar la fábrica cuando se lo pides.
+
 ### Paso 1. Pídeselo a tu agente
 
-Abre el proyecto en Orca, arranca un agente (Claude Code o Grok) y escríbele:
+Abre el proyecto en Orca, arranca un agente y escríbele:
+
+> inicializa prz-factory
+
+Si no hiciste el paso 0 (o el agente es Grok), dale la ruta completa:
 
 > Instala prz-factory en este repositorio: clona `https://github.com/Tortillaa/prz-factory.git` con `git clone --depth 1` en la carpeta `.prz-factory-src`, ejecuta `node .prz-factory-src/bin/factory.mjs install .`, borra `.prz-factory-src` y después sigue la skill factory-onboard que se acaba de instalar.
 
@@ -70,7 +84,7 @@ rm -rf .prz-factory-src      # en PowerShell: Remove-Item -Recurse -Force .prz-f
 
 A partir de aquí, el comando de la fábrica es `node .prz-factory/bin/factory.mjs`. En esta guía se escribe `factory` para abreviar: si quieres teclear solo `factory`, ejecuta `npm link` dentro de `.prz-factory`. Comprueba que todo está bien con `node .prz-factory/bin/factory.mjs doctor`.
 
-Para actualizar la fábrica a su última versión, repite las tres líneas de la instalación: reemplaza `.prz-factory/` y las skills, y no toca tu configuración.
+Para actualizar la fábrica a su última versión, pide "actualiza prz-factory" o repite las tres líneas de la instalación: reemplaza `.prz-factory/` y las skills, y no toca tu configuración.
 
 ### Paso 2b. El panel dentro de Orca (opcional)
 

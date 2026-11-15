@@ -147,7 +147,7 @@ La mecánica está probada (tests, CI, una tarjeta real, evals del agente de mer
 
 - [x] **1 · Cerrar la #6.** Aprobada por la persona el 2026-11-14: el gate la rebasó él mismo sobre `main` (sin volver al Builder ni al panel, mismo `patch-id`) y aterrizó en `db63e8a`. Primer recorrido real de "pide aprobación → apruebas → se mergea". La #8 aterrizó igual (`5bd5ea0`). La #9 tenía conflictos: volvió al Builder, que la rebasó, el panel la aprobó en una ronda y aterrizó con aprobación en `a56ec49`.
 - [x] **2 · Una ejecución completa en este repo.** Dos o tres ideas pequeñas y reales con `/factory-run`: una inocente, que debe mergearse sola, y otra que toque una ruta sensible, que debe llegar como solicitud. Medir tiempo por paso, cuota y errores. Hecho el 2026-11-15: la #11 (riesgo Low, solo `public/index.html`) recorrió spec → build → panel ligero (qa, code) → merge y **el gate la mergeó sin persona** (`b7a0098`) en 12 min de punta a punta, con 5 workers y 14.7 min de worker. Las tarjetas sensibles (#9 y #10, `hooks/**`) llegaron como solicitud. El advisor no se llamó, como debía en una tarjeta fácil: falta verlo en una difícil.
-- [ ] **2b · Las 5 evals pendientes con agentes reales:** `spec-empty-cart` y `spec-pricing-is-business` (Sonnet), `review-code-pass`, `review-ops-escalates-pricing` y `review-qa-missing-test` (Grok 4.7).
+- [x] **2b · Las 5 evals pendientes con agentes reales** (las 8 pasan, ver `docs/VALIDACION.md`): `spec-empty-cart` y `spec-pricing-is-business` (Sonnet), `review-code-pass`, `review-ops-escalates-pricing` y `review-qa-missing-test` (Grok 4.7).
 - [ ] **3 · Piloto en un repo no crítico, con buenos tests**, en modo piloto: `"humanRisk": ["low", "medium", "high"]` en su `factory.config.json`, de modo que todos los merges pasan por una persona.
 - [ ] **4 · Decidir con datos.** Tras 10 o 20 tarjetas del piloto: cuántas se aprobarían tal cual, cuántas se rechazarían y cuánto cuesta cada una. Si salen las cuentas, quitar el modo piloto para que los cambios pequeños se mergeen solos.
 - [ ] **5 · Ajustar con lo que salga.** Candidatos: el reparto de modelos (por la cuota), `maxWorkers`, y avisos fuera del tablero si se escapan las solicitudes. Puntos flacos vistos en la ejecución del paso 2:
@@ -189,9 +189,17 @@ Datos de `factory report` tras #8 y #9: 42 workers y 483 min, de los que la revi
 
 - [x] El repo es público: la instalación ya no usa `npx` sino `git clone --depth 1 https://github.com/Tortillaa/prz-factory.git .prz-factory-src`, `node .prz-factory-src/bin/factory.mjs install .` y borrar el clon. El clon va dentro del proyecto para que el guard `delete-outside` deje borrarlo. Actualizados README, GUIA, la skill `factory-onboard`, el aviso de `doctor` y CLAUDE.md; `test/readme.test.mjs` comprueba el comando y que no quede `npx`. Probado en un proyecto vacío: `doctor` en verde y sin restos del clon.
 
+- [x] **Skill global `prz-factory-init`** (`user-skills/`): `factory install --user` la deja en `~/.claude/skills/` una vez por máquina, y en cualquier repo basta con decir "inicializa prz-factory" o "actualiza prz-factory". Probada con tests (instala, actualiza, respeta una skill propia, no llega a los proyectos) y la copia vendida en `.prz-factory/` también puede ejecutar `install --user`.
+
+## Fase 17 · Presentación pública
+
+- [x] README de proyecto público: badges (CI, licencia, Node, sin dependencias), por qué existe, diagrama del flujo, resultados reales con agentes, inicio rápido en tres pasos, y después la referencia (despliegue, plugin, reglas, roles, skills, uso diario, desarrollo).
+- [x] Archivo `LICENSE` (MIT): el README y `package.json` lo declaraban pero faltaba el archivo.
+- [x] `docs/VALIDACION.md` al día: cierre del paso 2 (#6, #8, #9, #10 y #11) y los problemas que quedaron arreglados.
+
 ## Pendiente fuera del código
 
 - [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.
-- [ ] Ejecutar todas las evals con un agente real: ver Fase 13, paso 2b.
+- [x] Ejecutar todas las evals con un agente real: ver Fase 13, paso 2b.
 - [ ] Instalar el plugin en Orca (ver "Plugin para Orca" en el README): es `trusted-worker` y requiere tu aprobación.
 - [x] Subir el repo a GitHub (PR #1).

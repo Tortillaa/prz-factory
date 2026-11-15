@@ -2,6 +2,7 @@
 // <target>/.claude/skills/<name>/ and writes factory.config.json when it is missing.
 // A skill folder the factory did not create (no marker file) is never touched.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -12,15 +13,15 @@ export const MARKER = '.factory-managed';
 // The factory's own runtime, copied into every project so it needs nothing installed anywhere:
 // `node .prz-factory/bin/factory.mjs` works in the project and in each of its worktrees (it is committed).
 export const RUNTIME_DIR = '.prz-factory';
-const RUNTIME_PARTS = ['bin', 'src', 'public', 'hooks', 'skills', 'orca-plugin', 'package.json'];
+const RUNTIME_PARTS = ['bin', 'src', 'public', 'hooks', 'skills', 'user-skills', 'orca-plugin', 'package.json'];
 
 function samePath(a, b) {
   const norm = (p) => path.resolve(p).replace(/\\/g, '/').replace(/\/+$/, '');
   return process.platform === 'win32' ? norm(a).toLowerCase() === norm(b).toLowerCase() : norm(a) === norm(b);
 }
 
-export function listSkills(factoryRoot = FACTORY_ROOT) {
-  const dir = path.join(factoryRoot, 'skills');
+export function listSkills(factoryRoot = FACTORY_ROOT, folder = 'skills') {
+  const dir = path.join(factoryRoot, folder);
   return fs
     .readdirSync(dir, { withFileTypes: true })
     .filter((d) => d.isDirectory() && fs.existsSync(path.join(dir, d.name, 'SKILL.md')))
@@ -120,6 +121,32 @@ function installPrePush(target, factoryRoot) {
   return { file, status: existed ? 'updated' : 'installed' };
 }
 
+// Copies each skill of <factoryRoot>/<folder> into <skillsDir>/<name>, with a marker. A folder
+// without the marker is the user's own skill with the same name: it is left alone.
+function copySkills(factoryRoot, folder, skillsDir) {
+  return listSkills(factoryRoot, folder).map((name) => {
+    const dest = path.join(skillsDir, name);
+    if (fs.existsSync(dest) && !fs.existsSync(path.join(dest, MARKER))) return { name, status: 'skipped', reason: 'exists and is not managed by the factory' };
+    const existed = fs.existsSync(dest);
+    // Replace wholesale so files removed from the factory disappear from the target too.
+    fs.rmSync(dest, { recursive: true, force: true });
+    fs.cpSync(path.join(factoryRoot, folder, name), dest, { recursive: true });
+    fs.writeFileSync(path.join(dest, MARKER), 'Managed by prz-factory: `factory install` overwrites this folder.\n');
+    return { name, status: existed ? 'updated' : 'installed' };
+  });
+}
+
+// Claude Code's user folder: its skills there are available in every project on this machine.
+export const userClaudeDir = () => process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+
+// `install --user`: copies the skills of user-skills/ (prz-factory-init) into the user's Claude
+// folder, once per machine, so any agent session can bring the factory into its project when asked.
+export function installUser({ factoryRoot = FACTORY_ROOT, claudeDir = userClaudeDir() } = {}) {
+  const skillsDir = path.join(claudeDir, 'skills');
+  fs.mkdirSync(skillsDir, { recursive: true });
+  return { target: skillsDir, skills: copySkills(factoryRoot, 'user-skills', skillsDir) };
+}
+
 export function install(target, { factoryRoot = FACTORY_ROOT, hooks = true } = {}) {
   target = path.resolve(target);
   if (!fs.existsSync(target)) throw new Error(`target does not exist: ${target}`);
@@ -127,19 +154,7 @@ export function install(target, { factoryRoot = FACTORY_ROOT, hooks = true } = {
   report.prePush = installPrePush(target, factoryRoot);
   if (hooks) report.hooks = installHooks(target, factoryRoot);
 
-  for (const name of listSkills(factoryRoot)) {
-    const dest = path.join(target, '.claude', 'skills', name);
-    if (fs.existsSync(dest) && !fs.existsSync(path.join(dest, MARKER))) {
-      report.skills.push({ name, status: 'skipped', reason: 'exists and is not managed by the factory' });
-      continue;
-    }
-    const existed = fs.existsSync(dest);
-    // Replace wholesale so files removed from the factory disappear from the target too.
-    fs.rmSync(dest, { recursive: true, force: true });
-    fs.cpSync(path.join(factoryRoot, 'skills', name), dest, { recursive: true });
-    fs.writeFileSync(path.join(dest, MARKER), 'Managed by prz-factory: `factory install` overwrites this folder.\n');
-    report.skills.push({ name, status: existed ? 'updated' : 'installed' });
-  }
+  report.skills = copySkills(factoryRoot, 'skills', path.join(target, '.claude', 'skills'));
 
   const configFile = path.join(target, CONFIG_NAME);
   if (fs.existsSync(configFile)) {

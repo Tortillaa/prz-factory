@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const CLI = path.join(import.meta.dirname, '..', 'bin', 'factory.mjs');
 const tmpBoard = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-')), 'board.json');
@@ -130,4 +130,30 @@ for (const value of ['abc', '0', '70000', '65536', '8080.5']) {
 
 test('serve with FACTORY_PORT=abc and no --port is rejected and exits 1 on its own', async () => {
   assertInvalidPort(await serveRaw([], { FACTORY_PORT: 'abc' }), 'abc');
+});
+
+test('the page has #active and /api/board exposes the claims it counts', async () => {
+  const probe = await occupy();
+  const { port } = probe.address();
+  await new Promise((r) => probe.close(r));
+  const board = tmpBoard();
+  const run = (...a) => spawnSync(process.execPath, [CLI, ...a], { env: { ...process.env, FACTORY_BOARD: board }, encoding: 'utf8' });
+  run('add', 'uno'); run('add', 'dos');
+  run('claim', '1', '--as', 'w1');
+  run('move', '2', 'review', '--force');
+  run('claim', '2', '--as', 'w2', '--lens', 'code');
+  const child = spawn(process.execPath, [CLI, 'serve', '--port', String(port)], { env: { ...process.env, FACTORY_BOARD: board } });
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('serve did not start')), 10_000);
+      child.stdout.on('data', (d) => { if (String(d).includes('board:')) { clearTimeout(timer); resolve(); } });
+    });
+    const get = (p) => fetch(`http://127.0.0.1:${port}${p}`, { headers: { host: `localhost:${port}` } });
+    assert.ok((await (await get('/')).text()).includes('id="active"'));
+    const { cards } = await (await get('/api/board')).json();
+    assert.equal(cards.find((c) => c.id === 1).assignee, 'w1');
+    assert.equal(cards.find((c) => c.id === 2).panel.lenses.code.worker, 'w2');
+  } finally {
+    child.kill();
+  }
 });

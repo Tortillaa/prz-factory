@@ -21,7 +21,8 @@
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
   header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
   header h1 { font-size: 16px; margin: 0; }
-  header .status { margin-left: auto; color: var(--muted); font-size: 12px; }
+  header .status { color: var(--muted); font-size: 12px; }
+  header #active { margin-left: auto; margin-right: 16px; }
   .board { display: grid; grid-template-columns: repeat(9, minmax(200px, 1fr)); gap: 12px; padding: 16px 20px; overflow-x: auto; min-height: calc(100vh - 54px); }
   .column { background: var(--col); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 200px; }
   .column.drop { background: var(--drop); }
@@ -67,7 +68,7 @@
 </style>
 </head>
 <body>
-<header><h1>prz-factory</h1><button id="new-idea" title="Escribe lo que quieres; el Spec Writer la redacta y la fábrica la construye">+ Nueva idea</button><span class="status" id="status">conectando…</span></header>
+<header><h1>prz-factory</h1><button id="new-idea" title="Escribe lo que quieres; el Spec Writer la redacta y la fábrica la construye">+ Nueva idea</button><span class="status" id="active">0 en curso</span><span class="status" id="status">conectando…</span></header>
 <section class="requests" id="requests" hidden></section>
 <main class="board" id="board"></main>
 
@@ -183,6 +184,7 @@ async function move(id, column, before) {
 }
 
 function render() {
+  $('active').textContent = state.cards.filter((c) => c.assignee || Object.values(c.panel?.lenses || {}).some((l) => l.worker)).length + ' en curso';
   $('board').replaceChildren(...state.columns.map((col) => {
     const cards = state.cards.filter((c) => c.column === col);
     const column = el('section', { className: 'column' },

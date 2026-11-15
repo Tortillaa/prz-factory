@@ -134,3 +134,64 @@ test('the manifest declares the waiting status bar item that keeps the worker al
   assert.equal(manifest.engines.orca, '>=1.4.248')
   assert.ok(manifest.contributes.statusBarItems.some((item: { id: string }) => item.id === 'waiting'))
 })
+
+// A host whose workspace list the test can change (set), as Orca does when a workspace opens or closes.
+function liveHost(open: string[]) {
+  const host = mockHost({ results: {} })
+  const set = (paths: string[]) =>
+    host.respond('workspace.list', { workspaces: paths.map((p, i) => ({ id: `w${i}`, kind: 'worktree', name: 'shop', path: p, branch: 'main', hostId: null })), truncated: false })
+  set(open)
+  return Object.assign(host, { set })
+}
+const wait = (ms = 400) => new Promise((resolve) => setTimeout(resolve, ms))
+const boardsPosted = (worker: { posts: readonly { event: string }[] }) => worker.posts.filter((p) => p.event === 'boards.changed')
+
+test('workspace.created shows the board of a repo opened after the worker started', async () => {
+  const first = repoWithBoard(null)
+  const host = liveHost([first])
+  const worker = await mountWorker(main, { host })
+  const repo = repoWithBoard(cards)
+  host.set([first, repo])
+  await worker.emit('workspace.created', { workspaceId: 'x', kind: 'worktree', path: repo, branch: 'main' })
+  await wait()
+  assert.equal(boardsPosted(worker).length, 1)
+  assert.equal((boardsPosted(worker)[0].payload as { boards: unknown[] }).boards.length, 1)
+  assert.deepEqual(worker.refusals, [])
+  await worker.deactivate()
+})
+
+test('a board created in a repo that had none shows up without any Orca event', async () => {
+  const repo = repoWithBoard(null)
+  const worker = await mountWorker(main, { host: liveHost([repo]) })
+  fs.mkdirSync(path.join(repo, '.git', 'factory'))
+  await wait()
+  fs.writeFileSync(path.join(repo, '.git', 'factory', 'board.json'), JSON.stringify({ version: 1, nextId: 2, cards: [cards[0]] }))
+  await wait()
+  const boards = (boardsPosted(worker).at(-1)?.payload as { boards: { cards: unknown[] }[] }).boards
+  assert.equal(boards.length, 1)
+  assert.equal(boards[0].cards.length, 1)
+  assert.deepEqual(worker.refusals, [])
+  await worker.deactivate()
+})
+
+test('workspace.removed closes the watcher of a board, and of a repo still waiting for one', async () => {
+  const withBoard = repoWithBoard(cards)
+  const without = repoWithBoard(null)
+  const host = liveHost([withBoard, without])
+  const worker = await mountWorker(main, { host })
+  host.set([])
+  await worker.emit('workspace.removed', { workspaceId: 'x', kind: 'worktree', path: withBoard })
+  await wait()
+  const before = boardsPosted(worker).length
+  fs.writeFileSync(path.join(withBoard, '.git', 'factory', 'board.json'), JSON.stringify({ version: 1, nextId: 9, cards: [] }))
+  fs.mkdirSync(path.join(without, '.git', 'factory'))
+  await wait()
+  assert.equal(boardsPosted(worker).length, before)
+  assert.deepEqual(worker.refusals, [])
+  await worker.deactivate()
+})
+
+test('the manifest listens to workspace.created and workspace.removed', () => {
+  const manifest = JSON.parse(fs.readFileSync(new URL('../orca-plugin.json', import.meta.url), 'utf8'))
+  assert.deepEqual(manifest.contributes.events.map((e: { on: string }) => e.on), ['workspace.created', 'workspace.removed'])
+})

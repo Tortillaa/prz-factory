@@ -20,15 +20,22 @@ export function commonDir(dir: string): string | null {
   }
 }
 
-/** Unique boards behind a list of workspace paths: [{ key, name, file }]. */
-export function discover(paths: string[], resolve: (dir: string) => string | null = commonDir) {
+/**
+ * Unique boards behind a list of workspace paths: [{ key, name, file }]. A repo with no board yet
+ * adds the folder to watch for it to `pending`: the common dir, or `factory/` once that exists.
+ */
+export function discover(paths: string[], resolve: (dir: string) => string | null = commonDir, pending: string[] = []) {
   const seen = new Map<string, { key: string; name: string; file: string }>()
   for (const dir of paths) {
     if (!dir || !fs.existsSync(dir)) continue
     const common = resolve(dir)
     if (!common || seen.has(common)) continue
     const file = path.join(common, 'factory', 'board.json')
-    if (!fs.existsSync(file)) continue
+    if (!fs.existsSync(file)) {
+      const folder = path.dirname(file)
+      pending.push(fs.existsSync(folder) ? folder : common)
+      continue
+    }
     // <repo>/.git → "repo"; a bare or unusual layout falls back to the workspace folder name.
     const name = path.basename(common) === '.git' ? path.basename(path.dirname(common)) : path.basename(dir)
     seen.set(common, { key: common, name, file })

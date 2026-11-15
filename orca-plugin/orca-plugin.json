@@ -20,6 +20,10 @@
         "ui": "components"
       }
     ],
+    "events": [
+      { "on": "workspace.created" },
+      { "on": "workspace.removed" }
+    ],
     "statusBarItems": [
       {
         "id": "waiting",

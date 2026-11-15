@@ -21,8 +21,9 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   async function snapshot(): Promise<BoardsSnapshot> {
     try {
       const { workspaces } = await orca.host.call('workspace.list', {})
-      const found = discover(workspaces.filter((w) => !w.hostId || w.hostId === 'local').map((w) => w.path))
-      watch(found.map((b) => path.dirname(b.file)))
+      const pending: string[] = []
+      const found = discover(workspaces.filter((w) => !w.hostId || w.hostId === 'local').map((w) => w.path), undefined, pending)
+      watch([...found.map((b) => path.dirname(b.file)), ...pending])
       const boards = found.flatMap((entry) => {
         try {
           return [readBoard(entry)]
@@ -53,24 +54,32 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     }
   }
 
+  // One debounced refresh for every trigger: a board change, a new folder, a workspace event.
+  function refresh(): void {
+    clearTimeout(timer)
+    timer = setTimeout(async () => orca.panels.post('boards.changed', await snapshot()), 150)
+  }
+
+  // Watches exactly `dirs`: opens the new ones, closes those no open workspace needs any more.
+  // A repo's common dir is noisy, so only `board.json` and the `factory` folder count.
   function watch(dirs: string[]): void {
+    for (const [dir, w] of watchers) {
+      if (dirs.includes(dir)) continue
+      w.close()
+      watchers.delete(dir)
+    }
     for (const dir of dirs) {
       if (watchers.has(dir)) continue
       try {
-        watchers.set(
-          dir,
-          fs.watch(dir, (_event, name) => {
-            if (name && name !== 'board.json') return
-            clearTimeout(timer)
-            timer = setTimeout(async () => orca.panels.post('boards.changed', await snapshot()), 150)
-          })
-        )
+        watchers.set(dir, fs.watch(dir, (_event, name) => (name === 'board.json' || name === 'factory') && refresh()))
       } catch {
         // folder vanished; the next snapshot drops it
       }
     }
   }
 
+  orca.events.on('workspace.created', refresh)
+  orca.events.on('workspace.removed', refresh)
   orca.panels.handle('boards.get', () => snapshot())
   await snapshot()
 }

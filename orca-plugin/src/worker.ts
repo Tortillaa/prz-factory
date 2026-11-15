@@ -9,18 +9,22 @@ import type { BoardsSnapshot } from './protocol'
 
 const watchers = new Map<string, fs.FSWatcher>()
 let timer: ReturnType<typeof setTimeout> | undefined
+let stopped = false
 
 /** Orca awaits this before it stops the worker. */
 export function deactivate(): void {
+  stopped = true
   clearTimeout(timer)
   for (const w of watchers.values()) w.close()
   watchers.clear()
 }
 
 export default async function activate(orca: OrcaWorkerApi): Promise<void> {
+  stopped = false
   async function snapshot(): Promise<BoardsSnapshot> {
     try {
       const { workspaces } = await orca.host.call('workspace.list', {})
+      if (stopped) return { boards: [] } // deactivated while the list was in flight: open no watcher
       const pending: string[] = []
       const found = discover(workspaces.filter((w) => !w.hostId || w.hostId === 'local').map((w) => w.path), undefined, pending)
       watch([...found.map((b) => path.dirname(b.file)), ...pending])
@@ -57,7 +61,10 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   // One debounced refresh for every trigger: a board change, a new folder, a workspace event.
   function refresh(): void {
     clearTimeout(timer)
-    timer = setTimeout(async () => orca.panels.post('boards.changed', await snapshot()), 150)
+    timer = setTimeout(async () => {
+      const snap = await snapshot()
+      if (!stopped) orca.panels.post('boards.changed', snap)
+    }, 150)
   }
 
   // Watches exactly `dirs`: opens the new ones, closes those no open workspace needs any more.

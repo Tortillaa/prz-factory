@@ -207,3 +207,23 @@ test('deactivate closes every watcher: a board and a pending repo stay silent af
   assert.equal(boardsPosted(worker).length, 0)
   assert.deepEqual(worker.refusals, [])
 })
+
+test('deactivate while a refresh waits for workspace.list opens no watcher and posts nothing', async () => {
+  const repo = repoWithBoard(cards)
+  const host = liveHost([repo])
+  const worker = await mountWorker(main, { host })
+  // The host answers the next workspace.list by deactivating the worker: the stop lands while snapshot() awaits it.
+  host.respond('workspace.list', {
+    get workspaces() {
+      void worker.deactivate()
+      return [{ id: 'w0', kind: 'worktree', name: 'shop', path: repo, branch: 'main', hostId: null }]
+    },
+    truncated: false
+  })
+  await worker.emit('workspace.created', { workspaceId: 'x', kind: 'worktree', path: repo, branch: 'main' })
+  await wait(300)
+  fs.writeFileSync(path.join(repo, '.git', 'factory', 'board.json'), JSON.stringify({ version: 1, nextId: 9, cards: [] }))
+  await wait()
+  assert.equal(boardsPosted(worker).length, 0)
+  assert.deepEqual(worker.refusals, [])
+})

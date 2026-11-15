@@ -26,8 +26,9 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       const boards = found.flatMap((entry) => {
         try {
           return [readBoard(entry)]
-        } catch {
-          return [] // mid-write or broken: skip it this round
+        } catch (err) {
+          // mid-write or broken: show the repo with the error instead of dropping it
+          return [{ ...entry, counts: {}, cards: [], unknown: [], error: (err as Error).message }]
         }
       })
       await showWaiting(boards)

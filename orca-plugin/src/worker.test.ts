@@ -45,6 +45,31 @@ test('readBoard counts columns and lists unmet blockers', () => {
   assert.equal(board.cards.find((c) => c.id === 3)?.assignee, 'build-3')
 })
 
+test('readBoard puts a card in an unknown column in unknown, not in counts', () => {
+  const [entry] = discover([repoWithBoard([cards[0], { id: 5, title: 'Old', column: 'archived' }])])
+  const board = readBoard(entry)
+  assert.deepEqual(board.unknown.map((c) => c.id), [5])
+  assert.equal(board.counts.archived, undefined)
+  assert.equal(board.counts.done, 1)
+})
+
+test('a broken board.json shows up with an error, next to a healthy repo', async () => {
+  const bad = repoWithBoard(cards)
+  fs.writeFileSync(path.join(bad, '.git', 'factory', 'board.json'), '{ not json')
+  const good = repoWithBoard(cards)
+  const host = mockHost({
+    results: { 'workspace.list': { workspaces: [bad, good].map((p, i) => ({ id: `w${i}`, kind: 'worktree', name: 'shop', path: p, branch: 'main', hostId: null })), truncated: false } }
+  })
+  const worker = await mountWorker(main, { host })
+  const snap = await worker.request('boards.get')
+  const broken = snap.boards.find((b) => b.error)
+  assert.ok(broken?.error)
+  assert.equal(broken.name, 'shop')
+  assert.deepEqual(broken.cards, [])
+  assert.equal(snap.boards.find((b) => !b.error)?.cards.length, 4)
+  await worker.deactivate()
+})
+
 for (const [hostId, expected] of [[null, 1], ['local', 1], ['ssh:devbox', 0], ['runtime:x', 0]] as const) {
   test(`the worker answers the panel with the boards of the open workspaces (hostId ${hostId})`, async () => {
     const repo = repoWithBoard(cards)

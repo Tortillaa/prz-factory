@@ -28,6 +28,10 @@ export type BoardView = {
   file: string
   counts: Record<string, number>
   cards: CardView[]
+  /** Cards whose column the plugin does not know. */
+  unknown: CardView[]
+  /** Set when the board file could not be read; then there are no cards. */
+  error?: string
 }
 
 export type BoardsSnapshot = { boards: BoardView[]; error?: string }

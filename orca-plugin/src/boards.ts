@@ -60,7 +60,7 @@ export function readBoard(entry: { key: string; name: string; file: string }): B
     waitingOn: (c.blockedBy ?? []).filter((d) => column.get(d) !== 'done')
   }))
   const counts = Object.fromEntries(COLUMNS.map((col) => [col, views.filter((c) => c.column === col).length]))
-  return { ...entry, counts, cards: views }
+  return { ...entry, counts, cards: views, unknown: views.filter((c) => !COLUMNS.includes(c.column)) }
 }
 
 function reviewers(card: RawCard): string | null {

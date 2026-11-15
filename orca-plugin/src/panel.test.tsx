@@ -8,6 +8,7 @@ const board = (name: string, extra: Partial<BoardsSnapshot['boards'][number]> = 
   name,
   file: `/r/${name}/.git/factory/board.json`,
   counts: { backlog: 0, spec: 0, ready: 0, building: 1, qa: 0, review: 0, merge: 0, blocked: 1, done: 0 },
+  unknown: [],
   cards: [
     { id: 3, title: 'Mail sender', column: 'building', labels: [], assignee: 'build-3', waitingOn: [] },
     { id: 4, title: 'Pay', column: 'blocked', labels: ['needs-you'], assignee: null, waitingOn: [] }
@@ -26,6 +27,29 @@ test('shows the board, what needs a person, and switches repos', async () => {
   assert.equal(view.find({ label: '#3 Mail sender' }), null)
   assert.deepEqual(view.errors, [])
   assert.deepEqual(view.refusals, [])
+  await view.unmount()
+})
+
+test('shows a broken board by name, and still shows the healthy one', async () => {
+  const bad = board('shop', { cards: [], counts: {}, error: 'Unexpected token' })
+  const host = mockHost({ requests: { 'boards.get': () => ({ boards: [bad, board('blog')] }) } })
+  const view = await mount(panel, { host })
+  const text = view.summary().join(' ')
+  assert.match(text, /no se pudo leer el tablero de shop: Unexpected token/)
+  assert.doesNotMatch(text, /No factory board/)
+  await view.unmount()
+  const other = await mount(panel, { host: mockHost({ requests: { 'boards.get': () => ({ boards: [board('blog'), bad] }) } }) })
+  assert.ok(other.find({ label: '#3 Mail sender' }))
+  assert.match(other.summary().join(' '), /no se pudo leer el tablero de shop/)
+  await other.unmount()
+})
+
+test('lists cards in an unknown column apart, with their column', async () => {
+  const odd = { id: 9, title: 'Old card', column: 'archived', labels: [], assignee: null, waitingOn: [] }
+  const host = mockHost({ requests: { 'boards.get': () => ({ boards: [board('shop', { unknown: [odd] })] }) } })
+  const view = await mount(panel, { host })
+  assert.match(view.summary().join(' '), /unknown column/)
+  assert.ok(view.find({ label: '#9 Old card · archived' }))
   await view.unmount()
 })
 

@@ -67,6 +67,9 @@ export default function Panel() {
           Web board
         </Button>
       </Row>
+      {snap.boards.filter((b) => b.error).map((b) => (
+        <Callout key={b.key} tone="danger" title={`no se pudo leer el tablero de ${b.name}: ${b.error}`} />
+      ))}
       {needsYou.length > 0 && (
         <Callout tone="warning" title={`${needsYou.length} need you`} icon="warning">
           {needsYou.map((c) => `#${c.id} ${c.title}`).join(' · ')}
@@ -88,6 +91,15 @@ export default function Panel() {
           </Collapsible>
         )
       })}
+      {board.unknown.length > 0 && (
+        <Collapsible title={`unknown column (${board.unknown.length})`} defaultOpen>
+          <List label="unknown column">
+            {board.unknown.map((c) => (
+              <ListItem key={String(c.id)} title={`#${c.id} ${c.title} · ${c.column}`} description={describe(c)} />
+            ))}
+          </List>
+        </Collapsible>
+      )}
       <Row gap="xs">
         <Badge tone="accent">{`${board.cards.filter((c) => c.assignee).length} in flight`}</Badge>
         <Badge tone="success">{`${board.counts.done ?? 0} done`}</Badge>

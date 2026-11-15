@@ -21,7 +21,7 @@ export default function activate(orca: OrcaWorkerApi): void {
   async function snapshot(): Promise<BoardsSnapshot> {
     try {
       const { workspaces } = await orca.host.call('workspace.list', {})
-      const found = discover(workspaces.filter((w) => !w.hostId).map((w) => w.path))
+      const found = discover(workspaces.filter((w) => !w.hostId || w.hostId === 'local').map((w) => w.path))
       watch(found.map((b) => path.dirname(b.file)))
       const boards = found.flatMap((entry) => {
         try {

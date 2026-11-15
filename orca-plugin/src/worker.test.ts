@@ -45,15 +45,17 @@ test('readBoard counts columns and lists unmet blockers', () => {
   assert.equal(board.cards.find((c) => c.id === 3)?.assignee, 'build-3')
 })
 
-test('the worker answers the panel with the boards of the open workspaces', async () => {
-  const repo = repoWithBoard(cards)
-  const host = mockHost({
-    results: { 'workspace.list': { workspaces: [{ id: 'w1', kind: 'worktree', name: 'shop', path: repo, branch: 'main', hostId: null }], truncated: false } }
+for (const [hostId, expected] of [[null, 1], ['local', 1], ['ssh:devbox', 0], ['runtime:x', 0]] as const) {
+  test(`the worker answers the panel with the boards of the open workspaces (hostId ${hostId})`, async () => {
+    const repo = repoWithBoard(cards)
+    const host = mockHost({
+      results: { 'workspace.list': { workspaces: [{ id: 'w1', kind: 'worktree', name: 'shop', path: repo, branch: 'main', hostId }], truncated: false } }
+    })
+    const worker = await mountWorker(main, { host })
+    const snap = await worker.request('boards.get')
+    assert.equal(snap.boards.length, expected, JSON.stringify({ snap, calls: host.calls, refusals: worker.refusals }))
+    if (expected) assert.equal(snap.boards[0].cards.length, 4)
+    assert.deepEqual(worker.refusals, [])
+    await worker.deactivate()
   })
-  const worker = await mountWorker(main, { host })
-  const snap = await worker.request('boards.get')
-  assert.equal(snap.boards.length, 1, JSON.stringify({ snap, calls: host.calls, refusals: worker.refusals }))
-  assert.equal(snap.boards[0].cards.length, 4)
-  assert.deepEqual(worker.refusals, [])
-  await worker.deactivate()
-})
+}

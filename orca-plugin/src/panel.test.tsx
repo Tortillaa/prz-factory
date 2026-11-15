@@ -292,6 +292,8 @@ test('the form is above the columns, and absent without a board', async () => {
   const view = await mount(panel, { host: addHost(() => ({})) })
   assert.ok(view.find({ label: '+ Nueva idea' }))
   assert.ok(view.find({ text: 'Tarjeta completa' }))
+  const tree = JSON.stringify(view.tree())
+  assert.ok(tree.indexOf('+ Nueva idea') < tree.indexOf('backlog ('), 'the form comes before the first column')
   await view.unmount()
   const none = await mount(panel, { host: mockHost({ requests: { 'boards.get': () => ({ boards: [] }) } }) })
   assert.equal(none.find({ label: '+ Nueva idea' }), null)
@@ -313,6 +315,17 @@ test('an idea goes to spec as typed, then the field is empty; blank text is not 
   await view.unmount()
 })
 
+test('a failed idea shows its error and keeps the text', async () => {
+  const view = await mount(panel, { host: addHost(() => ({ error: 'sin CLI' })) })
+  await view.type({ label: '+ Nueva idea' }, 'x')
+  await view.press({ text: 'Añadir idea' })
+  assert.ok(JSON.stringify(view.tree()).includes('sin CLI'))
+  assert.ok(view.find({ label: '+ Nueva idea' }))
+  await view.press({ text: 'Añadir idea' }) // still enabled: the text was kept
+  assert.equal(calls.add.length, 2)
+  await view.unmount()
+})
+
 test('a full card starts from the CLI template, defaults to backlog, and keeps what was typed on error', async () => {
   const lint = 'a new card in ready must pass lint:\n- falta la sección "## Risk"'
   const view = await mount(panel, { host: addHost(() => (calls.add.length === 2 ? { error: lint } : { id: 9 })) })
@@ -330,6 +343,7 @@ test('a full card starts from the CLI template, defaults to backlog, and keeps w
   assert.ok(JSON.stringify(view.tree()).includes(JSON.stringify(lint).slice(1, -1))) // the whole message, not a cut title
   assert.ok(view.find({ label: 'Título' }))
   await view.press({ text: 'Guardar' }) // corrected: succeeds and closes
+  assert.deepEqual(calls.add[2], calls.add[1]) // the title, body and column survived the error
   assert.equal(view.find({ label: 'Título' }), null)
   assert.deepEqual(view.errors, [])
   await view.unmount()

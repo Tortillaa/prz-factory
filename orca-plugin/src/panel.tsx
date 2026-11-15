@@ -307,12 +307,12 @@ export default function Panel() {
         <Button disabled={!text.trim()} onPress={() => add(board.key, { title: text, column: 'spec' }, () => set(idea, ''))}>Añadir idea</Button>
         {!form && <Button variant="ghost" onPress={() => openFresh(board.key)}>Tarjeta completa</Button>}
       </Row>
+      {formError && <Callout tone="danger" title={formError} />}
       {form && (
         <Stack gap="sm">
           <Input label="Título" value={form.title} onChange={(v) => set(fresh, { ...form, title: v })} />
           <Textarea label="Cuerpo" value={form.body} rows={12} onChange={(v) => set(fresh, { ...form, body: v })} />
           <Select label="Guardar en" value={form.column} options={['backlog', 'ready'].map((value) => ({ value, label: value }))} onChange={(column) => set(fresh, { ...form, column })} />
-          {formError && <Callout tone="danger" title={formError} />}
           <Row gap="xs">
             <Button onPress={() => add(board.key, form, () => set(fresh, null))}>Guardar</Button>
             <Button variant="ghost" onPress={() => (set(fresh, null), set(freshError, ''))}>Cancelar</Button>

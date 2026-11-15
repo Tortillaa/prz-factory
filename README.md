@@ -11,12 +11,12 @@ Corre dentro de [Orca](https://www.onorca.dev/), que lanza cada agente en su pro
 
 ```mermaid
 flowchart LR
-  idea([Idea]) --> spec[Spec Writer<br/><sub>redacta la tarjeta</sub>]
-  spec --> build[Builder<br/><sub>tests primero</sub>]
-  build --> panel{{Panel de review<br/><sub>qa · security · code · ops</sub>}}
+  idea([Idea]) --> spec["Spec Writer: redacta la tarjeta"]
+  spec --> build["Builder: tests primero"]
+  build --> panel{{"Panel de review: qa · security · code · ops"}}
   panel -- falla --> build
   panel -- aprueba --> merge[Agente de merge]
-  merge --> gate[[Merge gate<br/><sub>verify · fast-forward</sub>]]
+  merge --> gate[["Merge gate: verify y fast-forward"]]
   gate -- cambio seguro --> main([main])
   gate -- toca el negocio --> you([Tu aprobación])
   you --> main
@@ -43,7 +43,7 @@ Validado con agentes reales en este mismo repositorio (detalle en [docs/VALIDACI
 | Cambio sensible (#9 y #10, hooks de git) | Panel completo; el gate lo **retuvo para aprobación** con qué cambia, por qué pregunta y cómo deshacerlo |
 | Rama desfasada (#6 y #8) | El gate **rebasó él solo** y mergeó sin volver a revisar, porque el cambio era idéntico al aprobado |
 | Arreglo de seguridad incompleto (#8) | El reviewer de seguridad encontró, con pruebas en git, nueve formas de saltarse el guard antes de aprobarlo |
-| Evals de las skills | Las 8 pasan con agentes reales (Sonnet, Grok y Haiku) |
+| Evals de las skills | Las 8 pasaron con agentes reales (Sonnet, Grok y Haiku) el 12 de noviembre de 2026 |
 
 ## Inicio rápido
 

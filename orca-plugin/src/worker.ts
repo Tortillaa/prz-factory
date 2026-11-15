@@ -70,7 +70,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     try {
       await orca.host.call('statusBar.update', {
         id: 'waiting',
-        text: n ? `${n} te esperan` : 'Sin esperas',
+        text: n ? `${n} ${n === 1 ? 'te espera' : 'te esperan'}` : 'Sin esperas',
         tone: n ? 'warning' : 'neutral',
         tooltip: 'Tarjetas de la fábrica en blocked, esperando a una persona'
       })

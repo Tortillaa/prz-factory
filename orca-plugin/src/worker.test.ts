@@ -95,7 +95,7 @@ const waiting = (host: ReturnType<typeof mockHost>) => host.calls.filter((c) => 
 test('the status bar item shows the blocked cards as soon as the worker mounts', async () => {
   const host = hostFor(repoWithBoard(cards))
   const worker = await mountWorker(main, { host })
-  assert.deepEqual(waiting(host)[0], { id: 'waiting', text: '1 te esperan', tone: 'warning', tooltip: waiting(host)[0].tooltip })
+  assert.deepEqual(waiting(host)[0], { id: 'waiting', text: '1 te espera', tone: 'warning', tooltip: waiting(host)[0].tooltip })
   await worker.deactivate()
 })
 
@@ -113,7 +113,14 @@ test('the status bar item follows the board when a card moves', async () => {
   const worker = await mountWorker(main, { host })
   fs.writeFileSync(path.join(repo, '.git', 'factory', 'board.json'), JSON.stringify({ version: 1, nextId: 9, cards }))
   await new Promise((resolve) => setTimeout(resolve, 400))
-  assert.equal(waiting(host).at(-1)?.text, '1 te esperan')
+  assert.equal(waiting(host).at(-1)?.text, '1 te espera')
+  await worker.deactivate()
+})
+
+test('the status bar item uses the plural from two blocked cards', async () => {
+  const host = hostFor(repoWithBoard([...cards, { id: 6, title: 'Refund', column: 'blocked' }]))
+  const worker = await mountWorker(main, { host })
+  assert.equal(waiting(host)[0].text, '2 te esperan')
   await worker.deactivate()
 })
 

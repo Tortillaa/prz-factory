@@ -449,6 +449,11 @@ test('readBoard gives the review progress by the lenses of factory.config.json, 
   const [high, low] = readBoard(entry).cards
   assert.equal(high.panel?.total, 4)
   assert.equal(low.panel?.total, 2)
+  // Keys the file leaves out take the defaults of loadConfig: Low light panel of 2; a business label means the full 4.
+  fs.writeFileSync(path.join(repo, 'factory.config.json'), '{}')
+  assert.deepEqual(readBoard(entry).cards.map((c) => c.panel?.total), [4, 2])
+  fs.writeFileSync(path.join(repo, 'factory.config.json'), JSON.stringify({ review: { light: ['qa', 'code'] } }))
+  assert.equal(readBoard(entry).cards[1].panel?.total, 2)
   fs.writeFileSync(path.join(repo, 'factory.config.json'), '{ broken')
   assert.equal(readBoard(entry).cards[0].panel?.total, 3)
 })

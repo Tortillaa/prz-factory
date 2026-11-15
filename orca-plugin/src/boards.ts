@@ -61,12 +61,14 @@ type Config = { review?: { lenses?: string[]; light?: string[] }; merge?: { huma
 // Mirrors lensesFor/riskLevel (src/lanes.mjs, src/ticket.mjs): the plugin ships apart from the factory.
 function panelTotal(card: RawCard, config: Config | null): number {
   const slots = Object.keys(card.panel?.lenses ?? {})
-  const lenses = config?.review?.lenses
-  if (!lenses?.length) return slots.length
-  const light = (config.review?.light ?? []).filter((l) => lenses.includes(l))
+  if (!config) return slots.length
+  // Keys the file leaves out take loadConfig's defaults (src/config.mjs).
+  const lenses = config.review?.lenses ?? ['qa', 'security', 'code', 'ops']
+  const light = (config.review?.light ?? ['qa', 'code']).filter((l) => lenses.includes(l))
+  const human = config.merge?.humanLabels ?? ['auth', 'payments', 'pricing', 'schema', 'ops', 'money', 'needs-human']
   const risk = (card.body ?? '').split(/^## /m).find((s) => /^risk\s*\n/i.test(s)) ?? ''
   const low = /^risk\s*\n\W*(low|bajo)\b/i.test(risk)
-  const business = (card.labels ?? []).some((l) => (config.merge?.humanLabels ?? []).includes(l))
+  const business = (card.labels ?? []).some((l) => human.includes(l))
   return light.length && low && !business ? light.length : lenses.length
 }
 

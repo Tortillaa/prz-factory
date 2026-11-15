@@ -30,14 +30,14 @@ prz-factory pone eso en código. Un tablero kanban local reparte cada tarjeta en
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#F6E7C1", "primaryTextColor": "#16130F", "primaryBorderColor": "#B36A12", "lineColor": "#E8A33D", "secondaryColor": "#E8A33D", "tertiaryColor": "#FBF3E1", "fontFamily": "ui-sans-serif, Segoe UI, Helvetica, Arial"}}}%%
 flowchart LR
-  idea([Idea]) --> spec["Spec Writer: redacta la tarjeta"]
-  spec --> build["Builder: tests primero"]
-  build --> panel{{"Panel de review: qa · security · code · ops"}}
+  idea([Idea]) --> spec[Spec Writer]
+  spec --> build[Builder]
+  build --> panel{{Panel de review}}
   panel -- falla --> build
   panel -- aprueba --> merge[Agente de merge]
-  merge --> gate[["Merge gate: verify y fast-forward"]]
-  gate -- cambio seguro --> main([main])
-  gate -- toca el negocio --> you([Tu aprobación])
+  merge --> gate[[Merge gate]]
+  gate -- seguro --> main([main])
+  gate -- negocio --> you([Tu aprobación])
   you --> main
 ```
 

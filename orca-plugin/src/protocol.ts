@@ -5,6 +5,13 @@ declare module 'orca' {
   interface PluginRequests {
     /** Every repo open in Orca that has a prz-factory board, with its cards. */
     'boards.get': { output: BoardsSnapshot }
+    /** One card action: the worker runs the repo's factory CLI and returns its JSON (or { error }). */
+    'card.get': { input: CardInputs['get']; output: CardReply }
+    'card.add': { input: CardInputs['add']; output: CardReply }
+    'card.edit': { input: CardInputs['edit']; output: CardReply }
+    'card.move': { input: CardInputs['move']; output: CardReply }
+    'card.comment': { input: CardInputs['comment']; output: CardReply }
+    'card.approve': { input: CardInputs['approve']; output: CardReply }
   }
   interface PluginPanelEvents {
     /** Posted to every open panel when a board file changes. */
@@ -42,3 +49,24 @@ export type BoardView = {
 }
 
 export type BoardsSnapshot = { boards: BoardView[]; error?: string }
+
+/** What the CLI printed: a card, a merge result, or { error }. */
+export type CardReply = { error?: string; labels?: string[]; run?: { branch?: string }; [key: string]: unknown }
+
+/** A card request, as the worker's handlers pass it to src/actions.ts. */
+export type CardAction =
+  | ({ action: 'get' } & CardInputs['get'])
+  | ({ action: 'add' } & CardInputs['add'])
+  | ({ action: 'edit' } & CardInputs['edit'])
+  | ({ action: 'move' } & CardInputs['move'])
+  | ({ action: 'comment' } & CardInputs['comment'])
+  | ({ action: 'approve' } & CardInputs['approve'])
+
+export type CardInputs = {
+  get: { board: string; id: number }
+  add: { board: string; title: string; body?: string; labels?: string[]; blockedBy?: number[]; column?: string }
+  edit: { board: string; id: number; title?: string; body?: string; labels?: string[]; blockedBy?: number[] }
+  move: { board: string; id: number; column: string; before?: number; force?: boolean }
+  comment: { board: string; id: number; text: string }
+  approve: { board: string; id: number; sha?: string }
+}

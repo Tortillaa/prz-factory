@@ -5,7 +5,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { OrcaWorkerApi } from 'orca/worker'
 import { discover, readBoard } from './boards'
-import type { BoardsSnapshot } from './protocol'
+import { runAction } from './actions'
+import type { BoardsSnapshot, CardAction, CardInputs } from './protocol'
 
 const watchers = new Map<string, fs.FSWatcher>()
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -110,5 +111,16 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   orca.events.on('workspace.created', refresh)
   orca.events.on('workspace.removed', refresh)
   orca.panels.handle('boards.get', () => snapshot())
+  // Card actions: the board key must be one this worker lists; the repo's own CLI applies every rule.
+  async function act(action: CardAction['action'], input: CardInputs[CardAction['action']]) {
+    const board = (await snapshot()).boards.find((b) => b.key === input.board)
+    return board ? runAction(board, { action, ...input } as CardAction) : { error: `unknown board ${input.board}` }
+  }
+  orca.panels.handle('card.get', (input) => act('get', input))
+  orca.panels.handle('card.add', (input) => act('add', input))
+  orca.panels.handle('card.edit', (input) => act('edit', input))
+  orca.panels.handle('card.move', (input) => act('move', input))
+  orca.panels.handle('card.comment', (input) => act('comment', input))
+  orca.panels.handle('card.approve', (input) => act('approve', input))
   await snapshot()
 }

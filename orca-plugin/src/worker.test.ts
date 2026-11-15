@@ -487,3 +487,102 @@ test('readBoard gives the review progress by the lenses of factory.config.json, 
   fs.writeFileSync(path.join(repo, 'factory.config.json'), '{ broken')
   assert.equal(readBoard(entry).cards[0].panel?.total, 3)
 })
+
+// A fake CLI: dumps argv, cwd and FACTORY_BOARD to a log, then answers like the real one (JSON on stdout).
+const FAKE = `
+import fs from 'node:fs'
+const a = process.argv.slice(2)
+fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify({ argv: a, cwd: process.cwd(), board: process.env.FACTORY_BOARD }) + '\\n')
+if (a.includes('--fail')) { console.log(JSON.stringify({ error: 'nope: "quoted"' })); process.exit(1) }
+if (a[0] === 'show') console.log(JSON.stringify(JSON.parse(process.env.FAKE_CARD || '{"id":7,"labels":[],"run":{}}')))
+else console.log(JSON.stringify({ ok: a[0] }))
+`
+
+async function actionWorker(layout: 'prz' | 'bin' | 'both' | 'none', card?: unknown) {
+  const repo = repoWithBoard(cards)
+  const log = path.join(repo, 'fake.log')
+  process.env.FAKE_LOG = log
+  process.env.FAKE_CARD = card ? JSON.stringify(card) : ''
+  for (const dir of layout === 'both' ? ['.prz-factory', '.'] : layout === 'prz' ? ['.prz-factory'] : layout === 'bin' ? ['.'] : []) {
+    fs.mkdirSync(path.join(repo, dir, 'bin'), { recursive: true })
+    fs.writeFileSync(path.join(repo, dir, 'bin', 'factory.mjs'), dir === '.' ? FAKE.replace("{ ok: a[0] }", "{ ok: a[0], from: 'bin' }") : FAKE)
+  }
+  const worker = await mountWorker(main, { host: hostFor(repo) })
+  const key = (await worker.request('boards.get')).boards[0].key
+  const calls = () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : [])
+  return { worker, key, repo, calls, boardFile: path.join(repo, '.git', 'factory', 'board.json') }
+}
+
+test('card.get/add/edit/move/comment run the CLI with the exact arguments, in the repo, on its board', async () => {
+  const t = await actionWorker('prz')
+  const before = fs.readFileSync(t.boardFile, 'utf8')
+  const b = t.key
+  assert.deepEqual(await t.worker.request('card.get', { board: b, id: 7 }), { id: 7, labels: [], run: {} })
+  assert.deepEqual(await t.worker.request('card.add', { board: b, title: 'T', body: 'B', labels: ['x', 'y'], blockedBy: [1, 2], column: 'spec' }), { ok: 'add' })
+  assert.deepEqual(await t.worker.request('card.edit', { board: b, id: 7, title: 'T2', body: 'B2', labels: ['z'], blockedBy: [3] }), { ok: 'edit' })
+  assert.deepEqual(await t.worker.request('card.move', { board: b, id: 7, column: 'ready', before: 4 }), { ok: 'move' })
+  assert.deepEqual(await t.worker.request('card.comment', { board: b, id: 7, text: 'hola' }), { ok: 'comment' })
+  const got = t.calls()
+  assert.deepEqual(got.map((c) => c.argv), [
+    ['show', '7', '--json'],
+    ['add', 'T', '--body', 'B', '--label', 'x', '--label', 'y', '--blocked-by', '1,2', '--column', 'spec', '--json'],
+    ['edit', '7', '--title', 'T2', '--body', 'B2', '--label', 'z', '--blocked-by', '3', '--json'],
+    ['move', '7', 'ready', '--before', '4', '--by', 'user', '--json'],
+    ['comment', '7', 'hola', '--role', 'user', '--json']
+  ])
+  for (const c of got) {
+    assert.equal(fs.realpathSync(c.cwd), t.repo)
+    assert.equal(c.board, t.boardFile)
+  }
+  assert.equal(fs.readFileSync(t.boardFile, 'utf8'), before)
+  await t.worker.deactivate()
+})
+
+test('card.move passes --force only when asked, and a CLI error comes back unchanged', async () => {
+  const t = await actionWorker('prz')
+  await t.worker.request('card.move', { board: t.key, id: 7, column: 'ready', force: false })
+  await t.worker.request('card.move', { board: t.key, id: 7, column: 'ready', force: true })
+  assert.ok(!t.calls()[0].argv.includes('--force'))
+  assert.ok(t.calls()[1].argv.includes('--force'))
+  // the fake fails on "--fail": the CLI fails on this text
+  assert.deepEqual(await t.worker.request('card.comment', { board: t.key, id: 7, text: '--fail' }), { error: 'nope: "quoted"' })
+  await t.worker.deactivate()
+})
+
+test('the CLI is .prz-factory/bin first, then bin, and no CLI is an error that says so', async () => {
+  const both = await actionWorker('both')
+  await both.worker.request('card.comment', { board: both.key, id: 1, text: 'a' })
+  assert.deepEqual((await both.worker.request('card.add', { board: both.key, title: 't' })), { ok: 'add' }) // .prz-factory's answer has no `from`
+  await both.worker.deactivate()
+  const bin = await actionWorker('bin')
+  assert.deepEqual(await bin.worker.request('card.add', { board: bin.key, title: 't' }), { ok: 'add', from: 'bin' })
+  await bin.worker.deactivate()
+  const none = await actionWorker('none')
+  const reply = await none.worker.request('card.get', { board: none.key, id: 1 })
+  assert.match(String(reply.error), /bin\/factory\.mjs/)
+  assert.deepEqual(await none.worker.request('card.get', { board: '/nowhere/.git', id: 1 }), { error: 'unknown board /nowhere/.git' })
+  await none.worker.deactivate()
+})
+
+test('card.approve needs merge-approval, a branch and a sha before the CLI sees a merge', async () => {
+  const held = { id: 7, labels: ['merge-approval'], run: { branch: 'factory/7-x', reviewedSha: 'abc' } }
+  for (const [card, sha] of [[{ id: 7, labels: [], run: { branch: 'b' } }, 'abc'], [{ id: 7, labels: ['merge-approval'], run: {} }, 'abc'], [held, undefined]] as const) {
+    const t = await actionWorker('prz', card)
+    assert.ok((await t.worker.request('card.approve', { board: t.key, id: 7, sha })).error)
+    assert.ok(t.calls().every((c) => c.argv[0] !== 'merge'))
+    await t.worker.deactivate()
+  }
+  const t = await actionWorker('prz', held)
+  assert.deepEqual(await t.worker.request('card.approve', { board: t.key, id: 7, sha: 'abc' }), { ok: 'merge' })
+  assert.deepEqual(t.calls().at(-1)?.argv, ['merge', '7', '--human', '--as', 'user', '--sha', 'abc', '--json'])
+  await t.worker.deactivate()
+})
+
+test('a text with spaces, quotes, $() and ; reaches the CLI as one argument', async () => {
+  const t = await actionWorker('prz')
+  const text = `a b "c" 'd' $(touch pwned); echo \`x\` & y`
+  await t.worker.request('card.comment', { board: t.key, id: 7, text })
+  assert.equal(t.calls()[0].argv[2], text)
+  assert.ok(!fs.existsSync(path.join(t.repo, 'pwned')))
+  await t.worker.deactivate()
+})

@@ -12,8 +12,21 @@ an agent or the web board moved it. "Web board" opens the `factory serve` of tha
 - `src/boards.ts`: discovery and reading, plain Node (mirrors `src/store.mjs#resolveBoardPath`).
 - `src/panel.tsx`: the panel (components UI). `src/protocol.ts`: the panel ↔ worker contract.
 
-It is read-only: moving cards stays with the CLI, the web board and the lanes, which enforce the
-board's rules.
+It never writes `board.json`. Besides `boards.get`, the worker answers six card requests, each carrying
+the board's `key` (`BoardView.key`) and running that repo's CLI with `--json` (`src/actions.ts`:
+`<repo>/.prz-factory/bin/factory.mjs`, else `<repo>/bin/factory.mjs`; no shell, `FACTORY_BOARD` set), so lint,
+blockers and the merge gate stay in the CLI. It replies with the CLI's JSON, or its `error` unchanged:
+
+| Request | CLI |
+|---|---|
+| `card.get` `{ id }` | `show <id>` |
+| `card.add` `{ title, body?, labels?, blockedBy?, column? }` | `add <title> [--body] [--label]… [--blocked-by] [--column]` |
+| `card.edit` `{ id, title?, body?, labels?, blockedBy? }` | `edit <id> …` |
+| `card.move` `{ id, column, before?, force? }` | `move <id> <column> [--before] --by user [--force]` |
+| `card.comment` `{ id, text }` | `comment <id> <text> --role user` |
+| `card.approve` `{ id, sha }` | `merge <id> --human --as user --sha <sha>`, only if the card has `merge-approval` and `run.branch` |
+
+Spawning the CLI needs no extra capability: the `trusted-worker` profile already runs Node code, and Orca asks for that approval at install.
 
 ## Install
 

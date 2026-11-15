@@ -404,3 +404,32 @@ test('deactivate in the middle: boards.get answers empty, nothing is posted, and
   await stop
   await again.deactivate()
 })
+
+test('readBoard reports serve only for a valid port whose process is alive', () => {
+  const [entry] = discover([repoWithBoard(cards)])
+  const info = path.join(path.dirname(entry.file), 'serve.json')
+  const dead = execFileSync(process.execPath, ['-p', 'process.pid'], { encoding: 'utf8' }).trim() // exited: pid is gone
+  assert.equal(readBoard(entry).serve, null)
+  for (const body of [{ port: 5050, pid: Number(dead) }, { port: 0, pid: process.pid }, { port: 'abc', pid: process.pid }, { port: 70000, pid: process.pid }]) {
+    fs.writeFileSync(info, JSON.stringify(body))
+    assert.equal(readBoard(entry).serve, null, JSON.stringify(body))
+  }
+  fs.writeFileSync(info, '{ not json')
+  assert.equal(readBoard(entry).serve, null)
+  fs.writeFileSync(info, JSON.stringify({ port: 5050, pid: process.pid }))
+  assert.equal(readBoard(entry).serve, 5050)
+})
+
+test('creating and deleting serve.json posts boards.changed with the new serve', async () => {
+  const repo = repoWithBoard(cards)
+  const worker = await mountWorker(main, { host: liveHost([repo]) })
+  const info = path.join(repo, '.git', 'factory', 'serve.json')
+  fs.writeFileSync(info, JSON.stringify({ port: 5050, pid: process.pid }))
+  await wait()
+  assert.equal((boardsPosted(worker).at(-1)?.payload as { boards: { serve: number | null }[] }).boards[0].serve, 5050)
+  fs.rmSync(info)
+  await wait()
+  assert.equal((boardsPosted(worker).at(-1)?.payload as { boards: { serve: number | null }[] }).boards[0].serve, null)
+  assert.deepEqual(worker.refusals, [])
+  await worker.deactivate()
+})

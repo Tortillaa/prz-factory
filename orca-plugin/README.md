@@ -3,7 +3,7 @@
 A right-sidebar panel that shows the prz-factory board of every repo open in Orca: one board per
 repo (worktrees of the same repo share it), the cards per column, who holds each card, what waits
 on blockers, and the cards that need a person. It updates live when a card moves, whether the CLI,
-an agent or the web board moved it. "Web board" opens `factory serve` (`http://localhost:4747`).
+an agent or the web board moved it. "Web board" opens the `factory serve` of that repo, on the port it listens on (it appears only while `factory serve` runs).
 
 - `src/worker.ts`: the plugin's worker. Lists Orca's workspaces (`workspace:read`), finds each repo's
   `<git common dir>/factory/board.json`, answers the panel's `boards.get`, and watches each board's

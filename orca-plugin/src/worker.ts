@@ -54,7 +54,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
           return [readBoard(entry)]
         } catch (err) {
           // mid-write or broken: show the repo with the error instead of dropping it
-          return [{ ...entry, counts: {}, cards: [], unknown: [], error: (err as Error).message }]
+          return [{ ...entry, serve: null, counts: {}, cards: [], unknown: [], error: (err as Error).message }]
         }
       })
       if (current()) await showWaiting(boards)
@@ -90,7 +90,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   }
 
   // Watches exactly `dirs`: opens the new ones, closes those no open workspace needs any more.
-  // A repo's common dir is noisy, so only `board.json` and the `factory` folder count.
+  // A repo's common dir is noisy, so only `board.json`, `serve.json` and the `factory` folder count.
   function watch(dirs: string[]): void {
     for (const [dir, w] of watchers) {
       if (dirs.includes(dir)) continue
@@ -100,7 +100,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     for (const dir of dirs) {
       if (watchers.has(dir)) continue
       try {
-        watchers.set(dir, fs.watch(dir, (_event, name) => (name === 'board.json' || name === 'factory') && refresh()))
+        watchers.set(dir, fs.watch(dir, (_event, name) => (name === 'board.json' || name === 'serve.json' || name === 'factory') && refresh()))
       } catch {
         // folder vanished; the next snapshot drops it
       }

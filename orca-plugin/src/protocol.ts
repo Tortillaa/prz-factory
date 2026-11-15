@@ -26,6 +26,8 @@ export type BoardView = {
   key: string
   name: string
   file: string
+  /** Port of this repo's running `factory serve`, or null when none is alive. */
+  serve: number | null
   counts: Record<string, number>
   cards: CardView[]
   /** Cards whose column the plugin does not know. */

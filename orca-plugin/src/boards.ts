@@ -67,7 +67,7 @@ export function readBoard(entry: { key: string; name: string; file: string }): B
     waitingOn: (c.blockedBy ?? []).filter((d) => column.get(d) !== 'done')
   }))
   const counts = Object.fromEntries(COLUMNS.map((col) => [col, views.filter((c) => c.column === col).length]))
-  return { ...entry, counts, cards: views, unknown: views.filter((c) => !COLUMNS.includes(c.column)) }
+  return { ...entry, serve: serving(entry.file), counts, cards: views, unknown: views.filter((c) => !COLUMNS.includes(c.column)) }
 }
 
 function reviewers(card: RawCard): string | null {
@@ -75,4 +75,16 @@ function reviewers(card: RawCard): string | null {
     .map((slot) => slot.worker)
     .filter(Boolean)
   return names.length ? names.join(', ') : null
+}
+
+/** Port in serve.json (next to the board) when its process is alive; a crash can leave the file behind. */
+export function serving(file: string): number | null {
+  try {
+    const { port, pid } = JSON.parse(fs.readFileSync(path.join(path.dirname(file), 'serve.json'), 'utf8'))
+    if (!Number.isInteger(port) || port < 1 || port > 65535 || !Number.isInteger(pid)) return null
+    process.kill(pid, 0)
+    return port
+  } catch {
+    return null
+  }
 }

@@ -215,6 +215,11 @@ try {
       });
       server.listen(port,'127.0.0.1', () => {
         console.log(`board: http://localhost:${port}\nfile:  ${file}`);
+        // The Orca panel reads this to open each repo's board on its real port.
+        const info = path.join(path.dirname(file), 'serve.json');
+        fs.writeFileSync(info, JSON.stringify({ port, pid: process.pid }));
+        process.on('exit', () => fs.rmSync(info, { force: true }));
+        for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(0));
       });
       break;
     }

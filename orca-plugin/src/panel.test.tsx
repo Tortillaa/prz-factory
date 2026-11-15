@@ -9,6 +9,7 @@ const board = (name: string, extra: Partial<BoardsSnapshot['boards'][number]> = 
   file: `/r/${name}/.git/factory/board.json`,
   counts: { backlog: 0, spec: 0, ready: 0, building: 1, qa: 0, review: 0, merge: 0, blocked: 1, done: 0 },
   unknown: [],
+  serve: null as number | null,
   cards: [
     { id: 3, title: 'Mail sender', column: 'building', labels: [], assignee: 'build-3', waitingOn: [] },
     { id: 4, title: 'Pay', column: 'blocked', labels: ['needs-you'], assignee: null, waitingOn: [] }
@@ -60,4 +61,18 @@ test('explains an empty setup and a read error', async () => {
   const broken = await mount(panel, { host: mockHost({ requests: { 'boards.get': () => ({ boards: [], error: 'boom' }) } }) })
   assert.match(broken.summary().join(' '), /Could not read the boards/)
   await broken.unmount()
+})
+
+test('Web board opens the port each repo serves on, and is replaced by a hint when none runs', async () => {
+  const host = mockHost({ requests: { 'boards.get': () => ({ boards: [board('shop', { serve: 4747 }), board('blog', { serve: 5050 }), board('docs', { serve: null })] }) } })
+  const view = await mount(panel, { host })
+  await view.press({ text: 'Web board' })
+  await view.select({ label: 'Repo' }, '/r/blog/.git')
+  await view.press({ text: 'Web board' })
+  await view.select({ label: 'Repo' }, '/r/docs/.git')
+  assert.equal(view.find({ text: 'Web board' }), null)
+  assert.ok(view.find({ text: 'factory serve' }))
+  const urls = host.calls.filter((c) => c.method === 'shell.openExternal').map((c) => (c.params as { url: string }).url)
+  assert.deepEqual(urls, ['http://localhost:4747', 'http://localhost:5050'])
+  await view.unmount()
 })

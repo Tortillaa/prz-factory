@@ -63,9 +63,13 @@ export default function Panel() {
       )}
       <Row justify="between">
         <Text weight="semibold">{board.name}</Text>
-        <Button size="sm" variant="ghost" icon="open-external" onPress={() => host.call('shell.openExternal', { url: 'http://localhost:4747' })}>
-          Web board
-        </Button>
+        {board.serve ? (
+          <Button size="sm" variant="ghost" icon="open-external" onPress={() => host.call('shell.openExternal', { url: `http://localhost:${board.serve}` })}>
+            Web board
+          </Button>
+        ) : (
+          <Text muted>factory serve</Text>
+        )}
       </Row>
       {snap.boards.filter((b) => b.error).map((b) => (
         <Callout key={b.key} tone="danger" title={`no se pudo leer el tablero de ${b.name}: ${b.error}`} />

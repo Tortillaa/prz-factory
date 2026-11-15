@@ -113,10 +113,16 @@ the verify result, `Head: <sha>`). Add ponytail's closing line as `Skipped:` —
 to build or could not check, every `shortcut:` you left, and any risk the reviewers must know
 (`Skipped: nothing` when there is none). A card that changes a screen also gets a `Design:` line:
 the unslop passes you applied against the card's Direction, how you rendered the screen, and any
-checklist item you could not check. Then:
+checklist item you could not check. **The handoff enforces it:** when the branch touches a file in
+`ui.paths` (`factory.config.json`; by default html, css, scss, jsx, tsx, vue, svelte), it refuses a
+comment without `Design:` and a handoff without `--screenshot <png>`, the capture you took (it is
+kept next to the board as evidence for this head). Only when nothing can render the screen in your
+worktree, pass `--no-screenshot "<why>"` instead: the reviewers then render it. An Acceptance
+Criterion you could not check is not done: say why in `Skipped:`, never leave it silently. Then:
 
 ```text
 factory handoff <id> review --lane build --as <your-worker-name> --text-file <comment.md> --json
+                [--screenshot <png>]...    (when the card changes a screen)
 ```
 
 The handoff refuses commits made since the last review that lack the line `Card: #<id>`: the

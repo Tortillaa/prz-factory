@@ -665,3 +665,57 @@ test('a builder cannot hand off to review new commits without `Card: #<id>`; rev
   handoff({ file, id, who: 'b', lane: 'build', to: 'review', text: 'fixed', cwd: wt.build, config });
   assert.equal(card(env, id).column, 'review');
 });
+
+// A build that changes a screen proves it was looked at; the code lens passes it only saying how it looked.
+test('a screen change hands off with a Design line and a screenshot, and the code lens passes it with a Design line', () => {
+  const env = setup();
+  const { file, wt, config } = env;
+  const id = addReadyCard(env);
+  startLane({ file, id, who: 'b', lane: 'build', cwd: wt.build, config });
+  fs.mkdirSync(path.join(wt.build, 'web'), { recursive: true });
+  fs.writeFileSync(path.join(wt.build, 'web', 'page.html'), '<h1>hi</h1>');
+  sh(wt.build, 'add', '.');
+  sh(wt.build, 'commit', '-qm', `✨ [feat] web: page\n\nCard: #${id}`);
+  const go = (extra) => handoff({ file, id, who: 'b', lane: 'build', to: 'review', text: 'built', cwd: wt.build, config, ...extra });
+
+  assert.throws(() => go({}), /changes a screen \(web\/page\.html\): add a `Design:` line/);
+  assert.throws(() => go({ text: 'built\nDesign: spacing and color passes' }), /--screenshot <png>[\s\S]*--no-screenshot/);
+  assert.throws(() => go({ text: 'built\nDesign: x', screenshots: [path.join(wt.build, 'web', 'page.html')] }), /not an existing \.png/);
+  assert.equal(card(env, id).column, 'building', 'nothing moved while the evidence was missing');
+
+  const png = path.join(wt.build, '..', 'shot.png');
+  fs.writeFileSync(png, 'png');
+  go({ text: 'built\n- **Design:** spacing and color passes; rendered in Orca', screenshots: [png] });
+  const c = card(env, id);
+  assert.equal(c.column, 'review');
+  assert.deepEqual(c.run.screens, ['web/page.html']);
+  assert.ok(fs.existsSync(c.run.evidence.files[0]), 'the screenshot is kept next to the board');
+  assert.match(c.comments.at(-1).text, /Screens: web\/page\.html\nEvidence: /);
+
+  const head = sh(wt.build, 'rev-parse', 'HEAD');
+  startReview(env, id, 'code');
+  assert.throws(() => pass(env, id, 'code', head), /a code pass needs a `Design:` line/);
+  pass(env, id, 'code', head, { text: 'code ok\nDesign: looked at the evidence; unslop checklist clean' });
+  assert.equal(card(env, id).panel.lenses.code.verdict, 'pass');
+});
+
+test('a screen change can hand off with --no-screenshot and the reason; a change with no screen needs neither', () => {
+  const env = setup();
+  const { file, wt, config } = env;
+  const id = addReadyCard(env);
+  startLane({ file, id, who: 'b', lane: 'build', cwd: wt.build, config });
+  fs.writeFileSync(path.join(wt.build, 'style.css'), 'a{}');
+  sh(wt.build, 'add', '.');
+  sh(wt.build, 'commit', '-qm', `✨ [feat] web: style\n\nCard: #${id}`);
+  handoff({ file, id, who: 'b', lane: 'build', to: 'review', text: 'built\nDesign: color pass', cwd: wt.build, config, noScreenshot: 'no display in this worker' });
+  assert.match(card(env, id).comments.at(-1).text, /No screenshot: no display in this worker/);
+
+  const other = addReadyCard(env);
+  startLane({ file, id: other, who: 'b2', lane: 'build', cwd: wt.qa, config });
+  sh(wt.qa, 'commit', '-q', '--allow-empty', '-m', `x\n\nCard: #${other}`);
+  fs.writeFileSync(path.join(wt.qa, 'notes.txt'), 'x');
+  sh(wt.qa, 'add', '.');
+  sh(wt.qa, 'commit', '-qm', `docs\n\nCard: #${other}`);
+  handoff({ file, id: other, who: 'b2', lane: 'build', to: 'review', text: 'built', cwd: wt.qa, config });
+  assert.deepEqual(card(env, other).run.screens, []);
+});

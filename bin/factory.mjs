@@ -53,7 +53,7 @@ Lanes (run inside the worker's own worktree)
                                          Claim, leave Ready if needed, check out the card's code
                                          (spec: base, detached; build: branch factory/<id>-<slug>;
                                          qa/review/merge: the branch, detached). review needs --lens
-  handoff <id> <column> --lane <l> --as <who> (--text t | --text-file f)
+  handoff <id> <column> --lane <l> --as <who> (--text t | --text-file f) [--screenshot png]... [--no-screenshot why]
                                          Comment + move + release in one write (spec, build, qa, merge)
   verdict <id> --lens <l> --as <who> --sha <head> (--pass [--escalate why] | --fail [--to building|blocked])
           (--text t | --text-file f)     A reviewer's verdict on the head the panel reviews. The verdict
@@ -132,6 +132,8 @@ const { values: opts, positionals } = parseOptions({
     escalate: { type: 'string' },
     text: { type: 'string' },
     'text-file': { type: 'string' },
+    screenshot: { type: 'string', multiple: true },
+    'no-screenshot': { type: 'string' },
     sha: { type: 'string' },
     human: { type: 'boolean' },
     'allow-main': { type: 'boolean' },
@@ -342,7 +344,7 @@ try {
     }
     case 'handoff': {
       const text = opts['text-file'] !== undefined ? fs.readFileSync(opts['text-file'], 'utf8') : opts.text;
-      const card = handoff({ file, id: need(args[0], 'id'), to: need(args[1], 'column'), lane: need(opts.lane, '--lane'), who: need(opts.as, '--as'), text, cwd: process.cwd(), config: loadConfig(repoRoot()).config });
+      const card = handoff({ file, id: need(args[0], 'id'), to: need(args[1], 'column'), lane: need(opts.lane, '--lane'), who: need(opts.as, '--as'), text, cwd: process.cwd(), config: loadConfig(repoRoot()).config, screenshots: opts.screenshot || [], noScreenshot: opts['no-screenshot'] ?? null });
       print(card, `handed off ${line(card)} → ${card.column}`);
       break;
     }

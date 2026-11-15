@@ -26,6 +26,9 @@ export const DEFAULTS = Object.freeze({
   // The review panel: one expert reviewer per lens, in parallel. All must pass the same commit.
   // `light` is the smaller panel for a Low-risk card with no business label; [] turns it off.
   review: { lenses: LENSES, light: ['qa', 'code'] },
+  // Files that draw a screen. A build that touches one hands off with a `Design:` line and a
+  // screenshot (or --no-screenshot and the reason), and the code lens passes it with a `Design:` line.
+  ui: { paths: ['**/*.html', '**/*.css', '**/*.scss', '**/*.jsx', '**/*.tsx', '**/*.vue', '**/*.svelte'] },
   // Which Orca agent runs each lane: { <lane>: { agent, model?, effort? } }. A lane without an entry
   // runs on DEFAULT_AGENT. Example: review on Grok to spare Claude's quota.
   agents: {},
@@ -81,6 +84,7 @@ function validate(config, file) {
   if (!strings(m.humanLabels)) fail('"merge.humanLabels" must be an array of strings');
   if (!strings(m.humanPaths)) fail('"merge.humanPaths" must be an array of glob strings');
   if (!Number.isInteger(m.maxLines) || m.maxLines < 1) fail('"merge.maxLines" must be a positive integer');
+  if (!config.ui || !strings(config.ui.paths)) fail('"ui.paths" must be an array of glob strings');
   const r = config.review;
   if (!r || !strings(r.lenses) || !r.lenses.length || !r.lenses.every((l) => LENSES.includes(l)) || new Set(r.lenses).size !== r.lenses.length) {
     fail(`"review.lenses" must list one or more of ${LENSES.join(', ')}, without repeats`);
@@ -120,7 +124,7 @@ export function loadConfig(root = repoRoot()) {
   } catch (err) {
     throw new Error(`${file}: invalid JSON (${err.message})`);
   }
-  return { file, exists: true, config: validate({ ...DEFAULTS, ...parsed, merge: { ...DEFAULTS.merge, ...parsed.merge }, review: { ...DEFAULTS.review, ...parsed.review }, agents: parsed.agents ?? DEFAULTS.agents, github: { ...DEFAULTS.github, ...parsed.github } }, file) };
+  return { file, exists: true, config: validate({ ...DEFAULTS, ...parsed, merge: { ...DEFAULTS.merge, ...parsed.merge }, review: { ...DEFAULTS.review, ...parsed.review }, ui: { ...DEFAULTS.ui, ...parsed.ui }, agents: parsed.agents ?? DEFAULTS.agents, github: { ...DEFAULTS.github, ...parsed.github } }, file) };
 }
 
 // Best guess at the commands that prove a project builds, for a fresh config.

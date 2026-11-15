@@ -2,7 +2,9 @@
 // hand it to the next lane, and record a reviewer's verdict. The judgment work happens in the
 // skills; this is the plumbing.
 import * as store from './store.mjs';
-import { git, revParse, isAncestor, isClean, toplevel, worktrees, samePath, slugify } from './git.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { git, revParse, isAncestor, isClean, toplevel, worktrees, samePath, slugify, diffFiles, globToRegExp } from './git.mjs';
 import { riskLevel } from './ticket.mjs';
 
 export const LANES = {
@@ -112,17 +114,59 @@ export function commitsWithoutCard(card, cwd, base) {
   return log.split('\x1e').map((e) => e.trim()).filter(Boolean).map((e) => e.split('\x1f')).filter(([, body]) => !want.test(body)).map(([sha]) => sha);
 }
 
+// Files of the card's branch that draw a screen (config `ui.paths`), against the base.
+export function screenFiles(card, cwd, config) {
+  const branch = card.run.branch;
+  const globs = (config.ui?.paths || []).map(globToRegExp);
+  if (!branch || !globs.length || !revParse(`refs/heads/${branch}`, cwd)) return [];
+  return diffFiles(config.baseBranch, `refs/heads/${branch}`, cwd).filter((f) => globs.some((g) => g.test(f)));
+}
+
+const DESIGN_LINE = /^\s*(?:[-*]\s*)?(?:\*\*)?Design:/m;
+const IMAGE = /\.(png|jpe?g|webp)$/i;
+
+// A build that changes a screen proves it was looked at: a `Design:` line (the unslop passes against
+// the card's Direction) and a screenshot, which is kept next to the board as evidence for that head.
+// `noScreenshot` is the honest way out when nothing can render it; the reviewers then have to.
+function screenEvidence({ file, card, cwd, config, text, screenshots, noScreenshot }) {
+  const screens = screenFiles(card, cwd, config);
+  if (!screens.length) return { screens, note: '' };
+  const list = screens.slice(0, 5).join(', ') + (screens.length > 5 ? ` and ${screens.length - 5} more` : '');
+  if (!DESIGN_LINE.test(text)) {
+    throw new Error(`this card changes a screen (${list}): add a \`Design:\` line to the comment with the unslop passes you applied against the card's Direction, then hand off again`);
+  }
+  if (!screenshots.length && !(noScreenshot && noScreenshot.trim())) {
+    throw new Error(`this card changes a screen (${list}): render it and attach what you saw with --screenshot <png> (repeatable).\n  web page: orca tab create --url <url>, then orca screenshot --json (its "path")\n  Orca plugin: orca plugin dev load <copy>, then orca plugin shot <key> --panel <id> --out <png>\nIf nothing can render it here, hand off with --no-screenshot "<why>" and the reviewers will render it.`);
+  }
+  const head = revParse(`refs/heads/${card.run.branch}`, cwd).slice(0, 7);
+  const dir = path.join(path.dirname(file), 'evidence', String(card.id));
+  const saved = screenshots.map((src, i) => {
+    if (!IMAGE.test(src) || !fs.existsSync(src)) throw new Error(`--screenshot ${src}: not an existing .png, .jpg or .webp file`);
+    fs.mkdirSync(dir, { recursive: true });
+    const dest = path.join(dir, `${head}-${i + 1}${path.extname(src).toLowerCase()}`);
+    fs.copyFileSync(src, dest);
+    return dest;
+  });
+  const note = saved.length ? `\nScreens: ${list}\nEvidence: ${saved.join(', ')}` : `\nScreens: ${list}\nNo screenshot: ${noScreenshot.trim()}`;
+  return { screens, note, evidence: saved.length ? { head, files: saved } : null };
+}
+
 // Comment, move and release in one write, so a card is never left claimed but moved (or the reverse).
-// With `cwd` and `config`, a builder's handoff to review also checks the commit format first.
-export function handoff({ file, id, who, lane, to, text, cwd = null, config = null }) {
+// With `cwd` and `config`, a builder's handoff to review also checks the commit format first, and a
+// card that changes a screen needs its design evidence (see screenEvidence).
+export function handoff({ file, id, who, lane, to, text, cwd = null, config = null, screenshots = [], noScreenshot = null }) {
   const { column, to: allowed } = checkLane(lane);
   if (lane === 'review') throw new Error('reviewers finish with `factory verdict`, not a handoff');
   if (!text || !text.trim()) throw new Error('a handoff needs a comment with what you did and the evidence');
+  let design = null;
   if (lane === 'build' && to === 'review' && cwd && config) {
-    const missing = commitsWithoutCard(store.getCard(store.load(file), id), cwd, config.baseBranch);
+    const card = store.getCard(store.load(file), id);
+    const missing = commitsWithoutCard(card, cwd, config.baseBranch);
     if (missing.length) {
       throw new Error(`commits ${missing.join(', ')} lack the line \`Card: #${id}\` (writing standard §1). Add it and hand off again:\n  git rebase ${missing.length > 1 ? `${missing.at(-1)}~1` : `${missing[0]}~1`} --exec 'git commit --amend --no-edit --trailer "Card: #${id}"'`);
     }
+    design = screenEvidence({ file, card, cwd, config, text, screenshots, noScreenshot });
+    text += design.note;
   }
   return store.update(file, (b) => {
     const card = store.getCard(b, id);
@@ -130,6 +174,8 @@ export function handoff({ file, id, who, lane, to, text, cwd = null, config = nu
     if (card.assignee !== who) throw new Error(`card #${id} is claimed by ${card.assignee ?? 'nobody'}, not ${who}`);
     if (!allowed.includes(to)) throw new Error(`the ${lane} lane hands cards to ${allowed.join(' or ')}, not ${to}`);
     card.failedDispatches = 0; // a worker that hands off did its job
+    // What the panel must look at: the code lens passes a screen change only with a Design: line.
+    if (design) card.run = { ...card.run, screens: design.screens, ...(design.evidence ? { evidence: design.evidence } : {}) };
     if (to === 'building') return store.sendBack(b, id, { who, role: lane, text });
     store.commentCard(b, id, { role: lane, text });
     store.moveCard(b, id, to, who);
@@ -175,6 +221,9 @@ export function verdict({ file, id, who, lens, sha, pass, to = 'building', escal
     const head = card.panel.head;
     if (!head || !head.startsWith(sha)) throw new Error(`the panel is reviewing ${head ? head.slice(0, 8) : 'nothing'}, not ${sha.slice(0, 8)}: restart the review on the current head`);
     const role = `review:${lens}`;
+    if (pass && lens === 'code' && card.run?.screens?.length && !DESIGN_LINE.test(text)) {
+      throw new Error(`this card changes a screen (${card.run.screens.join(', ')}): a code pass needs a \`Design:\` line saying how you looked at it (the builder's evidence or your own render) and what unslop's checklist found`);
+    }
     slot.failedDispatches = 0;
 
     if (!pass) {

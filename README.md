@@ -170,6 +170,7 @@ Cada regla la hace cumplir el código, no la buena voluntad del agente. `factory
 | No inventar una decisión de producto: la tarjeta va a `blocked` con la pregunta | skills `factory-spec`, `factory-build`, `factory-review` |
 | El mínimo código que resuelve la tarjeta; el que no debería existir se devuelve | skills `ponytail` y `ponytail-review` |
 | Una pantalla no sale con aspecto de "hecha por IA" (degradados morados, brillos, emojis, textos que gritan): sigue la dirección de la tarjeta | skill `unslop`, en el Spec Writer, el Builder y la lente `code` |
+| Un cambio de pantalla se entrega con una línea `Design:` y una captura de lo que se vio (o `--no-screenshot` y el motivo), y la lente `code` lo aprueba diciendo cómo lo miró | `handoff` y `verdict` en `src/lanes.mjs`, `ui.paths` en `factory.config.json` |
 | Commits y comentarios en un formato único, con evidencias | `skills/factory-board/references/writing-standard.md` |
 | A la décima ronda fallida, o al segundo worker caído, la tarjeta para y espera a una persona | `sendBack` en `src/store.mjs`, `reclaim` en `src/run.mjs` |
 

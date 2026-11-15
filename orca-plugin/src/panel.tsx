@@ -21,7 +21,8 @@ import {
   Stack,
   Text,
   Textarea,
-  type PanelContext
+  type PanelContext,
+  update
 } from 'orca'
 import type { BoardsSnapshot, CardReply, CardView } from './protocol'
 
@@ -50,8 +51,11 @@ const freshError = atom('')
 let adding = false
 /** The cover: search text, the card whose approval awaits confirmation, answers being typed, and the last worker error. */
 const query = atom('')
-const approving = atom<number | null>(null)
-const replies = atom<Record<number, string>>({})
+const approving = atom<string | null>(null)
+const replies = atom<Record<string, string>>({})
+/** Cover state is per repo and card: two repos can both have a #5. */
+const slot = (board: string, id: number) => `${board}#${id}`
+const adder = atom(false)
 const coverError = atom('')
 
 /** Cover actions show the worker's error as it came. */
@@ -64,10 +68,10 @@ async function cover(run: () => Promise<CardReply[]>): Promise<boolean> {
 const approveCard = (board: string, c: CardView) =>
   cover(async () => [await plugin.request('card.approve', { board, id: c.id, sha: c.sha! })]).then(() => set(approving, null))
 
-async function answerCard(board: string, c: CardView, all: Record<number, string>): Promise<void> {
-  const sent = await plugin.request('card.comment', { board, id: c.id, text: all[c.id].trim() })
+async function answerCard(board: string, c: CardView, text: string): Promise<void> {
+  const sent = await plugin.request('card.comment', { board, id: c.id, text: text.trim() })
   if (sent.error) return void set(coverError, sent.error)
-  if (await cover(async () => [await plugin.request('card.move', { board, id: c.id, column: c.from ?? 'spec' })])) set(replies, { ...all, [c.id]: '' })
+  if (await cover(async () => [await plugin.request('card.move', { board, id: c.id, column: c.from ?? 'spec' })])) update(replies, (now) => ({ ...now, [slot(board, c.id)]: '' }))
 }
 
 const ago = (iso: string | null) => (iso ? <RelativeTime at={Date.parse(iso)} /> : null)
@@ -306,7 +310,7 @@ export default function Panel() {
   const approve = board.cards.filter((c) => c.labels.includes('merge-approval') && c.sha)
   const answer = board.cards.filter((c) => c.labels.includes('needs-you') && !c.labels.includes('merge-approval'))
   const running = board.cards.filter((c) => c.assignee || c.panel)
-  const [q, confirmId, typed, coverErr] = [read(query), read(approving), read(replies), read(coverError)]
+  const [q, confirmId, typed, coverErr, adderOpen] = [read(query), read(approving), read(replies), read(coverError), read(adder)]
   const needle = q.trim().toLowerCase()
   const shown = needle ? board.cards.filter((c) => String(c.id) === needle.replace(/^#/, '') || c.title.toLowerCase().includes(needle)) : board.cards
   return (
@@ -329,23 +333,6 @@ export default function Panel() {
           <Text muted>factory serve</Text>
         )}
       </Row>
-      <Textarea label="+ Nueva idea" value={text} onChange={(v) => set(idea, v)} />
-      <Row gap="xs">
-        <Button disabled={!text.trim()} onPress={() => add(board.key, { title: text, column: 'spec' }, () => set(idea, ''))}>Añadir idea</Button>
-        {!form && <Button variant="ghost" onPress={() => openFresh(board.key)}>Tarjeta completa</Button>}
-      </Row>
-      {formError && <Callout tone="danger" title={formError} />}
-      {form && (
-        <Stack gap="sm">
-          <Input label="Título" value={form.title} onChange={(v) => set(fresh, { ...form, title: v })} />
-          <Textarea label="Cuerpo" value={form.body} rows={12} onChange={(v) => set(fresh, { ...form, body: v })} />
-          <Select label="Guardar en" value={form.column} options={['backlog', 'ready'].map((value) => ({ value, label: value }))} onChange={(column) => set(fresh, { ...form, column })} />
-          <Row gap="xs">
-            <Button onPress={() => add(board.key, form, () => set(fresh, null))}>Guardar</Button>
-            <Button variant="ghost" onPress={() => (set(fresh, null), set(freshError, ''))}>Cancelar</Button>
-          </Row>
-        </Stack>
-      )}
       {snap.boards.filter((b) => b.error).map((b) => (
         <Callout key={b.key} tone="danger" title={`no se pudo leer el tablero de ${b.name}: ${b.error}`} />
       ))}
@@ -357,21 +344,21 @@ export default function Panel() {
             <Callout key={String(c.id)} tone="warning" title={`Aprobar #${c.id} ${c.title}`} icon="warning">
               <Text>{c.lastMerge ?? c.lastComment ?? ''}</Text>
               <Text size="xs">{c.sha!.slice(0, 7)}</Text>
-              {confirmId === c.id ? (
+              {confirmId === slot(board.key, c.id) ? (
                 <Row gap="xs">
                   <Button onPress={() => approveCard(board.key, c)}>Confirmar merge</Button>
                   <Button variant="ghost" onPress={() => set(approving, null)}>Cancelar</Button>
                 </Row>
               ) : (
-                <Button variant="ghost" onPress={() => set(approving, c.id)}>Aprobar y mergear</Button>
+                <Button variant="ghost" onPress={() => set(approving, slot(board.key, c.id))}>Aprobar y mergear</Button>
               )}
             </Callout>
           ))}
           {answer.map((c) => (
             <Callout key={String(c.id)} tone="warning" title={`Contestar #${c.id} ${c.title}`} icon="warning">
               <Text>{c.lastComment ?? ''}</Text>
-              <Textarea label="Respuesta" value={typed[c.id] ?? ''} onChange={(v) => set(replies, { ...typed, [c.id]: v })} />
-              <Button disabled={!(typed[c.id] ?? '').trim()} onPress={() => answerCard(board.key, c, typed)}>Contestar</Button>
+              <Textarea label="Respuesta" value={typed[slot(board.key, c.id)] ?? ''} onChange={(v) => update(replies, (all) => ({ ...all, [slot(board.key, c.id)]: v }))} />
+              <Button disabled={!(typed[slot(board.key, c.id)] ?? '').trim()} onPress={() => answerCard(board.key, c, typed[slot(board.key, c.id)])}>Contestar</Button>
             </Callout>
           ))}
         </Stack>
@@ -387,6 +374,29 @@ export default function Panel() {
             ))}
           </List>
         </Stack>
+      )}
+      {adderOpen || text || form || formError ? (
+        <Stack gap="sm">
+          <Textarea label="+ Nueva idea" value={text} onChange={(v) => set(idea, v)} />
+          <Row gap="xs">
+            <Button disabled={!text.trim()} onPress={() => add(board.key, { title: text, column: 'spec' }, () => (set(idea, ''), set(adder, false)))}>Añadir idea</Button>
+            {!form && <Button variant="ghost" onPress={() => openFresh(board.key)}>Tarjeta completa</Button>}
+          </Row>
+          {formError && <Callout tone="danger" title={formError} />}
+          {form && (
+            <Stack gap="sm">
+              <Input label="Título" value={form.title} onChange={(v) => set(fresh, { ...form, title: v })} />
+              <Textarea label="Cuerpo" value={form.body} rows={12} onChange={(v) => set(fresh, { ...form, body: v })} />
+              <Select label="Guardar en" value={form.column} options={['backlog', 'ready'].map((value) => ({ value, label: value }))} onChange={(column) => set(fresh, { ...form, column })} />
+              <Row gap="xs">
+                <Button onPress={() => add(board.key, form, () => (set(fresh, null), set(adder, false)))}>Guardar</Button>
+                <Button variant="ghost" onPress={() => (set(fresh, null), set(freshError, ''))}>Cancelar</Button>
+              </Row>
+            </Stack>
+          )}
+        </Stack>
+      ) : (
+        <Button variant="ghost" onPress={() => set(adder, true)}>+ Nueva idea</Button>
       )}
       <Input label="Buscar" value={q} onChange={(v) => set(query, v)} />
       {COLUMNS.map((column) => {

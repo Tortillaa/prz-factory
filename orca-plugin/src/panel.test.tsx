@@ -328,12 +328,16 @@ const addHost = (add: (i: unknown) => object) => {
   })
 }
 
-test('the form is above the columns, and absent without a board', async () => {
+const unfold = (view: any) => view.press({ text: '+ Nueva idea' })
+
+test('Te esperan and En curso come before a folded + Nueva idea, which opens on press', async () => {
   const view = await mount(panel, { host: addHost(() => ({})) })
+  assert.equal(view.find({ label: '+ Nueva idea' }), null)
+  const tree = JSON.stringify(view.tree())
+  assert.ok(tree.indexOf('Te esperan') < tree.indexOf('En curso') && tree.indexOf('En curso') < tree.indexOf('+ Nueva idea'))
+  await unfold(view)
   assert.ok(view.find({ label: '+ Nueva idea' }))
   assert.ok(view.find({ text: 'Tarjeta completa' }))
-  const tree = JSON.stringify(view.tree())
-  assert.ok(tree.indexOf('+ Nueva idea') < tree.indexOf('backlog ('), 'the form comes before the first column')
   await view.unmount()
   const none = await mount(panel, { host: mockHost({ requests: { 'boards.get': () => ({ boards: [] }) } }) })
   assert.equal(none.find({ label: '+ Nueva idea' }), null)
@@ -342,21 +346,26 @@ test('the form is above the columns, and absent without a board', async () => {
 
 test('an idea goes to spec as typed, then the field is empty; blank text is not sent', async () => {
   const blank = await mount(panel, { host: addHost(() => ({ id: 9 })) })
+  await unfold(blank)
   await blank.type({ label: '+ Nueva idea' }, '  \n ')
   await assert.rejects(blank.press({ text: 'Añadir idea' }), /disabled/)
   assert.deepEqual(calls.add, [])
   await blank.unmount()
   const view = await mount(panel, { host: addHost(() => ({ id: 9 })) })
+  await unfold(view)
   await view.type({ label: '+ Nueva idea' }, 'Quiero un botón\ncon dos líneas')
   await view.press({ text: 'Añadir idea' })
   assert.deepEqual(calls.add, [{ board: '/r/shop/.git', title: 'Quiero un botón\ncon dos líneas', column: 'spec' }])
-  await assert.rejects(view.press({ text: 'Añadir idea' }), /disabled/) // the field is empty again
+  assert.equal(view.find({ label: '+ Nueva idea' }), null) // folded again
+  await unfold(view)
+  await assert.rejects(view.press({ text: 'Añadir idea' }), /disabled/) // and empty
   assert.deepEqual(view.errors, [])
   await view.unmount()
 })
 
 test('a failed idea shows its error and keeps the text', async () => {
   const view = await mount(panel, { host: addHost(() => ({ error: 'sin CLI' })) })
+  await unfold(view)
   await view.type({ label: '+ Nueva idea' }, 'x')
   await view.press({ text: 'Añadir idea' })
   assert.ok(JSON.stringify(view.tree()).includes('sin CLI'))
@@ -369,12 +378,14 @@ test('a failed idea shows its error and keeps the text', async () => {
 test('a full card starts from the CLI template, defaults to backlog, and keeps what was typed on error', async () => {
   const lint = 'a new card in ready must pass lint:\n- falta la sección "## Risk"'
   const view = await mount(panel, { host: addHost(() => (calls.add.length === 2 ? { error: lint } : { id: 9 })) })
+  await unfold(view)
   await view.press({ text: 'Tarjeta completa' })
   assert.equal(calls.template, 1)
   await view.type({ label: 'Título' }, 'T')
   await view.press({ text: 'Guardar' })
   assert.deepEqual(calls.add[0], { board: '/r/shop/.git', title: 'T', body: '## Problem\n<x>', column: 'backlog' })
   assert.equal(view.find({ label: 'Título' }), null) // closed on success
+  await unfold(view)
   await view.press({ text: 'Tarjeta completa' })
   await view.type({ label: 'Título' }, 'T')
   await view.select({ label: 'Guardar en' }, 'ready')
@@ -386,5 +397,39 @@ test('a full card starts from the CLI template, defaults to backlog, and keeps w
   assert.deepEqual(calls.add[2], calls.add[1]) // the title, body and column survived the error
   assert.equal(view.find({ label: 'Título' }), null)
   assert.deepEqual(view.errors, [])
+  await view.unmount()
+})
+
+const twoRepos = (extra: Record<string, unknown> = {}) =>
+  mockHost({ requests: { 'boards.get': () => ({ boards: [board('a'), board('b')] }), ...extra } })
+
+test('approval confirmation and typed answers belong to one repo, not to the card number', async () => {
+  const view = await mount(panel, { host: twoRepos() })
+  await view.press({ text: 'Aprobar y mergear' })
+  await view.type({ label: 'Respuesta' }, 'usa X')
+  await view.select({ label: 'Repo' }, '/r/b/.git')
+  assert.equal(view.find({ text: 'Confirmar merge' }), null)
+  assert.equal(view.find({ label: 'Respuesta' }).props.value, '')
+  await view.select({ label: 'Repo' }, '/r/a/.git')
+  assert.ok(view.find({ text: 'Confirmar merge' }))
+  assert.equal(view.find({ label: 'Respuesta' }).props.value, 'usa X')
+  await view.unmount()
+})
+
+test('answering clears only its own text, and a board refresh keeps what is typed', { timeout: 5000 }, async () => {
+  const slow = async () => (await new Promise((r) => setTimeout(r, 50)), {})
+  const view = await mount(panel, { host: twoRepos({ 'card.comment': slow, 'card.move': () => ({}) }) })
+  await view.type({ label: 'Respuesta' }, 'uno')
+  await Promise.all([
+    view.press({ text: 'Contestar' }),
+    (async () => {
+      await view.select({ label: 'Repo' }, '/r/b/.git') // typing elsewhere while the request is in flight
+      await view.type({ label: 'Respuesta' }, 'otro')
+    })()
+  ])
+  await view.post('boards.changed', { boards: [board('a'), board('b')] })
+  assert.equal(view.find({ label: 'Respuesta' }).props.value, 'otro')
+  await view.select({ label: 'Repo' }, '/r/a/.git')
+  assert.equal(view.find({ label: 'Respuesta' }).props.value, '')
   await view.unmount()
 })

@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "prz-factory-board",
   "name": "prz-factory board",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "The prz-factory kanban board of each repo open in Orca, live in the sidebar.",
   "engines": {
     "orca": ">=1.4.248"

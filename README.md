@@ -1,15 +1,48 @@
-# prz-factory
+<p align="center">
+  <img src=".github/assets/banner.svg" alt="prz-factory — de una idea a main, con un equipo de agentes que redacta, construye, revisa y mergea" width="100%">
+</p>
 
-[![test](https://github.com/Tortillaa/prz-factory/actions/workflows/test.yml/badge.svg)](https://github.com/Tortillaa/prz-factory/actions/workflows/test.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Node ≥ 22](https://img.shields.io/badge/node-%E2%89%A5%2022-339933)
-![Sin dependencias](https://img.shields.io/badge/dependencias-0-brightgreen)
+<p align="center">
+  <a href="https://github.com/Tortillaa/prz-factory/actions/workflows/test.yml"><img src="https://github.com/Tortillaa/prz-factory/actions/workflows/test.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-E8A33D?style=flat-square&labelColor=16130F" alt="Licencia MIT"></a>
+  <img src="https://img.shields.io/badge/node-%E2%89%A5%2022-E8A33D?style=flat-square&labelColor=16130F" alt="Node ≥ 22">
+  <img src="https://img.shields.io/badge/dependencias-0-E8A33D?style=flat-square&labelColor=16130F" alt="0 dependencias">
+</p>
 
-**Una fábrica de software para agentes de código.** Escribes una idea en el tablero; un equipo de agentes la redacta, la construye, la revisa desde cuatro puntos de vista y la mergea. Los cambios pequeños llegan a `main` solos. Los que tocan el negocio te esperan con una explicación en lenguaje claro y un botón de aprobar.
+<p align="center"><b>Una fábrica de software para agentes de código.</b><br>Escribes una idea; un equipo de agentes la redacta, la construye, la revisa desde cuatro puntos de vista y la mergea.</p>
 
-Corre dentro de [Orca](https://www.onorca.dev/), que lanza cada agente en su propio git worktree, y funciona con Claude Code y con Grok.
+<p align="center">
+  <a href="#inicio-rápido">Inicio rápido</a> ·
+  <a href="#cómo-funciona">Cómo funciona</a> ·
+  <a href="#reglas-para-los-agentes">Reglas</a> ·
+  <a href="#roles-de-agentes">Roles</a> ·
+  <a href="#desarrollo">Documentación</a>
+</p>
+
+## En 30 segundos
+
+prz-factory convierte un tablero kanban en una cadena de montaje de agentes. Corre dentro de [Orca](https://www.onorca.dev/), que da a cada agente su propio git worktree, y funciona con Claude Code y con Grok. Los cambios pequeños llegan a `main` solos; los que tocan el negocio te esperan con una explicación en lenguaje claro y un botón de aprobar.
+
+En este mismo repo, un cambio pequeño fue **de la idea a `main` en 12 minutos, sin que nadie lo tocara**.
+
+> [!TIP]
+> ¿Lo quieres probar ya? Instala la skill una vez y dile a tu agente **"inicializa prz-factory"** en cualquier repo. Tres líneas en [Inicio rápido](#inicio-rápido).
+
+## Por qué
+
+Los agentes de código ya escriben buen código. Lo que falta para dejarlos trabajar solos es todo lo de alrededor: saber qué hay que hacer exactamente, que alguien revise con criterio, que nada llegue a `main` sin pasar los tests y que una persona decida lo que importa. prz-factory pone eso en código, no en buenas intenciones:
+
+- **Un tablero como fuente de verdad.** Kanban local en `localhost`, compartido por todos los worktrees. El estado vive en el tablero, no en la memoria de una sesión.
+- **Un rol por paso, cada uno con su modelo.** Redactar, construir, revisar y mergear son agentes distintos, con instrucciones distintas y sin poder pisarse.
+- **Un panel de revisión en paralelo.** Cuatro lentes revisan el mismo commit: qa, seguridad, código y operaciones. Todas deben aprobarlo.
+- **Un merge gate que no se negocia.** Solo aterriza el commit exacto que aprobó el panel, con `verify` en verde y por fast-forward: lo que llega a `main` es lo que se probó.
+- **Las personas, donde importan.** Riesgo alto, etiquetas de negocio, rutas sensibles o un diff grande: el gate retiene el merge y te lo explica.
+- **Guards contra errores.** Hooks que impiden leer secretos, empujar a `main`, forzar una rama protegida o borrar fuera del proyecto.
+
+## Cómo funciona
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#F6E7C1", "primaryTextColor": "#16130F", "primaryBorderColor": "#B36A12", "lineColor": "#E8A33D", "secondaryColor": "#E8A33D", "tertiaryColor": "#FBF3E1", "fontFamily": "ui-sans-serif, Segoe UI, Helvetica, Arial"}}}%%
 flowchart LR
   idea([Idea]) --> spec["Spec Writer: redacta la tarjeta"]
   spec --> build["Builder: tests primero"]
@@ -22,16 +55,7 @@ flowchart LR
   you --> main
 ```
 
-## Por qué
-
-Los agentes de código ya escriben buen código. Lo que falta para dejarlos trabajar solos es todo lo de alrededor: saber qué hay que hacer exactamente, que alguien revise con criterio, que nada llegue a `main` sin pasar los tests y que una persona decida lo que importa. prz-factory pone eso en código, no en buenas intenciones:
-
-- **Un tablero como fuente de verdad.** Kanban local en `localhost`, compartido por todos los worktrees. El estado vive en el tablero, no en la memoria de una sesión.
-- **Un rol por paso, cada uno con su modelo.** Redactar, construir, revisar y mergear son agentes distintos, con instrucciones distintas y sin poder pisarse.
-- **Un panel de revisión en paralelo.** Cuatro lentes revisan el mismo commit: qa, seguridad, código y operaciones. Todas deben aprobarlo.
-- **Un merge gate que no se negocia.** Solo aterriza el commit exacto que aprobó el panel, con `verify` en verde y por fast-forward: lo que llega a `main` es lo que se probó.
-- **Las personas, donde importan.** Riesgo alto, etiquetas de negocio, rutas sensibles o un diff grande: el gate retiene el merge y te lo explica.
-- **Guards contra errores.** Hooks que impiden leer secretos, empujar a `main`, forzar una rama protegida o borrar fuera del proyecto.
+Cada caja es un agente distinto, lanzado por el coordinador en su propio worktree. Las tarjetas avanzan por el tablero (`spec → ready → building → review → merge → done`) y nadie puede saltarse una columna: el código del tablero y del gate lo impide.
 
 ## Resultados
 
@@ -270,3 +294,8 @@ Los cambios se proponen por pull request contra `main`. CI ejecuta `npm test` en
 ## Licencia y créditos
 
 [MIT](LICENSE). Inspirada en [super-board](https://github.com/EricTechPro/super-board) (MIT), con tablero propio en `localhost` en lugar de GitHub Projects y merges locales por fast-forward. Incluye [ponytail](https://github.com/DietrichGebert/ponytail) (MIT) sin modificar.
+
+<br>
+<p align="center">
+  <sub>Hecho a fuego lento por <a href="https://github.com/Tortillaa">Tortillaa</a> · <a href="LICENSE">MIT</a></sub>
+</p>

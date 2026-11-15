@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { git, tryGit, diffFiles } from '../src/git.mjs';
+import { git, tryGit } from '../src/git.mjs';
 import { loadConfig } from '../src/config.mjs';
 
 const MANIFEST = 'orca-plugin/orca-plugin.json';
@@ -14,7 +14,7 @@ const root = path.join(import.meta.dirname, '..');
 export function versionProblem(cwd, base) {
   const mb = tryGit(['merge-base', 'HEAD', base], cwd);
   if (!mb || mb === tryGit(['rev-parse', 'HEAD'], cwd)) return null;
-  if (!diffFiles(mb, 'HEAD', cwd).some((f) => f.startsWith('orca-plugin/'))) return null;
+  if (!git(['diff', '--name-only', '--no-renames', mb, 'HEAD'], cwd).split('\n').some((f) => f.startsWith('orca-plugin/'))) return null;
   const at = (ref) => JSON.parse(git(['show', `${ref}:${MANIFEST}`], cwd)).version;
   const now = at('HEAD');
   return at(mb) === now ? `${MANIFEST}: version is still ${now}; bump it, the plugin changed` : null;
@@ -65,5 +65,18 @@ test('no plugin change, HEAD at the merge-base, missing base or no repo: nothing
 test('this repo: the plugin version is 0.2.0 or later and bumped when the plugin changed', () => {
   const v = JSON.parse(fs.readFileSync(path.join(root, MANIFEST), 'utf8')).version;
   assert.notEqual(v, '0.1.0');
-  assert.equal(versionProblem(root, loadConfig(root).baseBranch), null);
+  assert.equal(versionProblem(root, loadConfig(root).config.baseBranch), null);
+});
+
+test('a rename out of orca-plugin/ counts as a plugin change', () => {
+  const dir = repo();
+  fs.writeFileSync(path.join(dir, 'orca-plugin', 'a.ts'), 'a'.repeat(200));
+  git(['add', '-A'], dir);
+  git(['commit', '-qm', 'a'], dir);
+  git(['checkout', '-q', 'main'], dir);
+  git(['merge', '-q', '--ff-only', 'work'], dir);
+  git(['checkout', '-qb', 'move'], dir);
+  git(['mv', 'orca-plugin/a.ts', 'moved.ts'], dir);
+  git(['commit', '-qm', 'mv'], dir);
+  assert.match(versionProblem(dir, 'main'), /1\.0\.0/);
 });

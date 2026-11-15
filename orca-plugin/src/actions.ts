@@ -30,7 +30,7 @@ export async function runAction(board: { key: string; file: string }, req: CardA
   if (!cli) return { error: `no factory CLI in ${repo}: expected .prz-factory/bin/factory.mjs or bin/factory.mjs` }
   const go = (args: string[]) => run(cli, repo, board.file, args)
   const id = String('id' in req ? req.id : '')
-  const force = 'force' in req && req.force ? ['--force'] : []
+  const force = 'force' in req && req.force === true ? ['--force'] : []
   switch (req.action) {
     case 'get':
       return go(['show', id])

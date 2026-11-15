@@ -544,6 +544,11 @@ test('card.move passes --force only when asked, and a CLI error comes back uncha
   await t.worker.request('card.move', { board: t.key, id: 7, column: 'ready', force: true })
   assert.ok(!t.calls()[0].argv.includes('--force'))
   assert.ok(t.calls()[1].argv.includes('--force'))
+  // a malformed request is not a force
+  for (const force of ['false', 1, 'true']) {
+    await t.worker.request('card.move', { board: t.key, id: 7, column: 'ready', force } as never)
+    assert.ok(!t.calls().at(-1)!.argv.includes('--force'))
+  }
   // the fake fails on "--fail": the CLI fails on this text
   assert.deepEqual(await t.worker.request('card.comment', { board: t.key, id: 7, text: '--fail' }), { error: 'nope: "quoted"' })
   await t.worker.deactivate()

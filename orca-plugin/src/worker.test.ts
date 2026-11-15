@@ -195,3 +195,15 @@ test('the manifest listens to workspace.created and workspace.removed', () => {
   const manifest = JSON.parse(fs.readFileSync(new URL('../orca-plugin.json', import.meta.url), 'utf8'))
   assert.deepEqual(manifest.contributes.events.map((e: { on: string }) => e.on), ['workspace.created', 'workspace.removed'])
 })
+
+test('deactivate closes every watcher: a board and a pending repo stay silent afterwards', async () => {
+  const withBoard = repoWithBoard(cards)
+  const without = repoWithBoard(null)
+  const worker = await mountWorker(main, { host: liveHost([withBoard, without]) })
+  await worker.deactivate()
+  fs.writeFileSync(path.join(withBoard, '.git', 'factory', 'board.json'), JSON.stringify({ version: 1, nextId: 9, cards: [] }))
+  fs.mkdirSync(path.join(without, '.git', 'factory'))
+  await wait()
+  assert.equal(boardsPosted(worker).length, 0)
+  assert.deepEqual(worker.refusals, [])
+})

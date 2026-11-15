@@ -201,5 +201,5 @@ Datos de `factory report` tras #8 y #9: 42 workers y 483 min, de los que la revi
 
 - [x] Recorrer una tarjeta real con workers de Orca por el flujo nuevo (spec → build → panel → merge): tarjeta #6, ver Fase 8.
 - [x] Ejecutar todas las evals con un agente real: ver Fase 13, paso 2b.
-- [ ] Instalar el plugin en Orca (ver "Plugin para Orca" en el README): es `trusted-worker` y requiere tu aprobación.
+- [x] Instalar el plugin en Orca (ver "Plugin para Orca" en el README): instalado y aprobado el 2026-11-15 (`local.prz-factory-board` 0.1.0, panel "Factory board" en marcha).
 - [x] Subir el repo a GitHub (PR #1).

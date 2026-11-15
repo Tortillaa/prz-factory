@@ -417,18 +417,15 @@ test('approval confirmation and typed answers belong to one repo, not to the car
 })
 
 test('answering clears only its own text, and a board refresh keeps what is typed', { timeout: 5000 }, async () => {
-  const slow = async () => (await new Promise((r) => setTimeout(r, 50)), {})
-  const view = await mount(panel, { host: twoRepos({ 'card.comment': slow, 'card.move': () => ({}) }) })
+  const hold = async () => (await new Promise((r) => setTimeout(r, 100)), {}) // settling waits on the request, so a timer lets it end
+  const view = await mount(panel, { host: twoRepos({ 'card.comment': hold, 'card.move': () => ({}) }) })
   await view.type({ label: 'Respuesta' }, 'uno')
-  await Promise.all([
-    view.press({ text: 'Contestar' }),
-    (async () => {
-      await view.select({ label: 'Repo' }, '/r/b/.git') // typing elsewhere while the request is in flight
-      await view.type({ label: 'Respuesta' }, 'otro')
-    })()
-  ])
+  const pressing = view.press({ text: 'Contestar' }) // not awaited: select and type run while it is pending; one character, as each typed one settles
+  const typing = view.select({ label: 'Repo' }, '/r/b/.git') // typing elsewhere while the request is in flight
+  await new Promise((r) => setTimeout(r, 20))
+  await Promise.all([typing, view.type({ label: 'Respuesta' }, 'x'), pressing])
   await view.post('boards.changed', { boards: [board('a'), board('b')] })
-  assert.equal(view.find({ label: 'Respuesta' }).props.value, 'otro')
+  assert.equal(view.find({ label: 'Respuesta' }).props.value, 'x')
   await view.select({ label: 'Repo' }, '/r/a/.git')
   assert.equal(view.find({ label: 'Respuesta' }).props.value, '')
   await view.unmount()

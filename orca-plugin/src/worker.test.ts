@@ -227,3 +227,29 @@ test('deactivate while a refresh waits for workspace.list opens no watcher and p
   assert.equal(boardsPosted(worker).length, 0)
   assert.deepEqual(worker.refusals, [])
 })
+
+test('a slow workspace.list that returns after workspace.removed does not bring the closed repo back', async () => {
+  const withBoard = repoWithBoard(cards)
+  const without = repoWithBoard(null)
+  const host = liveHost([withBoard, without])
+  const worker = await mountWorker(main, { host })
+  // The next workspace.list answers late, with the list it read before the repo closed; the ones after it are empty.
+  const late = { workspaces: [withBoard, without].map((p, i) => ({ id: `w${i}`, kind: 'worktree', name: 'shop', path: p, branch: 'main', hostId: null })), truncated: false }
+  host.respond('workspace.list', async () => {
+    host.set([])
+    await wait(800)
+    return late
+  })
+  await worker.emit('workspace.created', { workspaceId: 'x', kind: 'worktree', path: withBoard, branch: 'main' })
+  await wait(200)
+  await worker.emit('workspace.removed', { workspaceId: 'x', kind: 'worktree', path: withBoard })
+  await wait(1200)
+  assert.equal((boardsPosted(worker).at(-1)?.payload as { boards: unknown[] }).boards.length, 0)
+  const before = boardsPosted(worker).length
+  fs.writeFileSync(path.join(withBoard, '.git', 'factory', 'board.json'), JSON.stringify({ version: 1, nextId: 9, cards: [] }))
+  fs.mkdirSync(path.join(without, '.git', 'factory'))
+  await wait()
+  assert.equal(boardsPosted(worker).length, before)
+  assert.deepEqual(worker.refusals, [])
+  await worker.deactivate()
+})

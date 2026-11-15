@@ -21,13 +21,15 @@ export function deactivate(): void {
 
 export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   stopped = false
+  let seq = 0 // a newer snapshot supersedes one still waiting for workspace.list
   async function snapshot(): Promise<BoardsSnapshot> {
+    const mine = ++seq
     try {
       const { workspaces } = await orca.host.call('workspace.list', {})
       if (stopped) return { boards: [] } // deactivated while the list was in flight: open no watcher
       const pending: string[] = []
       const found = discover(workspaces.filter((w) => !w.hostId || w.hostId === 'local').map((w) => w.path), undefined, pending)
-      watch([...found.map((b) => path.dirname(b.file)), ...pending])
+      if (mine === seq) watch([...found.map((b) => path.dirname(b.file)), ...pending])
       const boards = found.flatMap((entry) => {
         try {
           return [readBoard(entry)]
@@ -36,7 +38,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
           return [{ ...entry, counts: {}, cards: [], unknown: [], error: (err as Error).message }]
         }
       })
-      await showWaiting(boards)
+      if (mine === seq) await showWaiting(boards)
       return { boards }
     } catch (err) {
       return { boards: [], error: (err as Error).message }
@@ -62,8 +64,9 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   function refresh(): void {
     clearTimeout(timer)
     timer = setTimeout(async () => {
+      const mine = seq + 1
       const snap = await snapshot()
-      if (!stopped) orca.panels.post('boards.changed', snap)
+      if (!stopped && mine === seq) orca.panels.post('boards.changed', snap)
     }, 150)
   }
 

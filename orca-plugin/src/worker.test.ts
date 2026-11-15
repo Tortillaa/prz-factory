@@ -524,11 +524,11 @@ test('card.get/add/edit/move/comment run the CLI with the exact arguments, in th
   assert.deepEqual(await t.worker.request('card.comment', { board: b, id: 7, text: 'hola' }), { ok: 'comment' })
   const got = t.calls()
   assert.deepEqual(got.map((c) => c.argv), [
-    ['show', '7', '--json'],
-    ['add', 'T', '--body', 'B', '--label', 'x', '--label', 'y', '--blocked-by', '1,2', '--column', 'spec', '--json'],
-    ['edit', '7', '--title', 'T2', '--body', 'B2', '--label', 'z', '--blocked-by', '3', '--json'],
-    ['move', '7', 'ready', '--before', '4', '--by', 'user', '--json'],
-    ['comment', '7', 'hola', '--role', 'user', '--json']
+    ['show', '--json', '--', '7'],
+    ['add', '--body=B', '--label=x', '--label=y', '--blocked-by=1,2', '--column=spec', '--json', '--', 'T'],
+    ['edit', '--title=T2', '--body=B2', '--label=z', '--blocked-by=3', '--json', '--', '7'],
+    ['move', '--before=4', '--by=user', '--json', '--', '7', 'ready'],
+    ['comment', '--role=user', '--json', '--', '7', 'hola']
   ])
   for (const c of got) {
     assert.equal(fs.realpathSync(c.cwd), t.repo)
@@ -579,7 +579,7 @@ test('card.approve needs merge-approval, a branch and a sha before the CLI sees 
   }
   const t = await actionWorker('prz', held)
   assert.deepEqual(await t.worker.request('card.approve', { board: t.key, id: 7, sha: 'abc' }), { ok: 'merge' })
-  assert.deepEqual(t.calls().at(-1)?.argv, ['merge', '7', '--human', '--as', 'user', '--sha', 'abc', '--json'])
+  assert.deepEqual(t.calls().at(-1)?.argv, ['merge', '--human', '--as=user', '--sha=abc', '--json', '--', '7'])
   await t.worker.deactivate()
 })
 
@@ -587,7 +587,36 @@ test('a text with spaces, quotes, $() and ; reaches the CLI as one argument', as
   const t = await actionWorker('prz')
   const text = `a b "c" 'd' $(touch pwned); echo \`x\` & y`
   await t.worker.request('card.comment', { board: t.key, id: 7, text })
-  assert.equal(t.calls()[0].argv[2], text)
+  assert.equal(t.calls()[0].argv.at(-1), text)
   assert.ok(!fs.existsSync(path.join(t.repo, 'pwned')))
+  await t.worker.deactivate()
+})
+
+test('free text that looks like an option stays text, after `--` or inside a --flag=value', async () => {
+  const t = await actionWorker('prz')
+  for (const text of ['- item', '--text-file=x', '--force']) {
+    await t.worker.request('card.comment', { board: t.key, id: 7, text })
+    await t.worker.request('card.add', { board: t.key, title: text, body: text })
+    await t.worker.request('card.edit', { board: t.key, id: 7, title: text, body: text })
+  }
+  const calls = t.calls()
+  assert.equal(calls.length, 9)
+  for (const { argv } of calls) {
+    const stop = argv.indexOf('--')
+    assert.ok(stop > argv.indexOf('--json'), '--json comes before --')
+    // before `--` only the command and --flag=value: a text there is always glued to its flag
+    for (const a of argv.slice(1, stop)) assert.match(a, /^--(json|role=user|body=.*|title=.*)$/)
+  }
+  assert.deepEqual(calls.filter((c) => c.argv[0] === 'comment').map((c) => c.argv.at(-1)), ['- item', '--text-file=x', '--force'])
+  assert.deepEqual(calls.filter((c) => c.argv[0] === 'add').map((c) => c.argv.at(-1)), ['- item', '--text-file=x', '--force'])
+  await t.worker.deactivate()
+})
+
+test('card.edit with labels [] is an error, never an OK that cleared nothing', async () => {
+  const t = await actionWorker('prz')
+  assert.match(String((await t.worker.request('card.edit', { board: t.key, id: 7, labels: [] })).error), /labels/)
+  assert.deepEqual(t.calls(), [])
+  await t.worker.request('card.edit', { board: t.key, id: 7, blockedBy: [] })
+  assert.ok(t.calls()[0].argv.includes('--blocked-by='))
   await t.worker.deactivate()
 })

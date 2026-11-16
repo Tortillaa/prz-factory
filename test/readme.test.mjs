@@ -24,6 +24,7 @@ test('README: the roles section covers every lane, its skill and every review le
   const text = section('Roles de agentes');
   for (const lane of LANE_NAMES) assert.ok(text.includes(`\`factory-${lane}\``), `role ${lane} is missing from the README`);
   assert.ok(text.includes('`factory-run`'), 'the coordinator is missing from the README');
+  assert.ok(text.includes('| **Recepción**') && text.includes('`factory-intake`'), 'the intake role is missing from the README');
   for (const lens of LENSES) assert.ok(text.includes(`| \`${lens}\` |`), `lens ${lens} is missing from the README`);
 });
 

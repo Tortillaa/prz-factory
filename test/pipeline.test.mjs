@@ -123,6 +123,30 @@ test('the managed block describes the pipeline, the panel and the business rule'
   assert.match(text, /labels auth, payments, pricing, schema, ops, money, needs-human · paths `migrations\/\*\*` · diff > 400 lines/);
 });
 
+test('CLI: agents-md writes the CLAUDE.md of the worktree it runs in, and of the main checkout when run there', () => {
+  const dir = tmp('factory-agentsmd-');
+  const r = path.join(dir, 'repo');
+  const wt = path.join(dir, 'wt');
+  fs.mkdirSync(r);
+  const sh = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  sh(r, 'init', '-q', '-b', 'main');
+  sh(r, 'config', 'user.email', 't@e.com');
+  sh(r, 'config', 'user.name', 't');
+  fs.writeFileSync(path.join(r, 'CLAUDE.md'), '# mine\n');
+  sh(r, 'add', '.');
+  sh(r, 'commit', '-qm', 'init');
+  sh(r, 'worktree', 'add', '-q', '-b', 'w', wt);
+  const env = { ...process.env, FACTORY_BOARD: path.join(dir, 'board.json') };
+  const cli = (cwd) => spawnSync(process.execPath, [CLI, 'agents-md', '--json'], { cwd, encoding: 'utf8', env });
+
+  assert.equal(cli(wt).status, 0);
+  assert.match(fs.readFileSync(path.join(wt, 'CLAUDE.md'), 'utf8'), /prz-factory/);
+  assert.equal(fs.readFileSync(path.join(r, 'CLAUDE.md'), 'utf8'), '# mine\n');
+
+  assert.equal(cli(r).status, 0);
+  assert.match(fs.readFileSync(path.join(r, 'CLAUDE.md'), 'utf8'), /prz-factory/);
+});
+
 test('CLI: an idea goes to spec as free text, plan and status know the new lanes', () => {
   const dir = tmp('factory-cli-');
   const env = { ...process.env, FACTORY_BOARD: path.join(dir, 'board.json') };

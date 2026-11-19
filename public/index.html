@@ -100,7 +100,7 @@
   .comment { border-left: 4px solid var(--line); padding: 4px 12px; margin: 8px 0; white-space: pre-wrap; }
   .close { position: absolute; top: 12px; right: 16px; background: transparent; color: var(--muted); padding: 0 4px; font-size: 16px; }
   @media (min-width: 1500px) { body.open { padding-right: 480px; } }
- { display: none !important; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -277,7 +277,7 @@ function render() {
   if (openId && !$('detail').contains(document.activeElement)) fillView();
 }
 
-function openCard(id) { openId = id; fillView(); $('detail').hidden = false; document.body.classList.add('open'); }
+function openCard(id) { openId = id; forcing = null; $('v-force').hidden = true; fillView(); $('detail').hidden = false; document.body.classList.add('open'); }
 function closeCard() { openId = null; $('detail').hidden = true; document.body.classList.remove('open'); }
 
 function fillView() {

@@ -129,3 +129,7 @@ test('la ficha es un panel lateral, no un diálogo, y no edita el cuerpo ni el t
   assert.match(html, /<aside id="detail"/);
   assert.doesNotMatch(html.match(/<aside id="detail"[\s\S]*?<\/aside>/)[0], /<textarea|name="title"|name="body"/);
 });
+
+test('la regla [hidden] existe: sin ella Forzar se ve siempre', () => {
+  assert.match(html, /\[hidden\]\s*\{\s*display:\s*none\s*!important/);
+});

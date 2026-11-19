@@ -31,10 +31,10 @@ test('shows the board, what needs a person, and switches repos', async () => {
   assert.doesNotMatch(text, /factory merge|⚠|🔴/)
   assert.ok(view.find({ text: 'abc1234' }))
   assert.ok(view.find({ text: /¿Qué moneda usamos[?]/ }))
-  assert.ok(view.find({ text: '#3 Mail sender' }))
+  assert.ok(view.find({ label: '#3 Mail sender' }))
 
   await view.post('boards.changed', { boards: [board('shop', { cards: [] })] })
-  assert.equal(view.find({ text: '#3 Mail sender' }), null)
+  assert.equal(view.find({ label: '#3 Mail sender' }), null)
   assert.deepEqual(view.errors, [])
   assert.deepEqual(view.refusals, [])
   assert.equal(view.find({ text: 'Te esperan' }), null)
@@ -51,7 +51,7 @@ test('shows a broken board by name, and still shows the healthy one', async () =
   assert.doesNotMatch(text, /Sin tablero de la fábrica/)
   await view.unmount()
   const other = await mount(panel, { host: mockHost({ requests: { 'boards.get': () => ({ boards: [board('blog'), bad] }) } }) })
-  assert.ok(other.find({ text: '#3 Mail sender' }))
+  assert.ok(other.find({ label: '#3 Mail sender' }))
   assert.match(other.summary().join(' '), /no se pudo leer el tablero de shop/)
   await other.unmount()
 })
@@ -84,11 +84,13 @@ test('the cover reads Te esperan, En marcha, Cola, Hecho, with the rail and role
   assert.ok(at.every((n, i) => n >= 0 && (i === 0 || n > at[i - 1])), String(at))
   assert.doesNotMatch(tree, /Collapsible/)
   assert.match(tree, /RelativeTime/)
-  assert.match(tree, /spec · \[build\] · review · merge[^]*?Builder · ronda 2/)
-  assert.match(tree, /spec · build · \[review\] · merge[^]*?qa ✓ {2}code …[^]*?Reviewer qa/)
-  assert.ok(view.find({ text: '1 · #7 Search' }))
+  assert.doesNotMatch(view.find({ label: "#3 Mail sender" })!.text, /[[\]]|Abrir/)
+  assert.equal(view.find({ text: /Abrir/ }), null)
+  assert.match(tree, /"spec ·"[^]*?"build ·"[^]*?Builder · ronda 2/)
+  assert.match(tree, /"review ·"[^]*?qa ✓ · code en curso[^]*?Reviewer qa/)
+  assert.ok(view.find({ label: '1 · #7 Search' }))
   assert.match(tree, /espera a #3/)
-  assert.ok(view.find({ text: '#8 Landed' }))
+  assert.ok(view.find({ label: '#8 Landed' }))
   await view.unmount()
 })
 
@@ -134,16 +136,16 @@ const sheetHost = (get: () => object, comment: (i: unknown) => object = () => ({
 test('a card opens its sheet instead of the list, and Volver returns to it', async () => {
   const host = sheetHost(() => sheet())
   const view = await mount(panel, { host })
-  await view.press({ text: 'Abrir #3' })
+  await view.press({ label: '#3 Mail sender' })
   const text = view.summary().join(' ') + JSON.stringify(view.tree())
   assert.match(text, /#3 Mail sender/)
   assert.match(text, /building/)
   assert.match(text, /feature/)
   assert.match(text, /riesgo Low/)
   assert.match(text, /No manda correos/)
-  assert.equal(view.find({ text: '#8 Landed' }), null)
+  assert.equal(view.find({ label: '#8 Landed' }), null)
   await view.press({ text: 'Volver' })
-  assert.ok(view.find({ text: '#8 Landed' }))
+  assert.ok(view.find({ label: '#8 Landed' }))
   assert.deepEqual(view.errors, [])
   await view.unmount()
 })
@@ -160,13 +162,13 @@ test('the sheet shows lint, blockers, comments with their age, history and the r
     })
   )
   const view = await mount(panel, { host })
-  await view.press({ text: 'Abrir #3' })
+  await view.press({ label: '#3 Mail sender' })
   const text = view.summary().join(' ') + JSON.stringify(view.tree())
   assert.match(text, /falta Risk/)
   assert.match(text, /bloqueada por #2/)
   assert.match(text, /ojo con esto/)
   assert.match(text, /ready → building \(build-3\)/)
-  assert.match(text, /qa ✓\s+code …/)
+  assert.match(text, /qa ✓ · code en curso/)
   assert.match(text, /"RelativeTime","props":{"at":\d+}/)
   await view.unmount()
 })
@@ -176,7 +178,7 @@ test('Comentar sends one request, keeps the text when it fails, and reloads the 
   const sent: unknown[] = []
   const host = sheetHost(() => sheet(), (input) => (sent.push(input), reply))
   const view = await mount(panel, { host })
-  await view.press({ text: 'Abrir #3' })
+  await view.press({ label: '#3 Mail sender' })
   await view.type({ label: 'Comentario' }, 'hola')
   await view.press({ text: 'Comentar' })
   assert.deepEqual(sent, [{ board: '/r/shop/.git', id: 3, text: 'hola' }])
@@ -192,10 +194,10 @@ test('Comentar sends one request, keeps the text when it fails, and reloads the 
 test('a failing card.get shows its error and Volver still works', async () => {
   const host = sheetHost(() => ({ error: 'boom' }))
   const view = await mount(panel, { host })
-  await view.press({ text: 'Abrir #3' })
+  await view.press({ label: '#3 Mail sender' })
   assert.match(view.summary().join(' '), /boom/)
   await view.press({ text: 'Volver' })
-  assert.ok(view.find({ text: '#3 Mail sender' }))
+  assert.ok(view.find({ label: '#3 Mail sender' }))
   await view.unmount()
 })
 
@@ -204,7 +206,7 @@ const actHost = (extra: Record<string, (i: any) => unknown>, get: () => object =
   mockHost({ requests: { 'boards.get': () => ({ boards: [board('shop')] }), 'card.get': get, ...extra } })
 const openSheet = async (host: ReturnType<typeof mockHost>) => {
   const view = await mount(panel, { host })
-  await view.press({ text: 'Abrir #3' })
+  await view.press({ label: '#3 Mail sender' })
   return view
 }
 
@@ -281,8 +283,8 @@ test('a card.get that arrives late for another card is dropped, and actions use 
   }
   const view = await mount(panel, { host: actHost({ 'card.comment': (i) => (sent.push(i), {}) }, get as never) })
   await Promise.all([
-    view.press({ text: 'Abrir #3' }),
-    (async () => (await tick(), await view.press({ text: 'Volver' }), await view.press({ text: 'Abrir #7' })))()
+    view.press({ label: '#3 Mail sender' }),
+    (async () => (await tick(), await view.press({ text: 'Volver' }), await view.press({ label: '1 · #7 Search' })))()
   ])
   await tick()
   await tick()
@@ -297,7 +299,7 @@ test('a card.get that arrives late for another card is dropped, and actions use 
 
 test('an answer for another card than the one open is never shown', { timeout: 5000 }, async () => {
   const view = await mount(panel, { host: actHost({}, () => sheet({ id: 4, title: 'Pay' })) })
-  await view.press({ text: 'Abrir #3' })
+  await view.press({ label: '#3 Mail sender' })
   assert.ok(view.find({ text: /Cargando #3/ }))
   assert.equal(view.find({ text: 'Comentar' }), null)
   await view.unmount()
@@ -348,5 +350,13 @@ test('answering clears only its own text, and a board refresh keeps what is type
   assert.equal(view.find({ label: 'Respuesta' }).props.value, 'x')
   await view.select({ label: 'Repo' }, '/r/a/.git')
   assert.equal(view.find({ label: 'Respuesta' }).props.value, '')
+  await view.unmount()
+})
+
+test('a long title is clipped to 60 characters with an ellipsis, and a short one is left alone', async () => {
+  const long = board('shop', { cards: [{ ...board('x').cards[0], title: 'x'.repeat(120) }] })
+  const view = await mount(panel, { host: mockHost({ requests: { 'boards.get': () => ({ boards: [long] }) } }) })
+  const shown = JSON.stringify(view.tree()).match(/"title":"(#3 x+…)"/)?.[1]
+  assert.ok(shown && shown.length <= 60, String(shown))
   await view.unmount()
 })

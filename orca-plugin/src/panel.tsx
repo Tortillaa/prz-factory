@@ -9,6 +9,8 @@ import {
   EmptyState,
   host,
   Input,
+  List,
+  ListItem,
   Markdown,
   plugin,
   read,
@@ -194,7 +196,7 @@ function CardSheet({ at }: { at: { board: string; id: number } }) {
         {c.unmet.map((d) => <Badge key={String(d)} tone="warning">{`bloqueada por #${d}`}</Badge>)}
       </Row>
       {c.column !== 'spec' && c.lint.map((i, n) => <Callout key={String(n)} tone={i.severity === 'error' ? 'danger' : 'warning'} title={i.message} />)}
-      {rail(c.column, c.history.findLast((h) => h.to === 'blocked')?.from ?? null, lenses.map(([lens, v]) => ({ lens, state: v.verdict === 'pass' ? 'pass' : v.verdict === 'fail' ? 'fail' : v.worker ? 'working' : 'pending' }))).map((l) => <Text key={l} muted size="xs">{l}</Text>)}
+      <Rail column={c.column} from={c.history.findLast((h) => h.to === 'blocked')?.from ?? null} lenses={lenses.map(([lens, v]) => ({ lens, state: v.verdict === 'pass' ? 'pass' : v.verdict === 'fail' ? 'fail' : v.worker ? 'working' : 'pending' }))} />
       {edit ? (
         <Stack gap="sm">
           <Input label="Título" value={edit.title} onChange={(v) => set(editing, { ...edit, title: v })} />
@@ -254,14 +256,20 @@ export function setup(ctx: PanelContext): void {
 
 const STATIONS = ['spec', 'build', 'review', 'merge']
 const STATION_OF: Record<string, string> = { spec: 'spec', ready: 'build', building: 'build', qa: 'review', review: 'review', merge: 'merge' }
-const MARK = { pass: '✓', fail: '✖', working: '…', pending: '·' }
+const MARK = { pass: '✓', fail: '✖', working: 'en curso', pending: '·' }
 
-/** The rail of stations as one line, the card's station in brackets and, in review, each lens with its state; a blocked card sits where it was blocked from. */
-function rail(column: string, from: string | null, lenses: NonNullable<CardView['panel']>['lenses'] = []): string[] {
+/** The rail of stations on one line: the card's station in strong text (a blocked card sits where it was blocked from) and, in review, each lens with its state. */
+function Rail({ column, from, lenses = [] }: { column: string; from: string | null; lenses?: NonNullable<CardView['panel']>['lenses'] }) {
   const at = STATION_OF[column === 'blocked' ? from ?? '' : column]
-  const line = STATIONS.map((s) => (s === at ? `[${s}]` : s)).join(' · ')
-  return at === 'review' && lenses.length ? [line, lenses.map((l) => `${l.lens} ${MARK[l.state]}`).join('  ')] : [line]
+  return (
+    <Row gap="xs" wrap>
+      {STATIONS.map((s, i) => <Text key={s} size="xs" muted={s !== at} weight={s === at ? 'semibold' : 'regular'}>{i < STATIONS.length - 1 ? `${s} ·` : s}</Text>)}
+      {at === 'review' && lenses.length > 0 && <Text size="xs" muted>{`— ${lenses.map((l) => `${l.lens} ${MARK[l.state]}`).join(' · ')}`}</Text>}
+    </Row>
+  )
 }
+
+const clip = (s: string, max = 60) => (s.length > max ? `${s.slice(0, max - 1)}…` : s)
 
 /** A worker name (build-34-r2, review-qa-7) in words; mirrors roleOf in public/board-view.mjs. */
 function role(worker: string): string {
@@ -305,16 +313,9 @@ export default function Panel() {
     .map(([c]) => c)
   const done = board.cards.filter((c) => c.column === 'done').sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? '')).slice(0, 5)
   const [confirmId, typed, coverErr] = [read(approving), read(replies), read(coverError)]
-  // A row wraps its title (a ListItem would cut it in a narrow sidebar); its button opens the sheet.
-  const item = (c: CardView, title: string, lines: string[], when?: ReturnType<typeof ago>) => (
-    <Card key={String(c.id)}>
-      <Text weight="medium">{title}</Text>
-      {lines.map((l) => <Text key={l} muted size="xs">{l}</Text>)}
-      <Row justify="between">
-        {when}
-        <Button size="sm" variant="ghost" onPress={() => open({ board: board.key, id: c.id })}>{`Abrir #${c.id}`}</Button>
-      </Row>
-    </Card>
+  // The whole row opens the sheet; its title is one clipped line.
+  const item = (c: CardView, title: string, children: unknown) => (
+    <ListItem key={String(c.id)} title={clip(title)} onPress={() => open({ board: board.key, id: c.id })}>{children as never}</ListItem>
   )
   return (
     <Stack gap="md">
@@ -369,19 +370,19 @@ export default function Panel() {
       {running.length > 0 && (
         <Stack gap="sm">
           <Text weight="semibold">En marcha</Text>
-          {running.map((c) => item(c, `#${c.id} ${c.title}`, [...rail(c.column, c.from, c.panel?.lenses), c.workers.map(role).join(' · ')], ago(c.since)))}
+          <List label="En marcha">{running.map((c) => item(c, `#${c.id} ${c.title}`, <><Rail column={c.column} from={c.from} lenses={c.panel?.lenses} /><Row gap="xs"><Text size="xs" muted>{c.workers.map(role).join(' · ')}</Text>{ago(c.since)}</Row></>))}</List>
         </Stack>
       )}
       {queue.length > 0 && (
         <Stack gap="sm">
           <Text weight="semibold">Cola</Text>
-          {queue.map((c, n) => item(c, `${n + 1} · #${c.id} ${c.title}`, [dependsOn(c)]))}
+          <List label="Cola">{queue.map((c, n) => item(c, `${n + 1} · #${c.id} ${c.title}`, <Text size="xs" muted>{dependsOn(c)}</Text>))}</List>
         </Stack>
       )}
       {done.length > 0 && (
         <Stack gap="sm">
           <Text weight="semibold">Hecho</Text>
-          {done.map((c) => item(c, `#${c.id} ${c.title}`, [], ago(c.doneAt)))}
+          <List label="Hecho">{done.map((c) => item(c, `#${c.id} ${c.title}`, ago(c.doneAt)))}</List>
         </Stack>
       )}
       {board.unknown.length > 0 && (

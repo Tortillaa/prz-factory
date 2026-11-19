@@ -5,11 +5,13 @@ const TAIL = 4000;
 
 export function runVerify(commands, cwd, { timeoutMinutes = 20 } = {}) {
   if (!commands.length) throw new Error('"verify" is empty in factory.config.json: nothing proves the build');
+  // The tests under verify must never reach the person's real board (the web's approve sets FACTORY_BOARD).
+  const { FACTORY_BOARD, ...env } = process.env;
   const results = [];
   for (const command of commands) {
     const start = Date.now();
     // A whole command line goes through the shell, so "npm test" and "&&" work everywhere.
-    const r = spawnSync(command, { cwd, shell: true, encoding: 'utf8', timeout: timeoutMinutes * 60_000, maxBuffer: 64 * 1024 * 1024 });
+    const r = spawnSync(command, { cwd, env, shell: true, encoding: 'utf8', timeout: timeoutMinutes * 60_000, maxBuffer: 64 * 1024 * 1024 });
     const output = `${r.stdout || ''}${r.stderr || ''}`;
     const code = r.error?.code === 'ETIMEDOUT' ? 'timeout' : r.status ?? 1;
     results.push({ command, code, ok: code === 0, ms: Date.now() - start, output: output.length > TAIL ? `…${output.slice(-TAIL)}` : output });

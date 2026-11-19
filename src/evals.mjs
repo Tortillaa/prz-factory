@@ -49,7 +49,11 @@ export function prepare(c, { dir = EVALS_DIR } = {}) {
   git(['add', '-A'], repo);
   git(['commit', '-qm', 'fixture'], repo);
 
+  // The case has its own board in its repo: FACTORY_BOARD (the person's) must not redirect it.
+  const { FACTORY_BOARD } = process.env;
+  delete process.env.FACTORY_BOARD;
   const file = store.resolveBoardPath(repo);
+  if (FACTORY_BOARD !== undefined) process.env.FACTORY_BOARD = FACTORY_BOARD;
   let worktree = null;
   const where = (step) => (step.cwd === 'worktree' ? worktree : repo);
   const expand = (v) => (typeof v === 'string' ? v.replace('${worktree}', worktree ?? '') : v);

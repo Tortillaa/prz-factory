@@ -2,10 +2,12 @@
 // releases the Orca terminals of workers that finished, and starts a worker for every action of
 // `plan` (claim → spec → `orca orchestration worker-start` → record), so the coordinator never runs
 // those steps by hand. Orca is reached through `orcaCli()`, which tests replace with a fake.
+import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import * as store from './store.mjs';
 import * as run from './run.mjs';
+import { findLeftovers, applyCleanup } from './cleanup.mjs';
 
 // The Orca CLI as [command, ...prefix args]. FACTORY_ORCA points at a replacement (a .mjs runs on node).
 export function orcaCli(env = process.env) {
@@ -100,6 +102,15 @@ export function dispatch({ file, config, repoRoot, dryRun = false }) {
     });
     events.push({ kind: 'started', id: a.id, lane: a.lane, lens: a.lens, worker: a.worker, dispatch: started.dispatchId, launch: a.launch, worktree: path.basename(started.workspace || p.name || p.worktree) });
   }
+
+  // 4 · Workspaces of cards already in done: nobody will use them again, so they leave Orca now.
+  if (!dryRun && fs.existsSync(repoRoot)) {
+    const found = findLeftovers({ cwd: repoRoot, board: store.load(file), config });
+    // The fake Orca of the tests is not on the shell path that cleanup uses: git removes the worktree.
+    const done = applyCleanup(found, { cwd: repoRoot, ...(process.env.FACTORY_ORCA ? { useOrca: false } : {}) });
+    for (const p of done.worktrees) events.push({ kind: 'cleaned', path: p, id: found.worktrees.find((w) => w.path === p)?.card });
+    for (const note of done.errors) events.push({ kind: 'clean-failed', note });
+  }
   return { events };
 }
 
@@ -111,6 +122,8 @@ export function describe(e) {
     case 'started': return `🚀 ${who} → ${e.worker}${model} ${e.dispatch}`;
     case 'stopped': return `⛔ #${e.id} stopped ${e.worker} (round over)${e.note ? ` · ${e.note}` : ''}`;
     case 'released': return `🧹 #${e.id} released ${e.worker}`;
+    case 'clean-failed': return `✖ cleanup: ${e.note}`;
+    case 'cleaned': return `🧹 #${e.id} removed workspace ${e.path}`;
     case 'failed': return `✖ ${who} ${e.worker}: ${e.note}`;
     case 'skipped': return `· ${who} ${e.worker}: ${e.note}`;
     default: return `${e.kind} ${who} ${e.worker ?? ''}${model}`;

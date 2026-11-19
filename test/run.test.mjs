@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import * as store from '../src/store.mjs';
 import * as run from '../src/run.mjs';
 import { DEFAULTS, loadConfig } from '../src/config.mjs';
@@ -368,6 +369,22 @@ test('dispatch: starts what the plan says, stops orphans, releases finished work
     const third = dispatch({ file, config: cfg, repoRoot: ROOT });
     assert.deepEqual(third.events.filter((e) => e.kind === 'failed').map((e) => e.worker), ['spec-3']);
     assert.equal(store.load(file).cards[2].assignee, null);
+
+    // 4 · A card in done: its clean worktree is removed by the same step, and reported.
+    const repo = fs.mkdtempSync(path.join(dir, 'repo-'));
+    const g = (...a) => execFileSync('git', a, { cwd: repo, stdio: 'ignore' });
+    g('init', '-q', '-b', 'main'); g('config', 'user.email', 't@e.com'); g('config', 'user.name', 't');
+    fs.writeFileSync(path.join(repo, 'a'), 'a'); g('add', '.'); g('commit', '-qm', 'i');
+    const wtPath = path.join(dir, 'factory-9');
+    g('worktree', 'add', '-q', '--detach', wtPath);
+    store.update(file, (bd) => {
+      bd.nextId = 9;
+      const c = store.addCard(bd, { title: 'finished' });
+      store.moveCard(bd, c.id, 'done', null, { force: true });
+    });
+    const fourth = dispatch({ file, config: cfg, repoRoot: repo });
+    assert.deepEqual(fourth.events.filter((e) => e.kind === 'cleaned').map((e) => [e.id, path.resolve(e.path)]), [[9, path.resolve(wtPath)]]);
+    assert.ok(!fs.existsSync(wtPath));
   } finally {
     for (const [k, v] of [['FACTORY_ORCA', prev.orca], ['FAKE_ORCA_LOG', prev.log], ['FAKE_ORCA_FAIL', prev.fail]]) {
       if (v === undefined) delete process.env[k];

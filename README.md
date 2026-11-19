@@ -172,6 +172,7 @@ Cada regla la hace cumplir el código, no la buena voluntad del agente. `factory
 | Una pantalla no sale con aspecto de "hecha por IA" (degradados morados, brillos, emojis, textos que gritan): sigue la dirección de la tarjeta | skill `unslop`, en el Spec Writer, el Builder y la lente `code` |
 | Un cambio de pantalla se entrega con una línea `Design:` y una captura de lo que se vio (o `--no-screenshot` y el motivo), y la lente `code` lo aprueba diciendo cómo lo miró | `handoff` y `verdict` en `src/lanes.mjs`, `ui.paths` en `factory.config.json` |
 | Commits y comentarios en un formato único, con evidencias | `skills/factory-board/references/writing-standard.md` |
+| Un agente que ya no se usa se elimina solo: su terminal al terminar su trabajo y su workspace cuando la tarjeta llega a Done, sin depender del coordinador | `factory dispatch` (`src/dispatch.mjs`), `findLeftovers` en `src/cleanup.mjs` |
 | A la décima ronda fallida, o al segundo worker caído, la tarjeta para y espera a una persona | `sendBack` en `src/store.mjs`, `reclaim` en `src/run.mjs` |
 
 Los guards (`hooks/factory-guard.mjs`) funcionan igual con Claude Code y con Grok.

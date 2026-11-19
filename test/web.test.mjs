@@ -130,6 +130,10 @@ test('la ficha es un panel lateral, no un diálogo, y no edita el cuerpo ni el t
   assert.doesNotMatch(html.match(/<aside id="detail"[\s\S]*?<\/aside>/)[0], /<textarea|name="title"|name="body"/);
 });
 
+test('el nombre de la captura se saca con barra normal e invertida (rutas de Windows)', () => {
+  assert.ok(html.includes('f.split(/[\\\\/]/).pop()'));
+});
+
 test('la regla [hidden] existe: sin ella Forzar se ve siempre', () => {
   assert.match(html, /\[hidden\]\s*\{\s*display:\s*none\s*!important/);
 });

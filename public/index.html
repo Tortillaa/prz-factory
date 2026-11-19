@@ -292,7 +292,7 @@ function fillView() {
   $('v-issues').replaceChildren(...c.lint.map((i) => el('div', { className: 'issue ' + i.severity, textContent: i.message })));
   $('v-body').innerHTML = renderMarkdown(c.body) || '(sin descripción)';
   $('v-shots').replaceChildren(...(c.run.evidence?.files || []).map((f) => {
-    const url = `/api/cards/${c.id}/evidence/${encodeURIComponent(f.split(/[\/]/).pop())}`;
+    const url = `/api/cards/${c.id}/evidence/${encodeURIComponent(f.split(/[\\/]/).pop())}`;
     return el('a', { href: url, target: '_blank' }, el('img', { src: url, alt: 'Captura de evidencia', loading: 'lazy' }));
   }));
   const col = c.column === 'blocked' ? c.history.findLast((h) => h.to === 'blocked')?.from : null;

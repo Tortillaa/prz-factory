@@ -93,7 +93,7 @@ For each `worker_done` or `escalation`:
    - **Yes** → it ended without finishing:
      `factory reclaim <id> --worker <worker> --reason "<the worker's report or stopReason>" --json`.
      The second time, the card goes to blocked with `needs-you` by itself.
-3. After a merge (`🎉`): `factory dispatch` already removes the clean workspaces of cards in done (it reports `🧹 removed workspace`); run `factory cleanup --apply` only for the branches left behind.
+3. After a merge (`🎉`): `factory dispatch` already removes the clean workspaces of cards in done (it reports `🧹 removed workspace`) and the merged branches; run `factory cleanup` only to see what is left.
 4. `factory status --json`: an `inFlight` claim with `stale: true` (older than 3 hours) gets checked
    with `orca orchestration worker-show`; a settled or unknown worker never finished: `factory reclaim`.
 

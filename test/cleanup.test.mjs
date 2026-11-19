@@ -133,11 +133,12 @@ test('a done card merged by rebase and an Orca-suffixed worktree are cleaned; di
   const dirty = wt('factory-2', rev);
   fs.writeFileSync(path.join(dirty, 'notes.txt'), 'wip');
   const active = wt('factory-3', rev);
+  const ghost = wt('factory-99', 'main'); // clean and merged, but no card #99 on the board
 
   const board = boardWith(['done', 'done', 'building']);
   board.cards[0].run.reviewedSha = rev;
   board.cards[1].run.reviewedSha = rev;
   const found = findLeftovers({ cwd: r, board, config: DEFAULTS });
   assert.deepEqual(found.worktrees.map((w) => path.resolve(w.path)).sort(), [reviewer, suffixed].sort());
-  assert.ok(![dirty, active].some((p) => found.worktrees.some((w) => path.resolve(w.path) === p)));
+  assert.ok(![dirty, active, ghost].some((p) => found.worktrees.some((w) => path.resolve(w.path) === p)));
 });

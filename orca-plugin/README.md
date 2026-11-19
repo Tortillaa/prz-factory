@@ -1,7 +1,7 @@
 # prz-factory board (Orca plugin)
 
 A right-sidebar panel that shows the prz-factory board of every repo open in Orca: one board per
-repo (worktrees of the same repo share it), the cards per column, who holds each card, what waits
+repo (worktrees of the same repo share it), what is waiting for a person, in flight (rail of stations, review lenses, roles), queued and done, who holds each card, what waits
 on blockers, and the cards that need a person. It updates live when a card moves, whether the CLI,
 an agent or the web board moved it. "Web board" opens the `factory serve` of that repo, on the port it listens on (it appears only while `factory serve` runs).
 

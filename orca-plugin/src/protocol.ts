@@ -34,8 +34,12 @@ export type CardView = {
   from: string | null
   /** ISO time its worker (or its first reviewer) took it. */
   since: string | null
-  /** Only in review: lenses that passed, out of the lenses this panel has. */
-  panel?: { passed: string[]; total: number }
+  /** Every worker holding the card: its builder, or one reviewer per lens. */
+  workers: string[]
+  /** ISO time it reached done. */
+  doneAt: string | null
+  /** Only in review: lenses that passed, out of the lenses this panel has, and where each one stands. */
+  panel?: { passed: string[]; total: number; lenses: { lens: string; state: 'pass' | 'fail' | 'working' | 'pending' }[] }
 }
 
 export type BoardView = {

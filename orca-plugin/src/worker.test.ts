@@ -472,7 +472,7 @@ test('readBoard gives the review progress by the lenses of factory.config.json, 
   const repo = repoWithBoard([card(risk('High')), { ...card(risk('Low')), id: 8 }])
   const [entry] = discover([repo])
   const none = readBoard(entry).cards[0]
-  assert.deepEqual(none.panel, { passed: ['qa', 'code'], total: 3 })
+  assert.deepEqual(none.panel, { passed: ['qa', 'code'], total: 3, lenses: [{ lens: 'qa', state: 'pass' }, { lens: 'code', state: 'pass' }, { lens: 'security', state: 'working' }] })
   assert.equal(none.sha, 'abc1234def')
   assert.equal(none.lastComment, '¿Qué moneda?')
   fs.writeFileSync(path.join(repo, 'factory.config.json'), JSON.stringify({ review: { lenses: ['qa', 'security', 'code', 'ops'], light: ['qa', 'code'] }, merge: { humanLabels: ['auth'] } }))
@@ -632,4 +632,14 @@ test('readBoard fills since, lastMerge and from, and survives a card with no his
   const [a, b] = readBoard(discover([repoWithBoard([held, bare])])[0]).cards
   assert.deepEqual([a.since, a.lastMerge, a.from], ['2026-01-01T00:00:00.000Z', 'retenido', 'merge'])
   assert.deepEqual([b.since, b.lastMerge, b.from], [null, null, null])
+})
+
+test('readBoard lists every worker holding a card and when it reached done', () => {
+  const lenses = { qa: { worker: 'review-qa-7' }, code: { worker: 'review-code-7' } }
+  const review = { id: 1, title: 'R', column: 'review', panel: { lenses } }
+  const built = { id: 2, title: 'B', column: 'building', assignee: 'build-2' }
+  const done = { id: 3, title: 'D', column: 'done', history: [{ at: '2026-01-01T00:00:00.000Z', to: 'ready' }, { at: '2026-01-02T00:00:00.000Z', from: 'merge', to: 'done' }] }
+  const [a, b, c] = readBoard(discover([repoWithBoard([review, built, done])])[0]).cards
+  assert.deepEqual([a.workers, b.workers, c.workers], [['review-qa-7', 'review-code-7'], ['build-2'], []])
+  assert.deepEqual([a.doneAt, c.doneAt], [null, '2026-01-02T00:00:00.000Z'])
 })

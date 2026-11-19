@@ -11,10 +11,12 @@ const board = (name: string, extra: Partial<BoardsSnapshot['boards'][number]> = 
   unknown: [],
   serve: null as number | null,
   cards: [
-    { id: 3, title: 'Mail sender', column: 'building', labels: [], assignee: 'build-3', waitingOn: [], sha: null, lastComment: null, lastMerge: null, from: null, since: new Date(Date.now() - 5 * 60000).toISOString() },
-    { id: 4, title: 'Pay', column: 'blocked', labels: ['needs-you', 'merge-approval'], assignee: null, waitingOn: [], sha: 'abc1234def', lastComment: 'listo', lastMerge: 'retenido: toca pagos', from: 'merge', since: null },
-    { id: 5, title: 'Money', column: 'blocked', labels: ['needs-you'], assignee: null, waitingOn: [], sha: null, lastComment: '¿Qué moneda usamos?', lastMerge: null, from: 'building', since: null },
-    { id: 6, title: 'Login', column: 'review', labels: [], assignee: 'review-qa-6', waitingOn: [], sha: null, lastComment: null, panel: { passed: ['qa', 'code'], total: 4 } }
+    { id: 3, title: 'Mail sender', column: 'building', labels: [], assignee: 'build-3', workers: ['build-34-r2'], doneAt: null, waitingOn: [], sha: null, lastComment: null, lastMerge: null, from: null, since: new Date(Date.now() - 5 * 60000).toISOString() },
+    { id: 4, title: 'Pay', column: 'blocked', labels: ['needs-you', 'merge-approval'], assignee: null, workers: [], doneAt: null, waitingOn: [], sha: 'abc1234def', lastComment: 'listo', lastMerge: 'Merge para una persona: riesgo high; label auth; diff grande: 477 líneas (máximo 400).\nPara aprobarlo: ejecuta `factory merge 4 --human`.', from: 'merge', since: null },
+    { id: 5, title: 'Money', column: 'blocked', labels: ['needs-you'], assignee: null, workers: [], doneAt: null, waitingOn: [], sha: null, lastComment: '¿Qué moneda usamos?', lastMerge: null, from: 'building', since: null },
+    { id: 6, title: 'Login', column: 'review', labels: [], assignee: 'review-qa-6', workers: ['review-qa-7'], doneAt: null, waitingOn: [], sha: null, lastComment: null, lastMerge: null, from: null, since: null, panel: { passed: ['qa'], total: 2, lenses: [{ lens: 'qa', state: 'pass' }, { lens: 'code', state: 'working' }] } },
+    { id: 7, title: 'Search', column: 'ready', labels: [], assignee: null, workers: [], doneAt: null, waitingOn: [3], sha: null, lastComment: null, lastMerge: null, from: null, since: null },
+    { id: 8, title: 'Landed', column: 'done', labels: [], assignee: null, workers: [], doneAt: new Date().toISOString(), waitingOn: [], sha: null, lastComment: null, lastMerge: null, from: null, since: null }
   ],
   ...extra
 })
@@ -25,15 +27,14 @@ test('shows the board, what needs a person, and switches repos', async () => {
   const summary = view.summary()
   const text = summary.join(' ')
   assert.ok(view.find({ text: 'Te esperan' }))
-  assert.ok(view.find({ text: 'retenido: toca pagos' }))
+  for (const phrase of ['riesgo high', 'label auth', 'diff grande: 477 líneas (máximo 400)']) assert.ok(view.find({ text: phrase }))
+  assert.doesNotMatch(text, /factory merge|⚠|🔴/)
   assert.ok(view.find({ text: 'abc1234' }))
   assert.ok(view.find({ text: /¿Qué moneda usamos[?]/ }))
-  assert.ok(view.find({ text: /review 2[/]4: qa ✓ code ✓/ }))
-  assert.ok(view.find({ text: /review-qa-6 · review/ }))
-  assert.ok(view.find({ label: '#3 Mail sender' }))
+  assert.ok(view.find({ text: '#3 Mail sender' }))
 
   await view.post('boards.changed', { boards: [board('shop', { cards: [] })] })
-  assert.equal(view.find({ label: '#3 Mail sender' }), null)
+  assert.equal(view.find({ text: '#3 Mail sender' }), null)
   assert.deepEqual(view.errors, [])
   assert.deepEqual(view.refusals, [])
   assert.equal(view.find({ text: 'Te esperan' }), null)
@@ -50,7 +51,7 @@ test('shows a broken board by name, and still shows the healthy one', async () =
   assert.doesNotMatch(text, /Sin tablero de la fábrica/)
   await view.unmount()
   const other = await mount(panel, { host: mockHost({ requests: { 'boards.get': () => ({ boards: [board('blog'), bad] }) } }) })
-  assert.ok(other.find({ label: '#3 Mail sender' }))
+  assert.ok(other.find({ text: '#3 Mail sender' }))
   assert.match(other.summary().join(' '), /no se pudo leer el tablero de shop/)
   await other.unmount()
 })
@@ -75,32 +76,28 @@ test('Te esperan: approve with the full sha, answer with a comment then a move t
   await view.unmount()
 })
 
-test('En curso shows who, lane, since when and panel progress; the search narrows the columns', async () => {
+test('the cover reads Te esperan, En marcha, Cola, Hecho, with the rail and roles, and no column sections', async () => {
   const host = mockHost({ requests: { 'boards.get': () => ({ boards: [board('shop')] }) } })
   const view = await mount(panel, { host })
   const tree = JSON.stringify(view.tree())
-  assert.ok(tree.indexOf('Te esperan') < tree.indexOf('"En curso"') && tree.indexOf('"En curso"') < tree.indexOf('"building"'))
+  const at = ['Te esperan', '"En marcha"', '"Cola"', '"Hecho"'].map((t) => tree.indexOf(t))
+  assert.ok(at.every((n, i) => n >= 0 && (i === 0 || n > at[i - 1])), String(at))
+  assert.doesNotMatch(tree, /Collapsible/)
   assert.match(tree, /RelativeTime/)
-  assert.ok(view.find({ text: /build-3 · building/ }))
-  assert.ok(view.find({ text: /review-qa-6 · review · review 2[/]4/ }))
-  const lists = () => view.summary().filter((l) => /^List "(building|review|blocked)"/.test(l)).join(' ')
-  assert.match(lists(), /building.*review.*blocked/) // empty search: every column
-  await view.type({ label: 'Buscar' }, 'LOGIN')
-  assert.equal(lists(), 'List "review": 1 item(s)')
+  assert.match(tree, /spec · \[build\] · review · merge[^]*?Builder · ronda 2/)
+  assert.match(tree, /spec · build · \[review\] · merge[^]*?qa ✓ {2}code …[^]*?Reviewer qa/)
+  assert.ok(view.find({ text: '1 · #7 Search' }))
+  assert.match(tree, /espera a #3/)
+  assert.ok(view.find({ text: '#8 Landed' }))
   await view.unmount()
-  // A card number matches too.
-  const byNumber = await mount(panel, { host })
-  await byNumber.type({ label: 'Buscar' }, '3')
-  assert.deepEqual(byNumber.summary().filter((l) => /^List "building"/.test(l)), ['List "building": 1 item(s)'])
-  await byNumber.unmount()
 })
 
 test('lists cards in an unknown column apart, with their column', async () => {
   const odd = { id: 9, title: 'Old card', column: 'archived', labels: [], assignee: null, waitingOn: [], sha: null, lastComment: null }
   const host = mockHost({ requests: { 'boards.get': () => ({ boards: [board('shop', { unknown: [odd] })] }) } })
   const view = await mount(panel, { host })
-  assert.match(view.summary().join(' '), /columna desconocida/)
-  assert.ok(view.find({ label: '#9 Old card · archived' }))
+  assert.match(JSON.stringify(view.tree()), /Columna desconocida/)
+  assert.ok(view.find({ text: '#9 Old card · archived' }))
   await view.unmount()
 })
 
@@ -137,16 +134,16 @@ const sheetHost = (get: () => object, comment: (i: unknown) => object = () => ({
 test('a card opens its sheet instead of the list, and Volver returns to it', async () => {
   const host = sheetHost(() => sheet())
   const view = await mount(panel, { host })
-  await view.press({ label: '#3 Mail sender' })
+  await view.press({ text: 'Abrir #3' })
   const text = view.summary().join(' ') + JSON.stringify(view.tree())
   assert.match(text, /#3 Mail sender/)
   assert.match(text, /building/)
   assert.match(text, /feature/)
   assert.match(text, /riesgo Low/)
   assert.match(text, /No manda correos/)
-  assert.equal(view.find({ label: '#4 Pay' }), null)
+  assert.equal(view.find({ text: '#8 Landed' }), null)
   await view.press({ text: 'Volver' })
-  assert.ok(view.find({ label: '#4 Pay' }))
+  assert.ok(view.find({ text: '#8 Landed' }))
   assert.deepEqual(view.errors, [])
   await view.unmount()
 })
@@ -163,13 +160,13 @@ test('the sheet shows lint, blockers, comments with their age, history and the r
     })
   )
   const view = await mount(panel, { host })
-  await view.press({ label: '#3 Mail sender' })
+  await view.press({ text: 'Abrir #3' })
   const text = view.summary().join(' ') + JSON.stringify(view.tree())
   assert.match(text, /falta Risk/)
   assert.match(text, /bloqueada por #2/)
   assert.match(text, /ojo con esto/)
   assert.match(text, /ready → building \(build-3\)/)
-  assert.match(text, /qa ✓ · code …/)
+  assert.match(text, /qa ✓\s+code …/)
   assert.match(text, /"RelativeTime","props":{"at":\d+}/)
   await view.unmount()
 })
@@ -179,7 +176,7 @@ test('Comentar sends one request, keeps the text when it fails, and reloads the 
   const sent: unknown[] = []
   const host = sheetHost(() => sheet(), (input) => (sent.push(input), reply))
   const view = await mount(panel, { host })
-  await view.press({ label: '#3 Mail sender' })
+  await view.press({ text: 'Abrir #3' })
   await view.type({ label: 'Comentario' }, 'hola')
   await view.press({ text: 'Comentar' })
   assert.deepEqual(sent, [{ board: '/r/shop/.git', id: 3, text: 'hola' }])
@@ -195,10 +192,10 @@ test('Comentar sends one request, keeps the text when it fails, and reloads the 
 test('a failing card.get shows its error and Volver still works', async () => {
   const host = sheetHost(() => ({ error: 'boom' }))
   const view = await mount(panel, { host })
-  await view.press({ label: '#3 Mail sender' })
+  await view.press({ text: 'Abrir #3' })
   assert.match(view.summary().join(' '), /boom/)
   await view.press({ text: 'Volver' })
-  assert.ok(view.find({ label: '#3 Mail sender' }))
+  assert.ok(view.find({ text: '#3 Mail sender' }))
   await view.unmount()
 })
 
@@ -207,7 +204,7 @@ const actHost = (extra: Record<string, (i: any) => unknown>, get: () => object =
   mockHost({ requests: { 'boards.get': () => ({ boards: [board('shop')] }), 'card.get': get, ...extra } })
 const openSheet = async (host: ReturnType<typeof mockHost>) => {
   const view = await mount(panel, { host })
-  await view.press({ label: '#3 Mail sender' })
+  await view.press({ text: 'Abrir #3' })
   return view
 }
 
@@ -280,27 +277,27 @@ test('a card.get that arrives late for another card is dropped, and actions use 
   const sent: any[] = []
   const get = async (i: { id: number }) => {
     if (i.id === 3) await tick(), await tick() // card 3's answer lands after card 4's
-    return sheet({ id: i.id, title: i.id === 3 ? 'Mail sender' : 'Pay' })
+    return sheet({ id: i.id, title: i.id === 3 ? 'Mail sender' : 'Search' })
   }
   const view = await mount(panel, { host: actHost({ 'card.comment': (i) => (sent.push(i), {}) }, get as never) })
   await Promise.all([
-    view.press({ label: '#3 Mail sender' }),
-    (async () => (await tick(), await view.press({ text: 'Volver' }), await view.press({ label: '#4 Pay' })))()
+    view.press({ text: 'Abrir #3' }),
+    (async () => (await tick(), await view.press({ text: 'Volver' }), await view.press({ text: 'Abrir #7' })))()
   ])
   await tick()
   await tick()
   const shown = view.summary().join(' ') + JSON.stringify(view.tree())
-  assert.match(shown, /#4 Pay/)
+  assert.match(shown, /#7 Search/)
   assert.doesNotMatch(shown, /#3 Mail sender"/)
   await view.type({ label: 'Comentario' }, 'hola')
   await view.press({ text: 'Comentar' })
-  assert.equal(sent[0].id, 4)
+  assert.equal(sent[0].id, 7)
   await view.unmount()
 })
 
 test('an answer for another card than the one open is never shown', { timeout: 5000 }, async () => {
   const view = await mount(panel, { host: actHost({}, () => sheet({ id: 4, title: 'Pay' })) })
-  await view.press({ label: '#3 Mail sender' })
+  await view.press({ text: 'Abrir #3' })
   assert.ok(view.find({ text: /Cargando #3/ }))
   assert.equal(view.find({ text: 'Comentar' }), null)
   await view.unmount()

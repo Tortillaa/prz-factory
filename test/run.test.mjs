@@ -393,6 +393,53 @@ test('dispatch: starts what the plan says, stops orphans, releases finished work
   }
 });
 
+test('roleTitle: every agent is named after its role', async () => {
+  const { roleTitle } = await import('../src/run.mjs');
+  const c = { id: 7 };
+  assert.deepEqual(
+    [['spec'], ['build'], ['build', null, 2], ['review', 'code'], ['merge'], ['qa']].map(([l, lens, r]) => roleTitle(c, l, lens, r)),
+    ['Spec Writer #7', 'Builder #7', 'Builder #7 · ronda 2', 'Reviewer code #7', 'Agente de merge #7', 'QA #7'],
+  );
+});
+
+test('dispatch: names the worktree and task after the role, and a failed rename only leaves a note', async () => {
+  const { dispatch } = await import('../src/dispatch.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-names-'));
+  const file = path.join(dir, 'board.json');
+  const log = path.join(dir, 'orca.log');
+  const calls = () => fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l).args);
+  const prev = { orca: process.env.FACTORY_ORCA, log: process.env.FAKE_ORCA_LOG, fail: process.env.FAKE_ORCA_FAIL };
+  process.env.FACTORY_ORCA = path.join(import.meta.dirname, 'fake-orca.mjs');
+  process.env.FAKE_ORCA_LOG = log;
+  const cfg = { ...config, maxWorkers: 5, review: { ...config.review, lenses: ['qa'] } };
+  try {
+    store.update(file, (b) => store.addCard(b, { title: 'to build', body: GOOD_BODY, column: 'ready' }));
+    dispatch({ file, config: cfg, repoRoot: ROOT });
+    const start = calls().find((a) => a[1] === 'worker-start');
+    assert.match(start[start.indexOf('--task-title') + 1], /^Builder #1/);
+    assert.equal(start[start.indexOf('--display-name') + 1], 'Builder #1');
+
+    // A reviewer reuses a worktree that already exists: it is renamed with `worktree set`.
+    store.update(file, (b) => {
+      store.releaseCard(b, 1);
+      store.moveCard(b, 1, 'review', null, { force: true });
+      b.cards[0].run.branch = 'factory/1-x';
+      b.cards[0].panel.lenses.qa = { worktree: dir };
+    });
+    fs.rmSync(log);
+    process.env.FAKE_ORCA_FAIL = 'set';
+    const { events } = dispatch({ file, config: cfg, repoRoot: ROOT });
+    assert.deepEqual(calls().find((a) => a[1] === 'set'), ['worktree', 'set', '--worktree', `path:${dir}`, '--display-name', 'Reviewer qa #1', '--json']);
+    const started = events.find((e) => e.kind === 'started');
+    assert.match(started.note, /worktree set/);
+  } finally {
+    for (const [k, v] of [['FACTORY_ORCA', prev.orca], ['FAKE_ORCA_LOG', prev.log], ['FAKE_ORCA_FAIL', prev.fail]]) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
 test('report: workers, minutes and wasted rounds per lane, model and card', async () => {
   const { report } = await import('../src/report.mjs');
   const b = board([{ title: 'one', column: 'done' }, { title: 'two', column: 'review' }]);

@@ -69,7 +69,7 @@ One command does the whole step, so you never claim, start or record a worker by
    worker-start` with the lane's agent, model and effort (`agents` in `factory.config.json`), and
    records the dispatch. A start Orca refuses gives the claim back.
 
-Each event is `{ kind, id, lane, lens, worker, dispatch, launch }`, `kind` one of `started`,
+Each event is `{ kind, id, lane, lens, worker, dispatch, launch }` (a `started` may carry a `note` when naming the agent in Orca failed: harmless), `kind` one of `started`,
 `stopped`, `released`, `failed`, `skipped`. Report one line each (`🚀 #12 review:security →
 review-security-12 (grok grok-4.7)`, `⛔ #12 stopped review-qa-12 (round over)`, `🧹 #12 released
 spec-12`). For a `failed` start, load Orca's `references/recovery-and-cleanup.md` before any retry.

@@ -173,6 +173,7 @@ Cada regla la hace cumplir el código, no la buena voluntad del agente. `factory
 | Un cambio de pantalla se entrega con una línea `Design:` y una captura de lo que se vio (o `--no-screenshot` y el motivo), y la lente `code` lo aprueba diciendo cómo lo miró | `handoff` y `verdict` en `src/lanes.mjs`, `ui.paths` en `factory.config.json` |
 | Commits y comentarios en un formato único, con evidencias | `skills/factory-board/references/writing-standard.md` |
 | Un agente que ya no se usa se elimina solo: su terminal al terminar su trabajo y su workspace cuando la tarjeta llega a Done, sin depender del coordinador | `factory dispatch` (`src/dispatch.mjs`), `findLeftovers` en `src/cleanup.mjs` |
+| Cada agente se llama en Orca como el rol que asume (`Builder #N`, `Reviewer qa #N`, `Agente de merge #N`…), también cuando comparte workspace con otro rol | `roleTitle` en `src/run.mjs`, `factory dispatch` (`src/dispatch.mjs`) |
 | A la décima ronda fallida, o al segundo worker caído, la tarjeta para y espera a una persona | `sendBack` en `src/store.mjs`, `reclaim` en `src/run.mjs` |
 
 Los guards (`hooks/factory-guard.mjs`) funcionan igual con Claude Code y con Grok.

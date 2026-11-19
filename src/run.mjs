@@ -19,6 +19,12 @@ const STALE_CLAIM_MS = 3 * 60 * 60_000;
 // earlier round can then never act under the claim of the current one.
 export const workerName = (id, lane, lens = null, round = 1) => `${lens ? `${lane}-${lens}-${id}` : `${lane}-${id}`}${round > 1 ? `-r${round}` : ''}`;
 
+// The name a worker shows in Orca: the role it plays on the card, not the workspace it shares.
+export function roleTitle(card, lane, lens = null, rnd = 1) {
+  const role = { spec: 'Spec Writer', build: 'Builder', merge: 'Agente de merge', qa: 'QA' }[lane] ?? `Reviewer ${lens}`;
+  return `${role} #${card.id}${lane === 'build' && rnd > 1 ? ` · ronda ${rnd}` : ''}`;
+}
+
 const COLUMN_OF = { spec: 'spec', build: 'building', qa: 'qa', review: 'review', merge: 'merge' };
 // Which visit of the lane's column this dispatch serves: entries into it so far, plus the one a card in
 // ready is about to make.

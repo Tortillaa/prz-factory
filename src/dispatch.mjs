@@ -85,10 +85,11 @@ export function dispatch({ file, config, repoRoot, dryRun = false }) {
     const card = store.getCard(store.load(file), a.id);
     const spec = run.spec(card, a.lane, a.worker, repoRoot, a.lens);
     const p = a.placement;
+    const role = run.roleTitle(card, a.lane, a.lens, run.round(card, a.lane));
     const args = ['orchestration', 'worker-start', '--spec-file', '-', '--agent', a.launch.agent,
       ...(a.launch.model ? ['--model', a.launch.model] : []), ...(a.launch.effort ? ['--effort', a.launch.effort] : []),
-      '--task-title', `#${a.id} ${label(a)}: ${a.title}`.slice(0, 120), '--worktree', p.worktree,
-      ...(p.worktree === 'new-top-level' ? ['--repo', p.repo, '--name', p.name, '--base-branch', config.baseBranch] : [])];
+      '--task-title', `${role}: ${a.title}`.slice(0, 120), '--worktree', p.worktree,
+      ...(p.worktree === 'new-top-level' ? ['--repo', p.repo, '--name', p.name, '--base-branch', config.baseBranch, '--display-name', role] : [])];
     const started = orca(args, { input: spec });
     if (started.error || !started.dispatchId) {
       // Nothing started: give the claim back so the next dispatch retries it.
@@ -100,7 +101,18 @@ export function dispatch({ file, config, repoRoot, dryRun = false }) {
       run.recordDispatch(b, a.id, { worker: a.worker, dispatch: started.dispatchId });
       (b.workers ??= []).push({ id: a.id, worker: a.worker, dispatch: started.dispatchId, lane: a.lane, lens: a.lens, agent: a.launch.agent, model: a.launch.model ?? null, startedAt: new Date().toISOString() });
     });
-    events.push({ kind: 'started', id: a.id, lane: a.lane, lens: a.lens, worker: a.worker, dispatch: started.dispatchId, launch: a.launch, worktree: path.basename(started.workspace || p.name || p.worktree) });
+    // The role changes while the workspace stays: rename it, and the terminal tab. A failure only leaves a note.
+    const notes = [];
+    if (p.worktree !== 'new-top-level') {
+      const r = orca(['worktree', 'set', '--worktree', p.worktree, '--display-name', role]);
+      if (r.error) notes.push(`worktree set: ${r.error}`);
+    }
+    const handle = started.terminal ?? started.terminalHandle;
+    if (handle) {
+      const r = orca(['terminal', 'rename', '--terminal', handle, '--title', role]);
+      if (r.error) notes.push(`terminal rename: ${r.error}`);
+    }
+    events.push({ kind: 'started', id: a.id, lane: a.lane, lens: a.lens, worker: a.worker, dispatch: started.dispatchId, launch: a.launch, worktree: path.basename(started.workspace || p.name || p.worktree), ...(notes.length ? { note: notes.join('; ') } : {}) });
   }
 
   // 4 · Workspaces of cards already in done: nobody will use them again, so they leave Orca now.

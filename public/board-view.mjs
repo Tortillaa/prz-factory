@@ -21,11 +21,11 @@ export function groupBoard(state) {
   return { waiting, inFlight, queue, done, backlog: cards.filter((c) => c.column === 'backlog') };
 }
 
-// The state of each review lens: pass, fail, active (someone is reviewing) or waiting.
+// The state of each review lens: pass, fail, working (someone is reviewing) or pending.
 export function lensStates(card, lenses = []) {
   return (card.lenses || lenses).map((lens) => {
     const s = card.panel?.lenses?.[lens] || {};
-    return { lens, state: s.verdict === 'pass' ? 'pass' : s.verdict === 'fail' ? 'fail' : s.worker ? 'active' : 'waiting', worker: s.worker ?? null };
+    return { lens, state: s.verdict === 'pass' ? 'pass' : s.verdict === 'fail' ? 'fail' : s.worker ? 'working' : 'pending', worker: s.worker ?? null };
   });
 }
 
@@ -45,5 +45,58 @@ export function ago(iso, now = Date.now()) {
   return m < 1440 ? `hace ${Math.floor(m / 60)} h` : `hace ${Math.floor(m / 1440)} d`;
 }
 
-export const since = (card) => card.claimedAt ?? lastAt(card);
+export const shorten = (text, max = 48) => text.length <= max ? text : text.slice(0, max).replace(/\s+\S*$/, '') + '…';
+
+// The four stations with their cards in flight (the same ones En marcha lists) and, in review, each lens.
+export function lineOf(state) {
+  const flying = groupBoard(state).inFlight.map((card) => ({ card, at: stationOf(card, state.lenses) })).filter((x) => x.at);
+  return STATIONS.map((station) => {
+    const cards = flying.filter((x) => x.at.station === station).map((x) => ({ card: x.card, lenses: x.at.lenses }));
+    return { station, count: cards.length, cards };
+  });
+}
+
+const dayKey = (t) => new Date(t).toDateString();
+const doneAt = (c) => c.history?.findLast((h) => h.to === 'done')?.at ?? lastAt(c);
+
+// The day cards landed, by calendar day ("Hoy", "Ayer", then the date), in the order given.
+export function dayGroups(done, now = Date.now()) {
+  const label = (t) => dayKey(t) === dayKey(now) ? 'Hoy' : dayKey(t) === dayKey(now - 86400000) ? 'Ayer'
+    : new Date(t).toLocaleDateString('es', { day: 'numeric', month: 'long' });
+  const groups = [];
+  for (const card of done) {
+    const day = label(doneAt(card));
+    if (groups.at(-1)?.day === day) groups.at(-1).cards.push(card); else groups.push({ day, cards: [card] });
+  }
+  return groups;
+}
+
+// The figures of the day; minutes is the mean from a card's first history entry to done, over the last ten (null when none).
+export function statsOf(state, now = Date.now()) {
+  const { waiting, inFlight } = groupBoard(state);
+  const done = state.cards.filter((c) => c.column === 'done').sort((a, b) => doneAt(b).localeCompare(doneAt(a)));
+  const spans = done.slice(0, 10).filter((c) => c.history?.length).map((c) => Date.parse(doneAt(c)) - Date.parse(c.history[0].at));
+  return {
+    inFlight: inFlight.length, waiting: waiting.length,
+    mergedToday: done.filter((c) => dayKey(doneAt(c)) === dayKey(now)).length,
+    minutes: spans.length ? Math.round(spans.reduce((a, b) => a + b, 0) / spans.length / 60000) : null,
+  };
+}
+
+// Why the gate held a merge for a person, as short phrases (no emoji, no CLI instruction).
+export function reasonsOf(card) {
+  const prefix = 'Merge para una persona:';
+  const line = card.comments.findLast((m) => m.text.includes(prefix))?.text.split('\n').find((l) => l.startsWith(prefix));
+  return line ? line.slice(prefix.length).trim().replace(/\.$/, '').split('; ') : [];
+}
+
+// A worker name (spec-3, build-34-r2, review-qa-7, merge-9) in words.
+export function roleOf(worker) {
+  const m = /^(spec|build|merge|review)-(?:([^-\d][^-]*)-)?\d+(?:-r(\d+))?$/.exec(worker);
+  if (!m) return worker;
+  const name = { spec: 'Spec Writer', build: 'Builder', merge: 'Agente de merge', review: 'Reviewer' + (m[2] ? ' ' + m[2] : '') }[m[1]];
+  return m[3] ? `${name} · ronda ${m[3]}` : name;
+}
+
+export const since =(card) => card.claimedAt ?? lastAt(card);
 export const workersOf = (card) => [...new Set([card.assignee, ...lensWorkers(card)].filter(Boolean))];

@@ -7,7 +7,7 @@
 <style>
   :root {
     --bg: #f5f5f4; --card: #fff; --text: #1c1c1a; --muted: #6b6b66; --line: #d8d8d4;
-    --accent: #b45309; --on-accent: #fff; --ask: #fbf1dc; --err: #c93c3c;
+    --accent: #a64708; --on-accent: #fff; --ask: #fbf1dc; --err: #c93c3c;
     --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
@@ -18,45 +18,72 @@
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   header { display: flex; align-items: baseline; gap: 16px; padding: 16px 24px; border-bottom: 1px solid var(--line); }
   header h1 { font-size: 16px; font-weight: 500; margin: 0; }
-  header .hint { margin-left: auto; }
-  .hint, .meta, .status { color: var(--muted); font-size: 12px; }
+  .meta, .status { color: var(--muted); font-size: 12px; }
   .status, .num { font-variant-numeric: tabular-nums; }
-  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 32px; padding: 24px; max-width: 1440px; margin: 0 auto; }
-  @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } header { flex-wrap: wrap; } header .hint { margin-left: 0; } }
-  section { margin-bottom: 32px; }
-  h2 { font-size: 14px; font-weight: 500; margin: 0 0 12px; display: flex; gap: 8px; align-items: baseline; }
-  h2 .count { color: var(--muted); font-family: var(--mono); font-size: 12px; font-weight: 400; }
+  .count { color: var(--muted); font-family: var(--mono); font-size: 12px; font-weight: 400; }
+  .id, .sha { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  .id { margin-right: 8px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; }
   .empty { color: var(--muted); margin: 0; }
   .stack { display: grid; gap: 8px; }
-  .item { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; cursor: pointer; transition: border-color .15s; overflow-wrap: anywhere; }
-  .item:hover { border-color: var(--muted); }
-  .item .id { color: var(--muted); font-family: var(--mono); font-size: 12px; margin-right: 8px; }
+  section { margin-bottom: 32px; }
+  h2 { font-size: 14px; font-weight: 500; margin: 0 0 12px; display: flex; gap: 8px; align-items: baseline; }
+  h3 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 16px 0 8px; }
+
+  /* The line: four stations on one track, a ficha under the station each card in flight is at. */
+  .line { max-width: 1392px; margin: 24px 24px 0; padding: 24px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; min-height: 240px; }
+  @media (min-width: 1440px) { .line { margin-inline: auto; } }
+  .stations { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
+  .st-head { display: flex; gap: 8px; align-items: baseline; font-size: 20px; }
+  .st-name { font-family: var(--mono); }
+  .track { height: 2px; background: var(--line); margin: 16px 0 24px; position: relative; }
+  .track::before { content: ""; position: absolute; top: -5px; left: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--line); }
+  .station.on .track, .station.on .track::before { background: var(--text); }
+  .station:not(.on) .st-head { color: var(--muted); }
+  .tokens { display: grid; gap: 8px; }
+  .idle { margin: 24px 0 0; color: var(--muted); font-size: 16px; }
+  .idle strong { color: var(--text); font-weight: 500; }
+  @media (max-width: 640px) { .stations { grid-template-columns: minmax(0, 1fr); } }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 32px; padding: 32px 24px 24px; max-width: 1440px; margin: 0 auto; }
+  @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .item, .ficha { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; cursor: pointer; transition: border-color .15s; overflow-wrap: anywhere; }
+  .ficha { background: var(--bg); }
+  .item:hover, .ficha:hover { border-color: var(--muted); }
   .item.ask { background: var(--ask); border-color: var(--accent); }
-  .item .why { margin: 4px 0 0; color: var(--muted); font-size: 12px; white-space: pre-wrap; }
+  .kind { font-size: 12px; font-weight: 500; color: var(--accent); margin-bottom: 4px; }
+  .reasons { margin: 8px 0 0; padding-left: 16px; color: var(--muted); }
+  .why { margin: 8px 0 0; color: var(--muted); white-space: pre-wrap; }
   .flight { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: center; }
   @media (max-width: 640px) { .flight { grid-template-columns: minmax(0, 1fr); } }
-  .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; }
   .rail { display: grid; grid-template-columns: repeat(4, 1fr); font-family: var(--mono); font-size: 12px; color: var(--muted); }
   .rail > span { border-top: 2px solid var(--line); padding-top: 8px; position: relative; }
   .rail > .past { border-color: var(--muted); }
   .rail > .now { border-color: var(--text); color: var(--text); }
   .rail > .now::before { content: ""; position: absolute; top: -6px; left: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--text); }
-  .lenses { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+  .lenses { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
   .lens { display: flex; gap: 4px; align-items: center; font-family: var(--mono); font-size: 12px; color: var(--muted); }
   .lens::before { content: ""; width: 8px; height: 8px; border: 1px solid var(--muted); border-radius: 2px; }
   .lens.pass { color: var(--text); } .lens.pass::before { background: var(--text); border-color: var(--text); }
   .lens.fail { color: var(--err); } .lens.fail::before { background: var(--err); border-color: var(--err); }
-  .lens.active { color: var(--text); } .lens.active::before { border-width: 3px; border-color: var(--text); }
-  .row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+  .lens.working { color: var(--text); } .lens.working::before { border-width: 3px; border-color: var(--text); }
+  .queue { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .queue .item { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; padding: 8px 12px; }
+  .queue .next { border-color: var(--text); }
+  .figs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px; margin: 0; }
+  .fig { margin: 0; }
+  .fig dd { margin: 0; font-size: 32px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .fig dt { color: var(--muted); font-size: 12px; }
+  .list .item { padding: 8px 12px; }
+  .row { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
   input { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px; flex: 1; min-width: 0; }
   button { font: inherit; border: 0; border-radius: 8px; padding: 8px 12px; background: var(--accent); color: var(--on-accent); cursor: pointer; transition: opacity .15s; }
   button:hover { opacity: .88; }
   button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
-  .list .item { padding: 8px 12px; }
   details summary { cursor: pointer; font-weight: 500; margin-bottom: 12px; }
   dialog { width: min(720px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 16px; background: var(--card); color: var(--text); padding: 20px; }
   dialog::backdrop { background: rgb(0 0 0 / .4); }
-  dialog h3 { font-weight: 500; margin: 0 0 8px; padding-right: 28px; }
+  dialog h3 { font-size: 16px; color: var(--text); margin: 0 0 8px; padding-right: 28px; }
   dialog .body { white-space: pre-wrap; margin: 12px 0; font-family: var(--mono); font-size: 14px; }
   dialog h4 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 16px 0 8px; }
   .comment { border-left: 4px solid var(--line); padding: 4px 12px; margin: 8px 0; white-space: pre-wrap; }
@@ -65,15 +92,17 @@
 </style>
 </head>
 <body>
-<header><h1>prz-factory</h1><span class="status" id="active">0 en curso · 0 te esperan</span><span class="status" id="status">conectando…</span><span class="hint">Pide cambios al agente de Orca</span></header>
+<header><h1>prz-factory</h1><span class="status" id="status">conectando…</span></header>
+<section class="line" id="line" aria-label="Línea de montaje"></section>
 <div class="layout">
   <main>
     <section><h2>Te esperan <span class="count" id="n-waiting"></span></h2><div class="stack" id="waiting"></div></section>
     <section><h2>En marcha <span class="count" id="n-flight"></span></h2><div class="stack" id="flight"></div></section>
-    <section><h2>Cola <span class="count" id="n-queue"></span></h2><div class="stack list" id="queue"></div></section>
+    <section><h2>Cola <span class="count" id="n-queue"></span></h2><ol class="queue" id="queue"></ol></section>
   </main>
   <aside>
-    <section><h2>Hecho recientemente</h2><div class="stack list" id="done"></div></section>
+    <section><h2>Cifras</h2><dl class="figs" id="figs"></dl></section>
+    <section><h2>Hecho recientemente</h2><div id="done"></div></section>
     <section><details><summary>Backlog <span class="count" id="n-backlog"></span></summary><div class="stack list" id="backlog"></div></details></section>
   </aside>
 </div>
@@ -91,7 +120,7 @@
 </dialog>
 
 <script type="module">
-import { groupBoard, lensStates, stationOf, STATIONS, ago, since, workersOf } from '/board-view.mjs';
+import { groupBoard, lensStates, stationOf, lineOf, statsOf, reasonsOf, roleOf, dayGroups, shorten, STATIONS, ago, since, workersOf } from '/board-view.mjs';
 
 let state = { columns: [], lenses: [], cards: [] };
 let openId = null;
@@ -123,8 +152,19 @@ function rail(card) {
     at.lenses.length > 0 && el('div', { className: 'lenses' }, ...lensChips(card)));
 }
 
-const head = (c) => [el('span', { className: 'id', textContent: '#' + c.id }), c.title];
-const open = (node, c) => { node.onclick = () => openCard(c.id); return node; };
+const head = (c) => [el('span', { className: 'id', textContent: '#' + c.id }), el('span', { title: c.title, textContent: shorten(c.title, 80) })];
+
+// Relative times are refreshed in place by the clock below, so a rebuild is not needed to keep them true.
+const when = (iso) => { const n = el('span', { className: 'num', textContent: ago(iso) }); n.dataset.at = iso; return n; };
+
+// Every row that opens a card: reachable with Tab, opened with Enter or a click. `zone` + id lets a rebuild give the focus back.
+function open(node, c, zone) {
+  node.tabIndex = 0;
+  node.dataset.key = zone + c.id;
+  node.onclick = (e) => { if (!e.target.closest('button, input')) openCard(c.id); };
+  node.onkeydown = (e) => { if (e.key === 'Enter' && e.target === node) openCard(c.id); };
+  return node;
+}
 
 function approve(c, btn) {
   const sha = c.run.reviewedSha;
@@ -136,27 +176,55 @@ function approve(c, btn) {
 }
 
 function waitingItem(c) {
-  const last = (c.comments.at(-1)?.text || '').split('\n').filter(Boolean).slice(0, 3).join('\n');
   const canApprove = c.labels.includes('merge-approval') && c.run.branch && c.run.reviewedSha;
+  const reasons = reasonsOf(c);
+  const said = (c.comments.at(-1)?.text || '').split('\n').filter((l) => l && !l.includes('factory merge'))
+    .map((l) => l.replace(/^\[[^\]]*\]\s*\p{Extended_Pictographic}*\s*/u, '')).slice(0, 3).join('\n');
   const btn = canApprove && el('button', { textContent: 'Aprobar y mergear' });
   if (btn) btn.onclick = () => approve(c, btn);
   const form = el('form', { className: 'row' }, el('input', { name: 'text', placeholder: 'Contestar', required: true }), el('button', { className: canApprove ? 'ghost' : '', textContent: 'Enviar' }));
   form.onsubmit = (e) => { e.preventDefault(); comment(c.id, form); };
-  const item = el('div', { className: 'item ask' }, el('div', {}, ...head(c)), last && el('p', { className: 'why', textContent: last }), el('div', { className: 'row' }, btn, form));
-  // Clicks on the controls must not open the card.
-  item.onclick = (e) => { if (!e.target.closest('button, input')) openCard(c.id); };
-  return item;
+  return open(el('div', { className: 'item ask' },
+    el('div', { className: 'kind', textContent: canApprove ? 'Aprobar merge' : 'Contestar' }),
+    el('div', {}, ...head(c), canApprove && el('span', { className: 'sha', textContent: ' ' + c.run.reviewedSha.slice(0, 8) })),
+    reasons.length > 0 ? el('ul', { className: 'reasons' }, ...reasons.map((r) => el('li', { textContent: r })))
+      : said && el('p', { className: 'why', textContent: said }),
+    el('div', { className: 'row' }, btn, form)), c, 'waiting');
 }
+
+const roles = (c) => workersOf(c).map(roleOf).join(' · ');
 
 function flightItem(c) {
   return open(el('div', { className: 'item flight' },
-    el('div', {}, el('div', {}, ...head(c)),
-      el('div', { className: 'meta' }, el('span', { textContent: '@' + workersOf(c).join(' @') }), el('span', { className: 'num', textContent: ago(since(c)) }))),
-    rail(c)), c);
+    el('div', {}, el('div', {}, ...head(c)), el('div', { className: 'meta' }, el('span', { textContent: roles(c) }), when(since(c)))),
+    rail(c)), c, 'flight');
 }
 
-const listItem = (c, note) => open(el('div', { className: 'item' }, ...head(c), el('div', { className: 'meta' }, note)), c);
-const queueNote = (c) => c.unmet.length > 0 ? 'espera a ' + c.unmet.map((d) => '#' + d).join(' ') : c.column;
+// A card on the line: under the station it is at, with a box per lens in review.
+const ficha = ({ card: c, lenses }) => open(el('div', { className: 'ficha' },
+  el('div', {}, ...head(c)), el('div', { className: 'meta' }, el('span', { textContent: roles(c) }), when(since(c))),
+  lenses.length > 0 && el('div', { className: 'lenses' }, ...lensChips(c))), c, 'line');
+
+function renderLine(last) {
+  const line = lineOf(state);
+  $('line').replaceChildren(
+    el('div', { className: 'stations' }, ...line.map((s) => el('div', { className: 'station' + (s.count ? ' on' : '') },
+      el('div', { className: 'st-head' }, el('span', { className: 'st-name', textContent: s.station }), el('span', { className: 'count', textContent: s.count })),
+      el('div', { className: 'track' }),
+      el('div', { className: 'tokens' }, ...s.cards.map(ficha))))),
+    ...(line.every((s) => s.count === 0) ? [el('p', { className: 'idle' }, el('strong', { textContent: 'Línea parada' }),
+      last ? ` · última mergeada: #${last.id} ${shorten(last.title)}` : '')] : []));
+}
+
+const minutes = (m) => m == null ? '–' : m < 90 ? `${m} min` : `${(m / 60).toFixed(1)} h`;
+
+function renderFigs() {
+  const s = statsOf(state);
+  $('figs').replaceChildren(...[['En curso', s.inFlight], ['Te esperan', s.waiting], ['Mergeadas hoy', s.mergedToday], ['Idea a main, media de 10', minutes(s.minutes)]]
+    .map(([label, n]) => el('div', { className: 'fig' }, el('dd', { textContent: n }), el('dt', { textContent: label }))));
+}
+
+const listItem = (c, zone, ...note) => open(el('div', { className: 'item' }, el('div', {}, el('div', {}, ...head(c)), el('div', { className: 'meta' }, ...note))), c, zone);
 
 function fill(id, cards, make, empty) {
   $(id).replaceChildren(...(cards.length ? cards.map(make) : [el('p', { className: 'empty', textContent: empty })]));
@@ -164,16 +232,29 @@ function fill(id, cards, make, empty) {
 
 function render() {
   const g = groupBoard(state);
-  $('active').textContent = `${g.inFlight.length} en curso · ${g.waiting.length} te esperan`;
+  const focused = document.activeElement?.dataset?.key;
   document.title = g.waiting.length ? `(${g.waiting.length}) prz-factory` : 'prz-factory';
   // Do not rebuild "Te esperan" while the person is typing a reply there.
   const typing = $('waiting').contains(document.activeElement) && document.activeElement.value;
-  if (!typing) fill('waiting', g.waiting, waitingItem, 'Nada espera tu respuesta');
+  if (!typing) fill('waiting', g.waiting, waitingItem, 'Nada te espera');
+  renderLine(g.done[0]);
+  renderFigs();
   fill('flight', g.inFlight, flightItem, 'Ningún worker en marcha');
-  fill('queue', g.queue, (c) => listItem(c, queueNote(c)), 'La cola está vacía');
-  fill('done', g.done, (c) => listItem(c, [c.run.mergedSha?.slice(0, 7), ago(c.history.at(-1)?.at)].filter(Boolean).join(' · ')), 'Todavía nada');
-  fill('backlog', g.backlog, (c) => listItem(c, ''), 'Vacío');
+  $('queue').replaceChildren(...(g.queue.length ? g.queue.map((c, i) => {
+    const item = listItem(c, 'queue', c.unmet.length > 0 ? 'espera a ' + c.unmet.map((d) => '#' + d).join(' ') : i === 0 ? 'siguiente' : c.column);
+    item.classList.toggle('next', i === 0);
+    item.prepend(el('span', { className: 'num', textContent: i + 1 }));
+    return el('li', {}, item);
+  }) : [el('p', { className: 'empty', textContent: 'La cola está vacía' })]));
+  $('done').replaceChildren(...(g.done.length ? dayGroups(g.done).flatMap((d) => [el('h3', { textContent: d.day }),
+    el('div', { className: 'stack list' }, ...d.cards.map((c) => {
+      const at = c.history.at(-1)?.at;
+      return listItem(c, 'done', c.run.mergedSha && el('span', { className: 'sha', textContent: c.run.mergedSha.slice(0, 7) }),
+        at && new Date(at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }));
+    }))]) : [el('p', { className: 'empty', textContent: 'Todavía nada' })]));
+  fill('backlog', g.backlog, (c) => listItem(c, 'backlog'), 'Vacío');
   for (const [id, n] of [['n-waiting', g.waiting], ['n-flight', g.inFlight], ['n-queue', g.queue], ['n-backlog', g.backlog]]) $(id).textContent = n.length;
+  if (focused) document.querySelector(`[data-key="${focused}"]`)?.focus();
   if (openId && !$('detail').contains(document.activeElement)) fillView();
 }
 
@@ -205,6 +286,9 @@ $('detail').onclose = () => { openId = null; };
 $('v-comment').onsubmit = (e) => { e.preventDefault(); comment(openId, e.target); };
 
 async function refresh() { state = await api('/api/board'); render(); }
+
+// Only the time nodes change, so the focus and a reply being typed survive.
+setInterval(() => document.querySelectorAll('[data-at]').forEach((n) => { n.textContent = ago(n.dataset.at); }), 30000);
 
 const events = new EventSource('/api/events');
 events.onopen = () => { $('status').textContent = 'en vivo'; refresh(); };

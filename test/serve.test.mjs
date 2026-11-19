@@ -149,7 +149,7 @@ test('the page has #active and /api/board exposes the claims it counts', async (
       child.stdout.on('data', (d) => { if (String(d).includes('board:')) { clearTimeout(timer); resolve(); } });
     });
     const get = (p) => fetch(`http://127.0.0.1:${port}${p}`, { headers: { host: `localhost:${port}` } });
-    assert.ok((await (await get('/')).text()).includes('id="active"'));
+    assert.ok((await (await get('/')).text()).includes('id="line"'));
     const mod = await get('/board-view.mjs');
     assert.equal(mod.status, 200);
     assert.match(mod.headers.get('content-type'), /^text\/javascript/);

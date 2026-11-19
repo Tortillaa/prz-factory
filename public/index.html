@@ -81,14 +81,26 @@
   button:hover { opacity: .88; }
   button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
   details summary { cursor: pointer; font-weight: 500; margin-bottom: 12px; }
-  dialog { width: min(720px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 16px; background: var(--card); color: var(--text); padding: 20px; }
-  dialog::backdrop { background: rgb(0 0 0 / .4); }
-  dialog h3 { font-size: 16px; color: var(--text); margin: 0 0 8px; padding-right: 28px; }
-  dialog .body { white-space: pre-wrap; margin: 12px 0; font-family: var(--mono); font-size: 14px; }
-  dialog h4 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 16px 0 8px; }
+  #detail { position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 100vw); overflow-y: auto; background: var(--card); border-left: 1px solid var(--line); padding: 20px 24px 32px; z-index: 2; }
+  #detail h3 { font-size: 16px; color: var(--text); margin: 0 0 8px; padding-right: 28px; }
+  #detail h4 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 24px 0 8px; }
+  .body { margin: 16px 0; overflow-wrap: anywhere; }
+  .body h3, .body h4, .body h5, .body h6 { font-size: 14px; color: var(--text); margin: 16px 0 4px; padding: 0; }
+  .body p, .body ul { margin: 4px 0; }
+  .body ul { padding-left: 20px; }
+  .body li:has(input) { list-style: none; margin-left: -20px; }
+  .body code { font-family: var(--mono); font-size: 12px; background: var(--bg); padding: 0 4px; border-radius: 4px; }
+  .body pre { background: var(--bg); border-radius: 8px; padding: 12px; overflow-x: auto; margin: 8px 0; }
+  .body pre code { padding: 0; }
+  .body a { color: var(--accent); }
+  .shots { display: grid; gap: 8px; }
+  .shots img { width: 100%; border: 1px solid var(--line); border-radius: 8px; display: block; }
+  .issue { color: var(--muted); margin: 4px 0; }
+  .issue.error { color: var(--err); }
   .comment { border-left: 4px solid var(--line); padding: 4px 12px; margin: 8px 0; white-space: pre-wrap; }
-  .close { position: absolute; top: 12px; right: 12px; background: transparent; color: var(--muted); padding: 0 4px; font-size: 16px; }
-  [hidden] { display: none !important; }
+  .close { position: absolute; top: 12px; right: 16px; background: transparent; color: var(--muted); padding: 0 4px; font-size: 16px; }
+  @media (min-width: 1500px) { body.open { padding-right: 480px; } }
+ { display: none !important; }
 </style>
 </head>
 <body>
@@ -107,20 +119,27 @@
   </aside>
 </div>
 
-<dialog id="detail">
-  <button class="close" onclick="this.closest('dialog').close()" aria-label="Cerrar">×</button>
+<aside id="detail" aria-label="Ficha de la tarjeta" hidden>
+  <button class="close" id="v-close" aria-label="Cerrar">×</button>
   <h3 id="v-title"></h3>
   <div class="meta" id="v-meta"></div>
   <section id="v-panel"></section>
+  <div id="v-issues"></div>
   <div class="body" id="v-body"></div>
+  <div id="v-shots" class="shots"></div>
   <div class="row"><button id="v-approve" hidden>Aprobar y mergear</button></div>
+  <h4>Contestar</h4>
+  <form class="row" id="v-comment"><input name="text" placeholder="Comentario" required><button>Enviar</button></form>
+  <details><summary>Más</summary>
+    <form class="row" id="v-move"><select id="v-to" aria-label="Mover a"></select><button class="ghost">Mover a</button></form>
+    <div class="row" id="v-force" hidden><span class="meta" id="v-why"></span><button class="ghost" type="button" id="v-force-go">Forzar</button></div>
+  </details>
   <h4>Comentarios</h4><div id="v-comments"></div>
-  <form class="row" id="v-comment"><input name="text" placeholder="Añadir comentario" required><button>Enviar</button></form>
   <h4>Historial</h4><div id="v-history" class="meta"></div>
-</dialog>
+</aside>
 
 <script type="module">
-import { groupBoard, lensStates, stationOf, lineOf, statsOf, reasonsOf, roleOf, dayGroups, shorten, STATIONS, ago, since, workersOf } from '/board-view.mjs';
+import { groupBoard, lensStates, stationOf, lineOf, statsOf, reasonsOf, roleOf, dayGroups, renderMarkdown, shorten, STATIONS, ago, since, workersOf } from '/board-view.mjs';
 
 let state = { columns: [], lenses: [], cards: [] };
 let openId = null;
@@ -258,21 +277,30 @@ function render() {
   if (openId && !$('detail').contains(document.activeElement)) fillView();
 }
 
-function openCard(id) { openId = id; fillView(); $('detail').showModal(); }
+function openCard(id) { openId = id; fillView(); $('detail').hidden = false; document.body.classList.add('open'); }
+function closeCard() { openId = null; $('detail').hidden = true; document.body.classList.remove('open'); }
 
 function fillView() {
   const c = state.cards.find((x) => x.id === openId);
-  if (!c) return $('detail').close();
+  if (!c) return closeCard();
   $('v-title').textContent = `#${c.id} ${c.title}`;
   $('v-meta').replaceChildren(el('span', { textContent: c.column }), ...c.labels.map((l) => el('span', { textContent: l })),
     ...c.unmet.map((d) => el('span', { textContent: `espera a #${d}` })),
-    ...Object.entries(c.run).map(([k, v]) => el('span', { textContent: `${k}: ${v}` })));
+    ...Object.entries(c.run).filter(([k]) => k !== 'evidence' && k !== 'screens').map(([k, v]) => el('span', { textContent: `${k}: ${v}` })));
   const at = stationOf(c, state.lenses);
   $('v-panel').replaceChildren(...(at ? [rail(c)] : []));
-  $('v-body').textContent = c.body || '(sin descripción)';
+  $('v-issues').replaceChildren(...c.lint.map((i) => el('div', { className: 'issue ' + i.severity, textContent: i.message })));
+  $('v-body').innerHTML = renderMarkdown(c.body) || '(sin descripción)';
+  $('v-shots').replaceChildren(...(c.run.evidence?.files || []).map((f) => {
+    const url = `/api/cards/${c.id}/evidence/${encodeURIComponent(f.split(/[\/]/).pop())}`;
+    return el('a', { href: url, target: '_blank' }, el('img', { src: url, alt: 'Captura de evidencia', loading: 'lazy' }));
+  }));
+  const col = c.column === 'blocked' ? c.history.findLast((h) => h.to === 'blocked')?.from : null;
+  $('v-comment').querySelector('button').textContent = col ? `Enviar y devolver a ${col}` : 'Enviar';
+  $('v-to').replaceChildren(...state.columns.filter((x) => x !== c.column).map((x) => el('option', { value: x, textContent: x })));
   $('v-approve').hidden = !(c.labels.includes('merge-approval') && c.run.branch && c.run.reviewedSha);
   $('v-comments').replaceChildren(...c.comments.map((m) =>
-    el('div', { className: 'comment' }, el('div', { className: 'meta', textContent: `[${m.role}] ${new Date(m.at).toLocaleString()}` }), m.text)));
+    el('div', { className: 'comment' }, el('div', { className: 'meta', textContent: `[${m.role}] ${ago(m.at)}` }), m.text)));
   $('v-history').replaceChildren(...c.history.map((h) =>
     el('div', { textContent: `${new Date(h.at).toLocaleString()} · ${h.from ? h.from + ' → ' : ''}${h.to}${h.by ? ' (' + h.by + ')' : ''}` })));
 }
@@ -282,8 +310,22 @@ async function comment(id, form) {
 }
 
 $('v-approve').onclick = () => approve(state.cards.find((x) => x.id === openId), $('v-approve'));
-$('detail').onclose = () => { openId = null; };
-$('v-comment').onsubmit = (e) => { e.preventDefault(); comment(openId, e.target); };
+$('v-close').onclick = closeCard;
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openId) closeCard(); });
+let forcing = null;
+async function moveTo(column, force) {
+  try { await api(`/api/cards/${openId}/move`, { column, force }); $('v-force').hidden = true; }
+  catch (err) { forcing = column; $('v-why').textContent = err.message; $('v-force').hidden = false; }
+}
+$('v-move').onsubmit = (e) => { e.preventDefault(); moveTo($('v-to').value, false); };
+$('v-force-go').onclick = () => moveTo(forcing, true);
+$('v-comment').onsubmit = async (e) => {
+  e.preventDefault();
+  const c = state.cards.find((x) => x.id === openId);
+  const col = c.column === 'blocked' ? c.history.findLast((h) => h.to === 'blocked')?.from : null;
+  await comment(openId, e.target);
+  if (col) await moveTo(col, false);
+};
 
 async function refresh() { state = await api('/api/board'); render(); }
 

@@ -115,3 +115,17 @@ test('las filas que se abren se alcanzan con el teclado', () => {
   assert.match(html, /tabIndex = 0/);
   assert.match(html, /e\.key === 'Enter' && e\.target === node/);
 });
+
+test('renderMarkdown pinta encabezados, listas, checklists, código y enlaces, y escapa el HTML', async () => {
+  const { renderMarkdown } = await import('../public/board-view.mjs');
+  const html = renderMarkdown('## Fix\n- uno\n- [ ] dos\n- [x] tres\n\n```\n<b>x</b>\n```\nVer [docs](https://a.dev) y `foo`\n<script>alert(1)</script>');
+  assert.equal(html, '<h4>Fix</h4><ul><li>uno</li><li><input type="checkbox" disabled> dos</li><li><input type="checkbox" disabled checked> tres</li></ul>'
+    + '<pre><code>&lt;b&gt;x&lt;/b&gt;</code></pre><p>Ver <a href="https://a.dev" target="_blank" rel="noreferrer noopener">docs</a> y <code>foo</code><br>&lt;script&gt;alert(1)&lt;/script&gt;</p>');
+  assert.doesNotMatch(renderMarkdown('[x](javascript:alert(1))'), /<a /);
+});
+
+test('la ficha es un panel lateral, no un diálogo, y no edita el cuerpo ni el título', () => {
+  assert.doesNotMatch(html, /<dialog|showModal/);
+  assert.match(html, /<aside id="detail"/);
+  assert.doesNotMatch(html.match(/<aside id="detail"[\s\S]*?<\/aside>/)[0], /<textarea|name="title"|name="body"/);
+});

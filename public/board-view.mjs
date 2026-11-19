@@ -100,3 +100,34 @@ export function roleOf(worker) {
 
 export const since =(card) => card.claimedAt ?? lastAt(card);
 export const workersOf = (card) => [...new Set([card.assignee, ...lensWorkers(card)].filter(Boolean))];
+
+const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Inline: `code`, [text](http link). The text is escaped first, so nothing from the body ever becomes markup.
+const inline = (t) => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>')
+  .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>');
+
+// The card body (a small Markdown subset) as HTML: headings, lists, checklists, code blocks, links, paragraphs.
+export function renderMarkdown(text = '') {
+  const out = [];
+  let list = null, para = [], code = null;
+  const flush = () => {
+    if (para.length) out.push(`<p>${para.map(inline).join('<br>')}</p>`);
+    if (list) out.push(`<ul>${list.join('')}</ul>`);
+    para = []; list = null;
+  };
+  for (const line of text.split('\n')) {
+    if (code) { if (line.startsWith('```')) { out.push(`<pre><code>${esc(code.join('\n'))}</code></pre>`); code = null; } else code.push(line); continue; }
+    let m;
+    if (line.startsWith('```')) { flush(); code = []; }
+    else if ((m = /^(#{1,6})\s+(.*)$/.exec(line))) { flush(); out.push(`<h${m[1].length + 2}>${inline(m[2])}</h${m[1].length + 2}>`); }
+    else if ((m = /^\s*[-*]\s+(?:\[([ xX])\]\s+)?(.*)$/.exec(line))) {
+      if (para.length) flush();
+      const box = m[1] == null ? '' : `<input type="checkbox" disabled${m[1] === ' ' ? '' : ' checked'}> `;
+      (list ??= []).push(`<li>${box}${inline(m[2])}</li>`);
+    } else if (!line.trim()) flush();
+    else { if (list) flush(); para.push(line); }
+  }
+  if (code) out.push(`<pre><code>${esc(code.join('\n'))}</code></pre>`);
+  flush();
+  return out.join('');
+}

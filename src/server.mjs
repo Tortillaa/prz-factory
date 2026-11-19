@@ -47,6 +47,7 @@ function runMerge({ boardFile, repoRoot, id, sha }) {
     });
   });
 }
+const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
 const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 function send(res, status, body, type = 'application/json') {
@@ -98,6 +99,15 @@ export function createServer({ boardFile, repoRoot = process.cwd() }) {
       }
       if (req.method === 'GET' && url.pathname === '/board-view.mjs') {
         return send(res, 200, fs.readFileSync(path.join(PUBLIC_DIR, 'board-view.mjs')), 'text/javascript; charset=utf-8');
+      }
+      const ev = req.method === 'GET' && url.pathname.match(/^\/api\/cards\/(\d+)\/evidence\/([^/\\]+)$/);
+      if (ev) {
+        // Only a plain file name inside this card's own evidence folder: no '..', no absolute path, no other card.
+        const name = decodeURIComponent(ev[2]);
+        const type = IMAGE_TYPES[path.extname(name).toLowerCase()];
+        const file = path.join(path.dirname(boardFile), 'evidence', ev[1], name);
+        if (!type || name !== path.basename(name) || !fs.existsSync(file)) return send(res, 404, { error: 'not found' });
+        return send(res, 200, fs.readFileSync(file), type);
       }
       if (req.method === 'GET' && url.pathname === '/api/board') {
         return send(res, 200, boardView(boardFile, repoRoot));

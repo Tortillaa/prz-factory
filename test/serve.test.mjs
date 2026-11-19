@@ -160,3 +160,28 @@ test('the page has #active and /api/board exposes the claims it counts', async (
     child.kill();
   }
 });
+
+test('GET /api/cards/:id/evidence/:file sirve solo la evidencia de esa tarjeta', async () => {
+  const { createServer } = await import('../src/server.mjs');
+  const board = tmpBoard();
+  const dir = path.join(path.dirname(board), 'evidence');
+  fs.mkdirSync(path.join(dir, '7'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '8'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '7', 'abc-1.png'), 'png');
+  fs.writeFileSync(path.join(dir, '8', 'other.png'), 'png');
+  fs.writeFileSync(path.join(dir, '7', 'note.txt'), 'x');
+  const server = createServer({ boardFile: board });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const get = (p) => fetch(`http://127.0.0.1:${server.address().port}${p}`);
+  try {
+    const ok = await get('/api/cards/7/evidence/abc-1.png');
+    assert.equal(ok.status, 200);
+    assert.equal(ok.headers.get('content-type'), 'image/png');
+    for (const p of ['/api/cards/7/evidence/..%2F8%2Fother.png', '/api/cards/7/evidence/other.png', '/api/cards/7/evidence/note.txt',
+      `/api/cards/7/evidence/${encodeURIComponent(path.join(dir, '8', 'other.png'))}`, '/api/cards/7/evidence/..%5C..%5Cboard.json']) {
+      assert.equal((await get(p)).status, 404, p);
+    }
+  } finally {
+    server.close();
+  }
+});

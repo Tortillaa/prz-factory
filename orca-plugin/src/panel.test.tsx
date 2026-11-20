@@ -353,6 +353,21 @@ test('answering clears only its own text, and a board refresh keeps what is type
   await view.unmount()
 })
 
+test('pending and failed lenses read without a bare separator or a leading dash, and an emoji title is not cut in half', async () => {
+  const c = board('x').cards[3]
+  const lenses = [{ lens: 'qa', state: 'pending' }, { lens: 'code', state: 'fail' }] as never
+  const emoji = '😀'.repeat(70)
+  const b = board('shop', { cards: [{ ...c, title: emoji, panel: { passed: [], total: 2, lenses } }] })
+  const view = await mount(panel, { host: mockHost({ requests: { 'boards.get': () => ({ boards: [b] }) } }) })
+  const tree = JSON.stringify(view.tree())
+  assert.match(tree, /qa en espera · code ✖/)
+  assert.doesNotMatch(tree, /— qa|· ·/)
+  const shown = JSON.parse(`"${tree.match(/"title":"(#6 (?:[^"\\]|\\.)+…)"/)?.[1]}"`)
+  assert.equal(Array.from(shown).length, 60)
+  assert.doesNotMatch(shown, /[\ud800-\udbff](?![\udc00-\udfff])/)
+  await view.unmount()
+})
+
 test('a long title is clipped to 60 characters with an ellipsis, and a short one is left alone', async () => {
   const long = board('shop', { cards: [{ ...board('x').cards[0], title: 'x'.repeat(120) }] })
   const view = await mount(panel, { host: mockHost({ requests: { 'boards.get': () => ({ boards: [long] }) } }) })

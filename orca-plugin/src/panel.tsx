@@ -256,7 +256,7 @@ export function setup(ctx: PanelContext): void {
 
 const STATIONS = ['spec', 'build', 'review', 'merge']
 const STATION_OF: Record<string, string> = { spec: 'spec', ready: 'build', building: 'build', qa: 'review', review: 'review', merge: 'merge' }
-const MARK = { pass: '✓', fail: '✖', working: 'en curso', pending: '·' }
+const MARK = { pass: '✓', fail: '✖', working: 'en curso', pending: 'en espera' }
 
 /** The rail of stations on one line: the card's station in strong text (a blocked card sits where it was blocked from) and, in review, each lens with its state. */
 function Rail({ column, from, lenses = [] }: { column: string; from: string | null; lenses?: NonNullable<CardView['panel']>['lenses'] }) {
@@ -264,12 +264,16 @@ function Rail({ column, from, lenses = [] }: { column: string; from: string | nu
   return (
     <Row gap="xs" wrap>
       {STATIONS.map((s, i) => <Text key={s} size="xs" muted={s !== at} weight={s === at ? 'semibold' : 'regular'}>{i < STATIONS.length - 1 ? `${s} ·` : s}</Text>)}
-      {at === 'review' && lenses.length > 0 && <Text size="xs" muted>{`— ${lenses.map((l) => `${l.lens} ${MARK[l.state]}`).join(' · ')}`}</Text>}
+      {at === 'review' && lenses.length > 0 && <Text size="xs" muted>{`${lenses.map((l) => `${l.lens} ${MARK[l.state]}`).join(' · ')}`}</Text>}
     </Row>
   )
 }
 
-const clip = (s: string, max = 60) => (s.length > max ? `${s.slice(0, max - 1)}…` : s)
+// Array.from counts code points, so an emoji is never cut in half.
+const clip = (s: string, max = 60) => {
+  const cs = Array.from(s)
+  return cs.length > max ? `${cs.slice(0, max - 1).join('')}…` : s
+}
 
 /** A worker name (build-34-r2, review-qa-7) in words; mirrors roleOf in public/board-view.mjs. */
 function role(worker: string): string {

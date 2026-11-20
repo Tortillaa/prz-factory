@@ -27,7 +27,6 @@ function orca(args, { input } = {}) {
   return out.result ?? {};
 }
 
-const label = (a) => (a.lens ? `${a.lane}:${a.lens}` : a.lane);
 
 export function dispatch({ file, config, repoRoot, dryRun = false }) {
   const events = [];

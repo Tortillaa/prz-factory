@@ -126,7 +126,7 @@ function release(file, id, text) {
 /**
  * Merges card `id` if every check passes.
  * sha: the commit the reviewer approved (defaults to run.reviewedSha). human: a person is
- * merging, so the human-merge policy is skipped (agents never pass it).
+ * approving a merge held in blocked with merge-approval; it skips the panel and policy only there.
  */
 export function mergeCard({ file, id, who = 'merge-gate', sha, human = false, cwd, config }) {
   if (!config.verify.length) throw new Error('"verify" is empty in factory.config.json: the gate cannot prove the build');
@@ -176,14 +176,14 @@ ${msg}`);
     if (!baseSha) return result('error', `base branch ${base} does not exist`);
 
     // Agents merge only what the whole review panel passed, on this very head.
-    if (!human) {
+    if (!awaitingHuman) {
       const pending = pendingLenses(card, config);
       if (pending.length) return reReview('panel-incomplete', `the review panel has not passed ${short(head)} yet: waiting on ${pending.join(', ')}`, { head, pending });
       if (!card.panel.head || card.panel.head !== head) return reReview('head-moved', `the panel reviewed ${card.panel.head ? short(card.panel.head) : 'nothing'}, the branch is at ${short(head)}`, { head });
     }
 
     const lines = diffLines(baseSha, head, cwd);
-    const reasons = human ? [] : humanReasons(card, lines, config.merge, diffFiles(baseSha, head, cwd));
+    const reasons = awaitingHuman ? [] : humanReasons(card, lines, config.merge, diffFiles(baseSha, head, cwd));
     if (reasons.length) {
       const msg = `Merge para una persona: ${reasons.join('; ')}.\nPara aprobarlo: revisa ${branch} (${short(head)}) y ejecuta \`factory merge ${id} --sha ${short(head)} --human\`.`;
       // Pin the commit the person is asked to approve: approving later must not land newer commits.

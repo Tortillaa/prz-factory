@@ -218,6 +218,14 @@ try {
       server.listen(port,'127.0.0.1', () => {
         console.log(`board: http://localhost:${port}\nfile:  ${file}`);
         // The Orca panel reads this to open each repo's board on its real port.
+        // a worker's test server (CLI inside a linked worktree of this repo) must not replace the board
+        const cliDir = fs.realpathSync.native(path.join(import.meta.dirname, '..'));
+        let linked = [];
+        try { linked = worktrees(process.cwd()).slice(1); } catch {}
+        const inside = (w) => {
+          try { const rel = path.relative(fs.realpathSync.native(w.path), cliDir); return !rel.startsWith('..') && !path.isAbsolute(rel); } catch { return false; } // a deleted worktree cannot hold the CLI
+        };
+        if (linked.some(inside)) return;
         const info = path.join(path.dirname(file), 'serve.json');
         fs.writeFileSync(info, JSON.stringify({ port, pid: process.pid }));
         // only remove our own file: a newer serve on the same board may have rewritten it
@@ -270,7 +278,9 @@ try {
     case 'show': {
       const card = store.annotate(store.load(file)).cards.find((c) => c.id === Number(need(args[0], 'id')));
       if (!card) throw new Error(`card #${args[0]} not found`);
-      const run = Object.entries(card.run).map(([k, v]) => `${k}: ${v}`).join(' · ');
+      // Objects print as their files (evidence) or short JSON, never as [object Object].
+      const shown = (v) => (Array.isArray(v) ? v.map(shown).join(', ') : v && typeof v === 'object' ? (v.files ? shown(v.files) : JSON.stringify(v)) : v);
+      const run = Object.entries(card.run).map(([k, v]) => `${k}: ${Array.isArray(v) && v.every((x) => typeof x !== 'object') ? v : shown(v)}`).join(' · ');
       const comments = card.comments.map((c) => `  [${c.role}] ${c.at}\n    ${c.text}`).join('\n');
       print(
         card,

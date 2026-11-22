@@ -438,7 +438,7 @@ test('roleTitle: every agent is named after its role', async () => {
   );
 });
 
-test('dispatch: names the worktree and task after the role, and a failed rename only leaves a note', async () => {
+test('dispatch: names the worktree and task after the role, and a failed worktree set only leaves a note', async () => {
   const { dispatch } = await import('../src/dispatch.mjs');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-names-'));
   const file = path.join(dir, 'board.json');
@@ -454,6 +454,7 @@ test('dispatch: names the worktree and task after the role, and a failed rename 
     const start = calls().find((a) => a[1] === 'worker-start');
     assert.match(start[start.indexOf('--task-title') + 1], /^Builder #1/);
     assert.equal(start[start.indexOf('--display-name') + 1], 'Builder #1');
+    assert.ok(!calls().some((a) => a[0] === 'terminal' && a[1] === 'rename'), 'no terminal rename');
 
     // A reviewer reuses a worktree that already exists: it is renamed with `worktree set`.
     store.update(file, (b) => {

@@ -86,15 +86,41 @@ test('list still prints a known column, or every column, on an empty board', () 
   ]);
 });
 
-test('factory serve writes serve.json next to the board and removes it on SIGTERM', async (t) => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-'));
-  const info = path.join(dir, 'serve.json');
-  const port = 20000 + Math.floor(Math.random() * 20000);
-  const child = spawn(process.execPath, [CLI, 'serve', '--port', String(port)], {
+// A throwaway repo holding a copy of the CLI, plus a linked worktree with its own copy: serve.json
+// depends on where the running CLI lives, so the tests cannot use the checkout they run from.
+function serveRepos() {
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-')));
+  const main = path.join(root, 'main');
+  const linked = path.join(root, 'linked');
+  const git = (...a) => spawnSync('git', a, { cwd: main, encoding: 'utf8' });
+  fs.mkdirSync(main);
+  git('init', '-q');
+  for (const d of ['bin', 'src', 'public']) fs.cpSync(path.join(CLI, '..', '..', d), path.join(main, d), { recursive: true });
+  fs.copyFileSync(path.join(CLI, '..', '..', 'package.json'), path.join(main, 'package.json'));
+  git('add', '-A');
+  git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'cli');
+  git('worktree', 'add', '-q', '--detach', linked);
+  return { dir: root, main, linked };
+}
+
+function serve(cwd, dir, port) {
+  return spawn(process.execPath, [path.join(cwd, 'bin', 'factory.mjs'), 'serve', '--port', String(port)], {
+    cwd,
     env: { ...process.env, FACTORY_BOARD: path.join(dir, 'board.json') },
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'ignore'],
   });
+}
+
+const listening = (child) => new Promise((r) => child.stdout.on('data', r));
+const randomPort = () => 20000 + Math.floor(Math.random() * 20000);
+
+test('factory serve from the main checkout writes serve.json next to the board and removes it on SIGTERM', async (t) => {
+  const { dir, main } = serveRepos();
+  const info = path.join(dir, 'serve.json');
+  const port = randomPort();
+  const child = serve(main, dir, port);
   t.after(() => child.kill());
+  await listening(child);
   for (let i = 0; i < 100 && !fs.existsSync(info); i++) await new Promise((r) => setTimeout(r, 100));
   assert.deepEqual(JSON.parse(fs.readFileSync(info, 'utf8')), { port, pid: child.pid });
   const closed = new Promise((r) => child.on('close', r));
@@ -104,13 +130,53 @@ test('factory serve writes serve.json next to the board and removes it on SIGTER
   if (process.platform !== 'win32') assert.ok(!fs.existsSync(info));
 });
 
-test('factory serve leaves serve.json alone when a newer serve rewrote it', { skip: process.platform === 'win32' }, async (t) => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-'));
+test('factory serve from a linked worktree serves but does not announce itself in serve.json', async (t) => {
+  const { dir, linked } = serveRepos();
+  const child = serve(linked, dir, randomPort());
+  t.after(() => child.kill());
+  await listening(child);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.ok(!fs.existsSync(path.join(dir, 'serve.json')));
+});
+
+test('factory serve with a CLI outside the repo (global or npm link) still writes serve.json', async (t) => {
+  const { dir, main } = serveRepos();
   const info = path.join(dir, 'serve.json');
-  const child = spawn(process.execPath, [CLI, 'serve', '--port', String(20000 + Math.floor(Math.random() * 20000))], {
+  const outside = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-cli-')));
+  for (const d of ['bin', 'src', 'public', 'package.json']) fs.cpSync(path.join(main, d), path.join(outside, d), { recursive: true });
+  const child = spawn(process.execPath, [path.join(outside, 'bin', 'factory.mjs'), 'serve', '--port', String(randomPort())], {
+    cwd: main, // the repo the board belongs to; the CLI itself lives elsewhere
     env: { ...process.env, FACTORY_BOARD: path.join(dir, 'board.json') },
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'ignore'],
   });
+  t.after(() => child.kill());
+  await listening(child);
+  for (let i = 0; i < 100 && !fs.existsSync(info); i++) await new Promise((r) => setTimeout(r, 100));
+  assert.ok(fs.existsSync(info));
+});
+
+test('factory serve survives a deleted but still registered worktree and keeps the announce rule', async (t) => {
+  const { dir, main, linked } = serveRepos();
+  const info = path.join(dir, 'serve.json');
+  const gone = path.join(dir, 'gone');
+  spawnSync('git', ['worktree', 'add', '-q', '--detach', gone], { cwd: main });
+  fs.rmSync(gone, { recursive: true, force: true }); // cleanup deleted the folder; git still lists it
+  const fromLinked = serve(linked, dir, randomPort());
+  t.after(() => fromLinked.kill());
+  await listening(fromLinked);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.ok(!fs.existsSync(info)); // a live worker still does not announce
+  const fromMain = serve(main, dir, randomPort());
+  t.after(() => fromMain.kill());
+  await listening(fromMain);
+  for (let i = 0; i < 100 && !fs.existsSync(info); i++) await new Promise((r) => setTimeout(r, 100));
+  assert.equal(JSON.parse(fs.readFileSync(info, 'utf8')).pid, fromMain.pid);
+});
+
+test('factory serve leaves serve.json alone when a newer serve rewrote it', { skip: process.platform === 'win32' }, async (t) => {
+  const { dir, main } = serveRepos();
+  const info = path.join(dir, 'serve.json');
+  const child = serve(main, dir, randomPort());
   t.after(() => child.kill());
   for (let i = 0; i < 100 && !fs.existsSync(info); i++) await new Promise((r) => setTimeout(r, 100));
   fs.writeFileSync(info, JSON.stringify({ port: 5050, pid: child.pid + 1 }));
@@ -118,4 +184,19 @@ test('factory serve leaves serve.json alone when a newer serve rewrote it', { sk
   child.kill('SIGTERM');
   await closed;
   assert.ok(fs.existsSync(info));
+});
+
+test('show writes the path of each screenshot, never [object Object]', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-'));
+  const board = path.join(dir, 'board.json');
+  const env = { ...process.env, FACTORY_BOARD: board };
+  const sh = (...a) => spawnSync(process.execPath, [CLI, ...a], { env, encoding: 'utf8', timeout: 10_000 });
+  sh('add', 'idea', '--column', 'backlog');
+  const b = JSON.parse(fs.readFileSync(board, 'utf8'));
+  b.cards[0].run = { screens: ['a.html', 'b.css'], evidence: { head: 'abc1234', files: ['/e/1/abc1234-1.png', '/e/1/abc1234-2.png'] } };
+  fs.writeFileSync(board, JSON.stringify(b));
+  const out = sh('show', String(b.cards[0].id)).stdout;
+  assert.ok(out.includes('/e/1/abc1234-1.png, /e/1/abc1234-2.png'), out);
+  assert.ok(!out.includes('[object Object]'), out);
+  assert.ok(out.includes('screens: a.html,b.css'), out);
 });

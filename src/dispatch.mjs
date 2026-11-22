@@ -118,16 +118,11 @@ export function dispatch({ file, config, repoRoot, dryRun = false }) {
       run.recordDispatch(b, a.id, { worker: a.worker, dispatch: started.dispatchId });
       (b.workers ??= []).push({ id: a.id, worker: a.worker, dispatch: started.dispatchId, lane: a.lane, lens: a.lens, agent: a.launch.agent, model: a.launch.model ?? null, startedAt: new Date().toISOString() });
     });
-    // The role changes while the workspace stays: rename it, and the terminal tab. A failure only leaves a note.
+    // The role changes while the workspace stays: rename it. A failure only leaves a note.
     const notes = [];
     if (p.worktree !== 'new-top-level') {
       const r = orca(['worktree', 'set', '--worktree', p.worktree, '--display-name', role]);
       if (r.error) notes.push(`worktree set: ${r.error}`);
-    }
-    const handle = started.terminal ?? started.terminalHandle;
-    if (handle) {
-      const r = orca(['terminal', 'rename', '--terminal', handle, '--title', role]);
-      if (r.error) notes.push(`terminal rename: ${r.error}`);
     }
     events.push({ kind: 'started', id: a.id, lane: a.lane, lens: a.lens, worker: a.worker, dispatch: started.dispatchId, launch: a.launch, worktree: path.basename(started.workspace || p.name || p.worktree), ...(notes.length ? { note: notes.join('; ') } : {}) });
   }

@@ -150,3 +150,10 @@ test('el nombre de la captura se saca con barra normal e invertida (rutas de Win
 test('la regla [hidden] existe: sin ella Forzar se ve siempre', () => {
   assert.match(html, /\[hidden\]\s*\{\s*display:\s*none\s*!important/);
 });
+
+test('la línea parada pierde la altura mínima y con tarjetas en marcha la conserva', () => {
+  assert.match(css, /\.line:not\(\.parada\)\s*\{[^}]*min-height: 240px/);
+  assert.doesNotMatch(css.match(/\.line\.parada\s*\{[^}]*\}/)[0], /min-height/);
+  assert.doesNotMatch(css.match(/\.line\s*\{[^}]*\}/)[0], /min-height/);
+  assert.match(html, /classList\.toggle\('parada', parada\)/);
+});

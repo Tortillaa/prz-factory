@@ -249,8 +249,7 @@ Decisión del usuario (2026-11-16): el trabajo entra por el chat del agente del 
 - [x] **#39** `verify` corre sin `FACTORY_BOARD`: aprobar desde la web hizo que un test de evals creara tarjetas en el tablero real (#36 a #38, aparcadas en backlog como basura). Mergeada con la aprobación del usuario (319a21f).
 - [x] **#43** Quitar la lista "En marcha" de la web, que repite las tarjetas de la línea de montaje.
 - [x] **#44** Las tareas en segundo plano de la sesión se cortan a las dos horas: arrancar `factory serve` en una terminal de Orca para que el tablero web no se caiga.
-- [ ] `orca terminal rename` falla con los workers: Orca los abre como sesiones de agente, no como terminales. El nombre del rol llega por `--task-title` y `--display-name`; quitar el rename o cambiarlo por lo que Orca acepte para una sesión.
-- [ ] `factory show` imprime `evidence: [object Object]`: enseñar la ruta de cada captura.
+- [x] `orca terminal rename` falla con los workers: Orca los abre como sesiones de agente, no como terminales. El nombre del rol llega por `--task-title` y `--display-name`; quitar el rename o cambiarlo por lo que Orca acepte para una sesión.
 - [ ] Tablero web (#44): pasar `FACTORY_BOARD` a la terminal y no abrir una segunda si dos pasos caen antes de que el servidor escriba `serve.json`.
 - [x] **#45** Los tests de dispatch y cleanup usan `fs.realpathSync.native` para la carpeta temporal: la CI de la PR #8 fallaba en macOS (`/private/var`) y Windows (nombre corto `RUNNER~1`).
 
@@ -260,3 +259,17 @@ Decisión del usuario (2026-11-16): el trabajo entra por el chat del agente del 
 - [x] Ejecutar todas las evals con un agente real: ver Fase 13, paso 2b.
 - [x] Instalar el plugin en Orca (ver "Plugin para Orca" en el README): instalado y aprobado el 2026-11-15 (`local.prz-factory-board` 0.1.0, panel "Factory board" en marcha).
 - [x] Subir el repo a GitHub (PR #1).
+
+## Fase 22 · Repaso con ponytail-review
+
+Revisión del repositorio entero tras el error del tablero web (`ENOENT` en `factory-43/public/index.html`).
+
+- [x] **#46** Solo un CLI que no corre en otro worktree del repo anuncia `serve.json`: el servidor de prueba de un builder ya no sustituye al tablero, y un worktree borrado no tumba `serve`.
+- [x] **#47** `factory merge --human` solo salta el panel y la política en una tarjeta retenida con `merge-approval`: la regla la cumple el gate, no el skill.
+- [x] **#48** `dispatch` deja de llamar a `orca terminal rename`, que siempre fallaba con los workers.
+- [x] **#49** `factory show` escribe la ruta de cada captura en vez de `[object Object]`.
+- [x] **#50** La línea de montaje parada se encoge a una franja en la web.
+- [x] **#51** `serve` compara rutas con `fs.realpathSync.native`: la CI de Windows falla con el nombre corto `RUNNER~1`.
+- [ ] `.gitignore` no ignora `serve.json` ni `board.json`: el builder de #50 commiteó un `serve.json` de su tablero de prueba.
+- [ ] El comentario del merge dice "aprobado por una persona" cuando se pasa `--human` sobre una tarjeta que no esperaba aprobación.
+- [ ] Un paso de `factory dispatch` cortado entre `worker-start` y `recordDispatch` deja la reserva sin `dispatch` (pasó con #46): `status` debería señalarla.

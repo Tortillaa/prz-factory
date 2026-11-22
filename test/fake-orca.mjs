@@ -13,7 +13,7 @@ if (process.env.FAKE_ORCA_FAIL === sub) {
   process.exit(1);
 }
 const n = fs.readFileSync(process.env.FAKE_ORCA_LOG, 'utf8').trim().split('\n').length;
-if (sub === 'worker-start') reply({ dispatchId: `ctx_fake${n}`, workspace: 'repo::C:/wt/factory-x' });
+if (sub === 'worker-start') reply({ dispatchId: `ctx_fake${n}`, workspace: 'repo::C:/wt/factory-x', terminal: 'term_fake' });
 else if (sub === 'worker-stop') reply({ state: 'stopped' });
 else if (sub === 'worker-release') reply({ state: 'released' });
 else reply({});

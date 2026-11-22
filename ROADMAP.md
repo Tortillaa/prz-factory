@@ -246,9 +246,10 @@ Decisión del usuario (2026-11-16): el trabajo entra por el chat del agente del 
 - [x] **#34** `factory agents-md` escribe en el worktree desde el que se ejecuta, no en el checkout de la persona.
 - [x] **#40** Los agentes que ya no se usan se eliminan solos: `factory dispatch` limpia al final de cada paso los workspaces de tarjetas en done (también tras un merge con rebase y con el sufijo de Orca).
 - [x] **#41** Cada agente lleva el nombre de su rol (`roleTitle`: "Builder #31", "Reviewer qa #31") como título de la tarea, nombre del workspace y pestaña de la terminal. Falta verlo en un arranque real.
-- [ ] **#39** `verify` corre sin `FACTORY_BOARD`: aprobar desde la web hizo que un test de evals creara tarjetas en el tablero real (#36 a #38, aparcadas en backlog como basura). Aprobada por el panel; espera la aprobación del usuario.
-- [ ] Quitar la lista "En marcha" de la web, que repite las tarjetas de la línea de montaje.
-- [ ] Las tareas en segundo plano de la sesión se cortan a las dos horas: arrancar `factory serve` en una terminal de Orca para que el tablero web no se caiga.
+- [x] **#39** `verify` corre sin `FACTORY_BOARD`: aprobar desde la web hizo que un test de evals creara tarjetas en el tablero real (#36 a #38, aparcadas en backlog como basura). Mergeada con la aprobación del usuario (319a21f).
+- [ ] **#43** Quitar la lista "En marcha" de la web, que repite las tarjetas de la línea de montaje.
+- [ ] **#44** Las tareas en segundo plano de la sesión se cortan a las dos horas: arrancar `factory serve` en una terminal de Orca para que el tablero web no se caiga.
+- [ ] `orca terminal rename` falla con los workers: Orca los abre como sesiones de agente, no como terminales. El nombre del rol llega por `--task-title` y `--display-name`; quitar el rename o cambiarlo por lo que Orca acepte para una sesión.
 
 ## Pendiente fuera del código
 

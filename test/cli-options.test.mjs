@@ -127,9 +127,10 @@ test('show writes the path of each screenshot, never [object Object]', () => {
   const sh = (...a) => spawnSync(process.execPath, [CLI, ...a], { env, encoding: 'utf8', timeout: 10_000 });
   sh('add', 'idea', '--column', 'backlog');
   const b = JSON.parse(fs.readFileSync(board, 'utf8'));
-  b.cards[0].run = { screens: ['a.html'], evidence: { head: 'abc1234', files: ['/e/1/abc1234-1.png', '/e/1/abc1234-2.png'] } };
+  b.cards[0].run = { screens: ['a.html', 'b.css'], evidence: { head: 'abc1234', files: ['/e/1/abc1234-1.png', '/e/1/abc1234-2.png'] } };
   fs.writeFileSync(board, JSON.stringify(b));
   const out = sh('show', String(b.cards[0].id)).stdout;
   assert.ok(out.includes('/e/1/abc1234-1.png, /e/1/abc1234-2.png'), out);
   assert.ok(!out.includes('[object Object]'), out);
+  assert.ok(out.includes('screens: a.html,b.css'), out);
 });

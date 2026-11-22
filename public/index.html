@@ -54,8 +54,6 @@
   .kind { font-size: 12px; font-weight: 500; color: var(--accent); margin-bottom: 4px; }
   .reasons { margin: 8px 0 0; padding-left: 16px; color: var(--muted); }
   .why { margin: 8px 0 0; color: var(--muted); white-space: pre-wrap; }
-  .flight { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: center; }
-  @media (max-width: 640px) { .flight { grid-template-columns: minmax(0, 1fr); } }
   .rail { display: grid; grid-template-columns: repeat(4, 1fr); font-family: var(--mono); font-size: 12px; color: var(--muted); }
   .rail > span { border-top: 2px solid var(--line); padding-top: 8px; position: relative; }
   .rail > .past { border-color: var(--muted); }
@@ -109,7 +107,6 @@
 <div class="layout">
   <main>
     <section><h2>Te esperan <span class="count" id="n-waiting"></span></h2><div class="stack" id="waiting"></div></section>
-    <section><h2>En marcha <span class="count" id="n-flight"></span></h2><div class="stack" id="flight"></div></section>
     <section><h2>Cola <span class="count" id="n-queue"></span></h2><ol class="queue" id="queue"></ol></section>
   </main>
   <aside>
@@ -213,12 +210,6 @@ function waitingItem(c) {
 
 const roles = (c) => workersOf(c).map(roleOf).join(' · ');
 
-function flightItem(c) {
-  return open(el('div', { className: 'item flight' },
-    el('div', {}, el('div', {}, ...head(c)), el('div', { className: 'meta' }, el('span', { textContent: roles(c) }), when(since(c)))),
-    rail(c)), c, 'flight');
-}
-
 // A card on the line: under the station it is at, with a box per lens in review.
 const ficha = ({ card: c, lenses }) => open(el('div', { className: 'ficha' },
   el('div', {}, ...head(c)), el('div', { className: 'meta' }, el('span', { textContent: roles(c) }), when(since(c))),
@@ -258,7 +249,6 @@ function render() {
   if (!typing) fill('waiting', g.waiting, waitingItem, 'Nada te espera');
   renderLine(g.done[0]);
   renderFigs();
-  fill('flight', g.inFlight, flightItem, 'Ningún worker en marcha');
   $('queue').replaceChildren(...(g.queue.length ? g.queue.map((c, i) => {
     const item = listItem(c, 'queue', c.unmet.length > 0 ? 'espera a ' + c.unmet.map((d) => '#' + d).join(' ') : i === 0 ? 'siguiente' : c.column);
     item.classList.toggle('next', i === 0);
@@ -272,7 +262,7 @@ function render() {
         at && new Date(at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }));
     }))]) : [el('p', { className: 'empty', textContent: 'Todavía nada' })]));
   fill('backlog', g.backlog, (c) => listItem(c, 'backlog'), 'Vacío');
-  for (const [id, n] of [['n-waiting', g.waiting], ['n-flight', g.inFlight], ['n-queue', g.queue], ['n-backlog', g.backlog]]) $(id).textContent = n.length;
+  for (const [id, n] of [['n-waiting', g.waiting], ['n-queue', g.queue], ['n-backlog', g.backlog]]) $(id).textContent = n.length;
   if (focused) document.querySelector(`[data-key="${focused}"]`)?.focus();
   if (openId && !$('detail').contains(document.activeElement)) fillView();
 }

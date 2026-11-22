@@ -47,7 +47,7 @@ export function ago(iso, now = Date.now()) {
 
 export const shorten = (text, max = 48) => text.length <= max ? text : text.slice(0, max).replace(/\s+\S*$/, '') + '…';
 
-// The four stations with their cards in flight (the same ones En marcha lists) and, in review, each lens.
+// The four stations with their cards in flight and, in review, each lens.
 export function lineOf(state) {
   const flying = groupBoard(state).inFlight.map((card) => ({ card, at: stationOf(card, state.lenses) })).filter((x) => x.at);
   return STATIONS.map((station) => {

@@ -23,6 +23,19 @@ test('la web ya no ofrece crear, editar ni arrastrar tarjetas', () => {
   for (const gone of ['new-idea', 'id="edit"', 'draggable']) assert.ok(!html.includes(gone), gone);
 });
 
+test('las tarjetas en marcha salen solo en la línea de montaje, y cada ficha se abre con Tab y Enter', () => {
+  assert.doesNotMatch(html, /En marcha|id="flight"/);
+  const ficha = html.match(/const ficha = [\s\S]*?'line'\);/)[0];
+  assert.match(ficha, /open\(/);
+  assert.match(ficha, /roles\(c\)/);
+  assert.match(ficha, /when\(since\(c\)\)/);
+  assert.match(ficha, /lenses\.length > 0 && .*lensChips/);
+  const open = html.match(/function open\([\s\S]*?\n}/)[0];
+  assert.match(open, /tabIndex = 0/);
+  assert.match(open, /onclick[^\n]*openCard/);
+  assert.match(open, /onkeydown[^\n]*Enter[^\n]*openCard/);
+});
+
 const { groupBoard, stationOf, ago, lineOf, statsOf, reasonsOf, roleOf, dayGroups, shorten } = await import('../public/board-view.mjs');
 const card = (id, column, extra = {}) => ({ id, column, labels: [], unmet: [], comments: [], history: [], panel: { head: null, lenses: {} }, run: {}, ...extra });
 

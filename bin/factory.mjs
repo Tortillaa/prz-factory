@@ -219,11 +219,11 @@ try {
         console.log(`board: http://localhost:${port}\nfile:  ${file}`);
         // The Orca panel reads this to open each repo's board on its real port.
         // a worker's test server (CLI inside a linked worktree of this repo) must not replace the board
-        const cliDir = fs.realpathSync(path.join(import.meta.dirname, '..'));
+        const cliDir = fs.realpathSync.native(path.join(import.meta.dirname, '..'));
         let linked = [];
         try { linked = worktrees(process.cwd()).slice(1); } catch {}
         const inside = (w) => {
-          try { const rel = path.relative(fs.realpathSync(w.path), cliDir); return !rel.startsWith('..') && !path.isAbsolute(rel); } catch { return false; } // a deleted worktree cannot hold the CLI
+          try { const rel = path.relative(fs.realpathSync.native(w.path), cliDir); return !rel.startsWith('..') && !path.isAbsolute(rel); } catch { return false; } // a deleted worktree cannot hold the CLI
         };
         if (linked.some(inside)) return;
         const info = path.join(path.dirname(file), 'serve.json');

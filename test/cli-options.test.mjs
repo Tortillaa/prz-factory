@@ -89,7 +89,7 @@ test('list still prints a known column, or every column, on an empty board', () 
 // A throwaway repo holding a copy of the CLI, plus a linked worktree with its own copy: serve.json
 // depends on where the running CLI lives, so the tests cannot use the checkout they run from.
 function serveRepos() {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-')));
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-')));
   const main = path.join(root, 'main');
   const linked = path.join(root, 'linked');
   const git = (...a) => spawnSync('git', a, { cwd: main, encoding: 'utf8' });
@@ -142,7 +142,7 @@ test('factory serve from a linked worktree serves but does not announce itself i
 test('factory serve with a CLI outside the repo (global or npm link) still writes serve.json', async (t) => {
   const { dir, main } = serveRepos();
   const info = path.join(dir, 'serve.json');
-  const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-cli-')));
+  const outside = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-cli-')));
   for (const d of ['bin', 'src', 'public', 'package.json']) fs.cpSync(path.join(main, d), path.join(outside, d), { recursive: true });
   const child = spawn(process.execPath, [path.join(outside, 'bin', 'factory.mjs'), 'serve', '--port', String(randomPort())], {
     cwd: main, // the repo the board belongs to; the CLI itself lives elsewhere

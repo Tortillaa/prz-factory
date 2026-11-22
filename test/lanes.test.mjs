@@ -440,6 +440,27 @@ test('high risk waits for a person, who merges from blocked', () => {
   assert.ok(!card(env, id).labels.includes('merge-approval'));
 });
 
+test('--human on a card in merge skips neither the policy nor the panel', () => {
+  const env = setup();
+  const { file, config } = env;
+  const id = addReadyCard(env, { body: GOOD_BODY.replace('🟢 **Low**', '🔴 **High**') });
+  const head = toReviewed(env, id);
+  const r = mergeCard({ file, id, sha: head, human: true, cwd: env.repo, config });
+  assert.equal(r.code, 7);
+  assert.equal(card(env, id).column, 'blocked');
+  assert.ok(card(env, id).labels.includes('merge-approval'));
+
+  const id2 = addReadyCard(env);
+  sh(env.wt.build, 'switch', '-q', '--detach', 'main');
+  const head2 = build(env, id2, ['b.txt']);
+  startReview(env, id2, 'qa');
+  pass(env, id2, 'qa', head2);
+  store.update(file, (b) => store.moveCard(b, id2, 'merge', 'user', { force: true }));
+  const pending = mergeCard({ file, id: id2, sha: head2, human: true, cwd: env.repo, config });
+  assert.equal(pending.code, 11);
+  assert.notEqual(card(env, id2).column, 'done');
+});
+
 test('business labels, sensitive paths and big diffs also wait for a person', () => {
   const env = setup();
   const id = addReadyCard(env, { labels: ['pricing'] });

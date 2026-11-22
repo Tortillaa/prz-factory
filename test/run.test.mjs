@@ -321,7 +321,7 @@ test('maxWorkers is validated: a number, or a positive number per agent', () => 
 // `factory dispatch` against a fake Orca: one coordinator step with no manual Orca calls.
 test('dispatch: starts what the plan says, stops orphans, releases finished workers, and recovers from a failed start', async () => {
   const { dispatch } = await import('../src/dispatch.mjs');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-dispatch-'));
+  const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-dispatch-')));
   const file = path.join(dir, 'board.json');
   const log = path.join(dir, 'orca.log');
   const calls = () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : []);

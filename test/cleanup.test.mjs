@@ -12,7 +12,7 @@ import { DEFAULTS } from '../src/config.mjs';
 const sh = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 function repo() {
-  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-clean-')));
+  const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-clean-')));
   const r = path.join(dir, 'repo');
   fs.mkdirSync(r);
   sh(r, 'init', '-q', '-b', 'main');

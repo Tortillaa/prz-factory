@@ -155,6 +155,24 @@ test('factory serve with a CLI outside the repo (global or npm link) still write
   assert.ok(fs.existsSync(info));
 });
 
+test('factory serve survives a deleted but still registered worktree and keeps the announce rule', async (t) => {
+  const { dir, main, linked } = serveRepos();
+  const info = path.join(dir, 'serve.json');
+  const gone = path.join(dir, 'gone');
+  spawnSync('git', ['worktree', 'add', '-q', '--detach', gone], { cwd: main });
+  fs.rmSync(gone, { recursive: true, force: true }); // cleanup deleted the folder; git still lists it
+  const fromLinked = serve(linked, dir, randomPort());
+  t.after(() => fromLinked.kill());
+  await listening(fromLinked);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.ok(!fs.existsSync(info)); // a live worker still does not announce
+  const fromMain = serve(main, dir, randomPort());
+  t.after(() => fromMain.kill());
+  await listening(fromMain);
+  for (let i = 0; i < 100 && !fs.existsSync(info); i++) await new Promise((r) => setTimeout(r, 100));
+  assert.equal(JSON.parse(fs.readFileSync(info, 'utf8')).pid, fromMain.pid);
+});
+
 test('factory serve leaves serve.json alone when a newer serve rewrote it', { skip: process.platform === 'win32' }, async (t) => {
   const { dir, main } = serveRepos();
   const info = path.join(dir, 'serve.json');

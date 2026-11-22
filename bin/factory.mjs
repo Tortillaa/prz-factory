@@ -222,7 +222,9 @@ try {
         const cliDir = fs.realpathSync(path.join(import.meta.dirname, '..'));
         let linked = [];
         try { linked = worktrees(process.cwd()).slice(1); } catch {}
-        const inside = (w) => { const rel = path.relative(fs.realpathSync(w.path), cliDir); return !rel.startsWith('..') && !path.isAbsolute(rel); };
+        const inside = (w) => {
+          try { const rel = path.relative(fs.realpathSync(w.path), cliDir); return !rel.startsWith('..') && !path.isAbsolute(rel); } catch { return false; } // a deleted worktree cannot hold the CLI
+        };
         if (linked.some(inside)) return;
         const info = path.join(path.dirname(file), 'serve.json');
         fs.writeFileSync(info, JSON.stringify({ port, pid: process.pid }));

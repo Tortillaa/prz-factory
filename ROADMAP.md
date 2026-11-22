@@ -269,6 +269,7 @@ Revisión del repositorio entero tras el error del tablero web (`ENOENT` en `fac
 - [x] **#48** `dispatch` deja de llamar a `orca terminal rename`, que siempre fallaba con los workers.
 - [x] **#49** `factory show` escribe la ruta de cada captura en vez de `[object Object]`.
 - [x] **#50** La línea de montaje parada se encoge a una franja en la web.
+- [x] **#51** `serve` compara rutas con `fs.realpathSync.native`: la CI de Windows falla con el nombre corto `RUNNER~1`.
 - [ ] `.gitignore` no ignora `serve.json` ni `board.json`: el builder de #50 commiteó un `serve.json` de su tablero de prueba.
 - [ ] El comentario del merge dice "aprobado por una persona" cuando se pasa `--human` sobre una tarjeta que no esperaba aprobación.
 - [ ] Un paso de `factory dispatch` cortado entre `worker-start` y `recordDispatch` deja la reserva sin `dispatch` (pasó con #46): `status` debería señalarla.

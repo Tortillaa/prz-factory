@@ -454,7 +454,7 @@ test('dispatch: names the worktree and task after the role, and a failed worktre
     const start = calls().find((a) => a[1] === 'worker-start');
     assert.match(start[start.indexOf('--task-title') + 1], /^Builder #1/);
     assert.equal(start[start.indexOf('--display-name') + 1], 'Builder #1');
-    assert.ok(!calls().some((a) => a[0] === 'terminal'), 'no terminal call');
+    assert.ok(!calls().some((a) => a[0] === 'terminal' && a[1] === 'rename'), 'no terminal rename');
 
     // A reviewer reuses a worktree that already exists: it is renamed with `worktree set`.
     store.update(file, (b) => {

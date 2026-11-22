@@ -207,7 +207,7 @@ Probado en un Orca real (1.4.259) con un plugin de diagnóstico: el panel instal
 - [x] **#14** Descubrimiento en vivo (`workspace.created`/`removed`, tableros que aparecen, vigilantes que sobran) con un único estado "último snapshot": cinco rondas parcheando carreras hasta escribir esa regla en la tarjeta; la sexta, con el advisor, convergió.
 - [x] **#15** `factory serve` escribe `serve.json` (puerto y pid); el botón abre el puerto real o enseña el comando. Comprobado con `--port 4799`.
 - [x] **#16** El panel separa "Aprobar merge" de "Contestar", muestra el progreso de cada lente y está en español.
-- [ ] Backlog: #18 (dos `## Risk` y `lensesFor` duplicada), #19 (subir la versión del plugin), #20 ("1 te espera" en singular).
+- [x] Backlog: #18 (dos `## Risk` y `lensesFor` duplicada), #19 (subir la versión del plugin), #20 ("1 te espera" en singular): hechas en la Fase 19.
 - [ ] Afinar `factory-build`: el Builder no consultó al advisor en la #14 pese a ser concurrencia y volver cuatro veces ("cambio local a un único módulo"); solo lo hizo cuando se le pidió en la tarjeta.
 
 ## Fase 19 · El panel de Orca sustituye a la web
@@ -232,7 +232,23 @@ Decisión del usuario: el plugin deja de ser de solo lectura y pasa a ser un cli
 - [x] Corregido en las skills: el Builder renderiza la pantalla (`orca tab create` + `orca screenshot`, o `orca plugin shot`) y entrega con una línea `Design:`; la lente `code` la mira ella misma y trata la falta de `Design:` como Should fix. Falta volver a probarlo: la #28 está en review (code aprobó, qa pendiente) y la #29 en ready.
 - [x] **La #29 lo confirmó: no era la tarjeta.** Con las skills ya corregidas, el Builder aplicó el contenido de unslop (acento único, sin emojis ni mayúsculas, rejilla de 4, ids en mono) pero otra vez ni renderizó ni escribió `Design:`, y se saltó dos criterios de aceptación visuales. Las lentes sí lo hicieron: `code` renderizó la rama y anotó la falta de `Design:`; `qa` comprobó a mano AC4 y AC5 en claro y oscuro y midió el contraste.
 - [x] **Arreglo en el código, como `Card: #N`:** `ui.paths` en la config detecta los cambios de pantalla por el diff; `factory handoff` rechaza la entrega sin `Design:` y sin `--screenshot` (que guarda como evidencia del head) salvo `--no-screenshot "<motivo>"`, y `factory verdict` rechaza un `pass` de la lente `code` sin `Design:`. Tests en `test/lanes.test.mjs`.
-- [ ] Ver la regla en una tarjeta real de pantalla con un Builder que la cumpla, y mostrar las capturas de evidencia en la ficha de la web y del panel.
+- [x] Vista en tarjetas reales: los Builders de la #31, #33 y #35 adjuntaron capturas (la #31 en claro y oscuro) y la ficha de la web (#33) las muestra. Cuando el Builder no puede cargar el plugin en Orca (#32, #42), usa `--no-screenshot` y la captura la hace la persona o la Recepción.
+
+## Fase 21 · Sala de control y agentes ordenados
+
+Decisión del usuario (2026-11-16): el trabajo entra por el chat del agente del IDE, no por el tablero; la web y el panel de Orca pasan a ser una sala de control para ver, decidir e inspeccionar.
+
+- [x] **#30** Skill `factory-intake`: la Recepción del chat redacta la tarjeta completa con las reglas del Spec Writer, pregunta las decisiones en el chat y la crea en ready.
+- [x] **#32** El panel de Orca deja de crear tarjetas ("Pide cambios al agente de Orca").
+- [x] **#31** La web como sala de control: línea de montaje con las estaciones, cifras del día, "Te esperan" con motivos limpios, roles en palabras, cola numerada y "Hecho" por día. Tres rondas: la primera, aprobada por el panel, el usuario la vio plana y la devolvió.
+- [x] **#33** Ficha lateral: Markdown renderizado, riel, capturas de evidencia (también con rutas de Windows), Contestar y Mover bajo "Más", teclado.
+- [x] **#35, #42** El panel de Orca como sala de control en la barra lateral (plugin 0.10.0): filas compactas, riel sin corchetes, lentes en palabras.
+- [x] **#34** `factory agents-md` escribe en el worktree desde el que se ejecuta, no en el checkout de la persona.
+- [x] **#40** Los agentes que ya no se usan se eliminan solos: `factory dispatch` limpia al final de cada paso los workspaces de tarjetas en done (también tras un merge con rebase y con el sufijo de Orca).
+- [x] **#41** Cada agente lleva el nombre de su rol (`roleTitle`: "Builder #31", "Reviewer qa #31") como título de la tarea, nombre del workspace y pestaña de la terminal. Falta verlo en un arranque real.
+- [ ] **#39** `verify` corre sin `FACTORY_BOARD`: aprobar desde la web hizo que un test de evals creara tarjetas en el tablero real (#36 a #38, aparcadas en backlog como basura). Aprobada por el panel; espera la aprobación del usuario.
+- [ ] Quitar la lista "En marcha" de la web, que repite las tarjetas de la línea de montaje.
+- [ ] Las tareas en segundo plano de la sesión se cortan a las dos horas: arrancar `factory serve` en una terminal de Orca para que el tablero web no se caiga.
 
 ## Pendiente fuera del código
 

@@ -249,7 +249,7 @@ Decisión del usuario (2026-11-16): el trabajo entra por el chat del agente del 
 - [x] **#39** `verify` corre sin `FACTORY_BOARD`: aprobar desde la web hizo que un test de evals creara tarjetas en el tablero real (#36 a #38, aparcadas en backlog como basura). Mergeada con la aprobación del usuario (319a21f).
 - [x] **#43** Quitar la lista "En marcha" de la web, que repite las tarjetas de la línea de montaje.
 - [x] **#44** Las tareas en segundo plano de la sesión se cortan a las dos horas: arrancar `factory serve` en una terminal de Orca para que el tablero web no se caiga.
-- [ ] `orca terminal rename` falla con los workers: Orca los abre como sesiones de agente, no como terminales. El nombre del rol llega por `--task-title` y `--display-name`; quitar el rename o cambiarlo por lo que Orca acepte para una sesión.
+- [x] `orca terminal rename` falla con los workers: Orca los abre como sesiones de agente, no como terminales. El nombre del rol llega por `--task-title` y `--display-name`; quitar el rename o cambiarlo por lo que Orca acepte para una sesión.
 - [ ] `factory show` imprime `evidence: [object Object]`: enseñar la ruta de cada captura.
 - [ ] Tablero web (#44): pasar `FACTORY_BOARD` a la terminal y no abrir una segunda si dos pasos caen antes de que el servidor escriba `serve.json`.
 - [x] **#45** Los tests de dispatch y cleanup usan `fs.realpathSync.native` para la carpeta temporal: la CI de la PR #8 fallaba en macOS (`/private/var`) y Windows (nombre corto `RUNNER~1`).

@@ -31,7 +31,11 @@
   h3 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 16px 0 8px; }
 
   /* The line: four stations on one track, a ficha under the station each card in flight is at. */
-  .line { max-width: 1392px; margin: 24px 24px 0; padding: 24px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; min-height: 240px; }
+  .line { max-width: 1392px; margin: 24px 24px 0; padding: 24px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
+  .line:not(.parada) { min-height: 240px; }
+  .line.parada { padding: 12px 24px; }
+  .parada .track { margin: 8px 0 0; }
+  .parada .idle { margin: 8px 0 0; }
   @media (min-width: 1440px) { .line { margin-inline: auto; } }
   .stations { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
   .st-head { display: flex; gap: 8px; align-items: baseline; font-size: 20px; }
@@ -217,12 +221,14 @@ const ficha = ({ card: c, lenses }) => open(el('div', { className: 'ficha' },
 
 function renderLine(last) {
   const line = lineOf(state);
+  const parada = line.every((s) => s.count === 0);
+  $('line').classList.toggle('parada', parada);
   $('line').replaceChildren(
     el('div', { className: 'stations' }, ...line.map((s) => el('div', { className: 'station' + (s.count ? ' on' : '') },
       el('div', { className: 'st-head' }, el('span', { className: 'st-name', textContent: s.station }), el('span', { className: 'count', textContent: s.count })),
       el('div', { className: 'track' }),
       el('div', { className: 'tokens' }, ...s.cards.map(ficha))))),
-    ...(line.every((s) => s.count === 0) ? [el('p', { className: 'idle' }, el('strong', { textContent: 'Línea parada' }),
+    ...(parada ? [el('p', { className: 'idle' }, el('strong', { textContent: 'Línea parada' }),
       last ? ` · última mergeada: #${last.id} ${shorten(last.title)}` : '')] : []));
 }
 

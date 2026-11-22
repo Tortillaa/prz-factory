@@ -252,6 +252,7 @@ Decisión del usuario (2026-11-16): el trabajo entra por el chat del agente del 
 - [ ] `orca terminal rename` falla con los workers: Orca los abre como sesiones de agente, no como terminales. El nombre del rol llega por `--task-title` y `--display-name`; quitar el rename o cambiarlo por lo que Orca acepte para una sesión.
 - [ ] `factory show` imprime `evidence: [object Object]`: enseñar la ruta de cada captura.
 - [ ] Tablero web (#44): pasar `FACTORY_BOARD` a la terminal y no abrir una segunda si dos pasos caen antes de que el servidor escriba `serve.json`.
+- [x] **#45** Los tests de dispatch y cleanup usan `fs.realpathSync.native` para la carpeta temporal: la CI de la PR #8 fallaba en macOS (`/private/var`) y Windows (nombre corto `RUNNER~1`).
 
 ## Pendiente fuera del código
 

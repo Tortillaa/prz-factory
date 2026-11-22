@@ -139,6 +139,22 @@ test('factory serve from a linked worktree serves but does not announce itself i
   assert.ok(!fs.existsSync(path.join(dir, 'serve.json')));
 });
 
+test('factory serve with a CLI outside the repo (global or npm link) still writes serve.json', async (t) => {
+  const { dir, main } = serveRepos();
+  const info = path.join(dir, 'serve.json');
+  const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-cli-')));
+  for (const d of ['bin', 'src', 'public', 'package.json']) fs.cpSync(path.join(main, d), path.join(outside, d), { recursive: true });
+  const child = spawn(process.execPath, [path.join(outside, 'bin', 'factory.mjs'), 'serve', '--port', String(randomPort())], {
+    cwd: main, // the repo the board belongs to; the CLI itself lives elsewhere
+    env: { ...process.env, FACTORY_BOARD: path.join(dir, 'board.json') },
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  t.after(() => child.kill());
+  await listening(child);
+  for (let i = 0; i < 100 && !fs.existsSync(info); i++) await new Promise((r) => setTimeout(r, 100));
+  assert.ok(fs.existsSync(info));
+});
+
 test('factory serve leaves serve.json alone when a newer serve rewrote it', { skip: process.platform === 'win32' }, async (t) => {
   const { dir, main } = serveRepos();
   const info = path.join(dir, 'serve.json');

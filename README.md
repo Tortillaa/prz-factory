@@ -171,6 +171,7 @@ Cada regla la hace cumplir el código, no la buena voluntad del agente. `factory
 | El mínimo código que resuelve la tarjeta; el que no debería existir se devuelve | skills `ponytail` y `ponytail-review` |
 | Una pantalla no sale con aspecto de "hecha por IA" (degradados morados, brillos, emojis, textos que gritan): sigue la dirección de la tarjeta | skill `unslop`, en el Spec Writer, el Builder y la lente `code` |
 | Un cambio de pantalla se entrega con una línea `Design:` y una captura de lo que se vio (o `--no-screenshot` y el motivo), y la lente `code` lo aprueba diciendo cómo lo miró | `handoff` y `verdict` en `src/lanes.mjs`, `ui.paths` en `factory.config.json` |
+| El tablero web se arranca siempre en una terminal de Orca ("Tablero web"), nunca como tarea en segundo plano de la sesión del agente, que se corta a las dos horas o al reiniciar Orca | `factory dispatch` (`src/dispatch.mjs`): al empezar cada paso abre la terminal si no hay un `serve.json` con un pid vivo |
 | Commits y comentarios en un formato único, con evidencias | `skills/factory-board/references/writing-standard.md` |
 | Un agente que ya no se usa se elimina solo: su terminal al terminar su trabajo y su workspace cuando la tarjeta llega a Done, sin depender del coordinador | `factory dispatch` (`src/dispatch.mjs`), `findLeftovers` en `src/cleanup.mjs` |
 | Cada agente se llama en Orca como el rol que asume (`Builder #N`, `Reviewer qa #N`, `Agente de merge #N`…), también cuando comparte workspace con otro rol | `roleTitle` en `src/run.mjs`, `factory dispatch` (`src/dispatch.mjs`) |

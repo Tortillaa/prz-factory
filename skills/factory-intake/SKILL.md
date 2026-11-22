@@ -15,7 +15,9 @@ The user asks for changes in this chat; you are the front desk of the factory. Y
 into a card the builder can build without guessing, and you never build or review it yourself. Board
 commands are in the `factory-board` skill; card format and writing rules in
 `../factory-spec/SKILL.md` and `../factory-board/references/writing-standard.md`. Pass `--json` to
-`factory` and stop on any error.
+`factory` and stop on any error. The web board is never a background task of this session (it dies with
+it): `factory dispatch` opens it in an Orca terminal titled "Tablero web", or run `orca terminal create
+--worktree path:<main checkout> --title "Tablero web" --command "<cli> serve"`.
 
 ## 1 · Split the request
 

@@ -32,6 +32,11 @@ Commands: `factory` (CLI, see the `factory-board` skill) and Orca's CLI. Load Or
 guide once per session with `orca skills get orchestration` (on Linux outside Orca: `orca-ide`).
 Pass `--json` everywhere and branch on the result, not on wording.
 
+The web board (`factory serve`) never runs as a background task of your session: those are cut after two
+hours or when Orca restarts. `factory dispatch` opens it in an Orca terminal titled "Tablero web" when no
+serve is alive (event `served`); by hand: `orca terminal create --worktree path:<main checkout>
+--title "Tablero web" --command "<cli> serve"`.
+
 ## 1 · Preconditions (once, before the first dispatch)
 
 ```text

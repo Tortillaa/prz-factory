@@ -27,9 +27,27 @@ function orca(args, { input } = {}) {
   return out.result ?? {};
 }
 
+const CLI = path.join(import.meta.dirname, '..', 'bin', 'factory.mjs');
+
+// A live `factory serve` for this board: serve.json (next to it) holds a pid that still exists.
+function serveAlive(file) {
+  try {
+    process.kill(JSON.parse(fs.readFileSync(path.join(path.dirname(file), 'serve.json'), 'utf8')).pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM'; // the process exists but is not ours
+  }
+}
 
 export function dispatch({ file, config, repoRoot, dryRun = false }) {
   const events = [];
+
+  // 0 · The web board lives in its own Orca terminal, outside this agent's session (background tasks
+  // of a session are cut after two hours or when Orca restarts).
+  if (!dryRun && !serveAlive(file)) {
+    const r = orca(['terminal', 'create', '--worktree', `path:${repoRoot}`, '--title', 'Tablero web', '--command', `node "${CLI}" serve`]);
+    events.push({ kind: 'served', ...(r.error ? { note: `terminal create: ${r.error}` } : {}) });
+  }
 
   // 1 · Workers still running on a round that is over: stop them and drop them from the list.
   for (const o of run.status(store.load(file), config, repoRoot).toStop) {
@@ -132,6 +150,7 @@ export function describe(e) {
   switch (e.kind) {
     case 'started': return `🚀 ${who} → ${e.worker}${model} ${e.dispatch}`;
     case 'stopped': return `⛔ #${e.id} stopped ${e.worker} (round over)${e.note ? ` · ${e.note}` : ''}`;
+    case 'served': return `🖥 web board ${e.note ? `not started · ${e.note}` : 'started in the "Tablero web" terminal'}`;
     case 'released': return `🧹 #${e.id} released ${e.worker}`;
     case 'clean-failed': return `✖ cleanup: ${e.note}`;
     case 'cleaned': return `🧹 #${e.id} removed workspace ${e.path}`;

@@ -154,5 +154,6 @@ Also backlog (parked), qa (`qa` cards) and blocked (waiting for a person). `fact
 | Craft | every step loads `ponytail` (spec, build) or `ponytail-review` (reviewers): the smallest change that fully works, and no code that should not exist |
 | Writing | commits and comments: `.claude/skills/factory-board/references/writing-standard.md` |
 | Agents | spec on claude claude-sonnet-5-5 · build on claude claude-sonnet-5-5 · merge on claude claude-haiku-5-5 · review on claude claude-sonnet-5-5 (high) · other lanes on claude; Claude Code and Grok read the same `.claude/` skills, this file and the guard hooks |
+| Web board | start it only in an Orca terminal (`factory dispatch` does it), never as a background task of an agent session |
 | Secrets | never read `.env` or key files; never write a key literal (guard hooks block both) |
 <!-- prz-factory:end -->

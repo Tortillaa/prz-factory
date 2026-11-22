@@ -338,7 +338,7 @@ test('dispatch: starts what the plan says, stops orphans, releases finished work
     });
 
     const first = dispatch({ file, config: cfg, repoRoot: ROOT });
-    assert.deepEqual(first.events.map((e) => [e.kind, e.id, e.worker]), [['started', 2, 'review-qa-2'], ['started', 2, 'review-code-2'], ['started', 1, 'spec-1']]);
+    assert.deepEqual(first.events.filter((e) => e.kind !== 'served').map((e) => [e.kind, e.id, e.worker]), [['started', 2, 'review-qa-2'], ['started', 2, 'review-code-2'], ['started', 1, 'spec-1']]);
     const starts = calls().filter((c) => c.args[1] === 'worker-start');
     assert.deepEqual(starts[0].args.slice(starts[0].args.indexOf('--agent'), starts[0].args.indexOf('--agent') + 6), ['--agent', 'grok', '--model', 'grok-4.7', '--effort', 'high']);
     assert.match(starts[0].input, /review \(qa\) worker/, 'the spec goes in on stdin');
@@ -385,6 +385,42 @@ test('dispatch: starts what the plan says, stops orphans, releases finished work
     const fourth = dispatch({ file, config: cfg, repoRoot: repo });
     assert.deepEqual(fourth.events.filter((e) => e.kind === 'cleaned').map((e) => [e.id, path.resolve(e.path)]), [[9, path.resolve(wtPath)]]);
     assert.ok(!fs.existsSync(wtPath));
+  } finally {
+    for (const [k, v] of [['FACTORY_ORCA', prev.orca], ['FAKE_ORCA_LOG', prev.log], ['FAKE_ORCA_FAIL', prev.fail]]) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
+test('dispatch: opens the web board in an Orca terminal unless a live serve.json exists', async () => {
+  const { dispatch } = await import('../src/dispatch.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-served-'));
+  const file = path.join(dir, 'board.json');
+  const log = path.join(dir, 'orca.log');
+  const creates = () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l).args).filter((a) => a[1] === 'create') : []);
+  const prev = { orca: process.env.FACTORY_ORCA, log: process.env.FAKE_ORCA_LOG, fail: process.env.FAKE_ORCA_FAIL };
+  process.env.FACTORY_ORCA = path.join(import.meta.dirname, 'fake-orca.mjs');
+  process.env.FAKE_ORCA_LOG = log;
+  const step = () => dispatch({ file, config, repoRoot: ROOT }).events.filter((e) => e.kind === 'served');
+  try {
+    assert.equal(step().length, 1);
+    const [args] = creates();
+    assert.equal(args[args.indexOf('--title') + 1], 'Tablero web');
+    assert.match(args[args.indexOf('--command') + 1], /serve$/);
+
+    fs.rmSync(log, { force: true });
+    fs.writeFileSync(path.join(dir, 'serve.json'), JSON.stringify({ port: 4747, pid: process.pid }));
+    assert.equal(step().length, 0);
+    assert.equal(creates().length, 0, 'a live serve gets no terminal');
+
+    fs.writeFileSync(path.join(dir, 'serve.json'), JSON.stringify({ port: 4747, pid: 2 ** 22 + 12345 }));
+    assert.equal(step().length, 1, 'a dead pid gets one');
+    assert.equal(creates().length, 1);
+
+    process.env.FAKE_ORCA_FAIL = 'create';
+    const [failed] = step();
+    assert.match(failed.note, /terminal create/);
   } finally {
     for (const [k, v] of [['FACTORY_ORCA', prev.orca], ['FAKE_ORCA_LOG', prev.log], ['FAKE_ORCA_FAIL', prev.fail]]) {
       if (v === undefined) delete process.env[k];

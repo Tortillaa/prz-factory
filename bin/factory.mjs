@@ -270,7 +270,9 @@ try {
     case 'show': {
       const card = store.annotate(store.load(file)).cards.find((c) => c.id === Number(need(args[0], 'id')));
       if (!card) throw new Error(`card #${args[0]} not found`);
-      const run = Object.entries(card.run).map(([k, v]) => `${k}: ${v}`).join(' · ');
+      // Objects print as their files (evidence) or short JSON, never as [object Object].
+      const shown = (v) => (Array.isArray(v) ? v.map(shown).join(', ') : v && typeof v === 'object' ? (v.files ? shown(v.files) : JSON.stringify(v)) : v);
+      const run = Object.entries(card.run).map(([k, v]) => `${k}: ${Array.isArray(v) && v.every((x) => typeof x !== 'object') ? v : shown(v)}`).join(' · ');
       const comments = card.comments.map((c) => `  [${c.role}] ${c.at}\n    ${c.text}`).join('\n');
       print(
         card,

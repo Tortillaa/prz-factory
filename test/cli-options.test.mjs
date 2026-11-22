@@ -119,3 +119,17 @@ test('factory serve leaves serve.json alone when a newer serve rewrote it', { sk
   await closed;
   assert.ok(fs.existsSync(info));
 });
+
+test('show writes the path of each screenshot, never [object Object]', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-'));
+  const board = path.join(dir, 'board.json');
+  const env = { ...process.env, FACTORY_BOARD: board };
+  const sh = (...a) => spawnSync(process.execPath, [CLI, ...a], { env, encoding: 'utf8', timeout: 10_000 });
+  sh('add', 'idea', '--column', 'backlog');
+  const b = JSON.parse(fs.readFileSync(board, 'utf8'));
+  b.cards[0].run = { screens: ['a.html'], evidence: { head: 'abc1234', files: ['/e/1/abc1234-1.png', '/e/1/abc1234-2.png'] } };
+  fs.writeFileSync(board, JSON.stringify(b));
+  const out = sh('show', String(b.cards[0].id)).stdout;
+  assert.ok(out.includes('/e/1/abc1234-1.png, /e/1/abc1234-2.png'), out);
+  assert.ok(!out.includes('[object Object]'), out);
+});

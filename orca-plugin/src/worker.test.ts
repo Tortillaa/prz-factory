@@ -472,7 +472,7 @@ test('readBoard gives the review progress by the lenses of factory.config.json, 
   const repo = repoWithBoard([card(risk('High')), { ...card(risk('Low')), id: 8 }])
   const [entry] = discover([repo])
   const none = readBoard(entry).cards[0]
-  assert.deepEqual(none.panel, { passed: ['qa', 'code'], total: 3 })
+  assert.deepEqual(none.panel, { passed: ['qa', 'code'], total: 3, lenses: [{ lens: 'qa', state: 'pass' }, { lens: 'code', state: 'pass' }, { lens: 'security', state: 'working' }] })
   assert.equal(none.sha, 'abc1234def')
   assert.equal(none.lastComment, '¿Qué moneda?')
   fs.writeFileSync(path.join(repo, 'factory.config.json'), JSON.stringify({ review: { lenses: ['qa', 'security', 'code', 'ops'], light: ['qa', 'code'] }, merge: { humanLabels: ['auth'] } }))
@@ -513,19 +513,17 @@ async function actionWorker(layout: 'prz' | 'bin' | 'both' | 'none', card?: unkn
   return { worker, key, repo, calls, boardFile: path.join(repo, '.git', 'factory', 'board.json') }
 }
 
-test('card.get/add/edit/move/comment run the CLI with the exact arguments, in the repo, on its board', async () => {
+test('card.get/edit/move/comment run the CLI with the exact arguments, in the repo, on its board', async () => {
   const t = await actionWorker('prz')
   const before = fs.readFileSync(t.boardFile, 'utf8')
   const b = t.key
   assert.deepEqual(await t.worker.request('card.get', { board: b, id: 7 }), { id: 7, labels: [], run: {} })
-  assert.deepEqual(await t.worker.request('card.add', { board: b, title: 'T', body: 'B', labels: ['x', 'y'], blockedBy: [1, 2], column: 'spec' }), { ok: 'add' })
   assert.deepEqual(await t.worker.request('card.edit', { board: b, id: 7, title: 'T2', body: 'B2', labels: ['z'], blockedBy: [3] }), { ok: 'edit' })
   assert.deepEqual(await t.worker.request('card.move', { board: b, id: 7, column: 'ready', before: 4 }), { ok: 'move' })
   assert.deepEqual(await t.worker.request('card.comment', { board: b, id: 7, text: 'hola' }), { ok: 'comment' })
   const got = t.calls()
   assert.deepEqual(got.map((c) => c.argv), [
     ['show', '--json', '--', '7'],
-    ['add', '--body=B', '--label=x', '--label=y', '--blocked-by=1,2', '--column=spec', '--json', '--', 'T'],
     ['edit', '--title=T2', '--body=B2', '--label=z', '--blocked-by=3', '--json', '--', '7'],
     ['move', '--before=4', '--by=user', '--json', '--', '7', 'ready'],
     ['comment', '--role=user', '--json', '--', '7', 'hola']
@@ -557,10 +555,10 @@ test('card.move passes --force only when asked, and a CLI error comes back uncha
 test('the CLI is .prz-factory/bin first, then bin, and no CLI is an error that says so', async () => {
   const both = await actionWorker('both')
   await both.worker.request('card.comment', { board: both.key, id: 1, text: 'a' })
-  assert.deepEqual((await both.worker.request('card.add', { board: both.key, title: 't' })), { ok: 'add' }) // .prz-factory's answer has no `from`
+  assert.deepEqual(await both.worker.request('card.comment', { board: both.key, id: 1, text: 't' }), { ok: 'comment' }) // .prz-factory's answer has no `from`
   await both.worker.deactivate()
   const bin = await actionWorker('bin')
-  assert.deepEqual(await bin.worker.request('card.add', { board: bin.key, title: 't' }), { ok: 'add', from: 'bin' })
+  assert.deepEqual(await bin.worker.request('card.comment', { board: bin.key, id: 1, text: 't' }), { ok: 'comment', from: 'bin' })
   await bin.worker.deactivate()
   const none = await actionWorker('none')
   const reply = await none.worker.request('card.get', { board: none.key, id: 1 })
@@ -596,11 +594,10 @@ test('free text that looks like an option stays text, after `--` or inside a --f
   const t = await actionWorker('prz')
   for (const text of ['- item', '--text-file=x', '--force']) {
     await t.worker.request('card.comment', { board: t.key, id: 7, text })
-    await t.worker.request('card.add', { board: t.key, title: text, body: text })
     await t.worker.request('card.edit', { board: t.key, id: 7, title: text, body: text })
   }
   const calls = t.calls()
-  assert.equal(calls.length, 9)
+  assert.equal(calls.length, 6)
   for (const { argv } of calls) {
     const stop = argv.indexOf('--')
     assert.ok(stop > argv.indexOf('--json'), '--json comes before --')
@@ -608,7 +605,6 @@ test('free text that looks like an option stays text, after `--` or inside a --f
     for (const a of argv.slice(1, stop)) assert.match(a, /^--(json|role=user|body=.*|title=.*)$/)
   }
   assert.deepEqual(calls.filter((c) => c.argv[0] === 'comment').map((c) => c.argv.at(-1)), ['- item', '--text-file=x', '--force'])
-  assert.deepEqual(calls.filter((c) => c.argv[0] === 'add').map((c) => c.argv.at(-1)), ['- item', '--text-file=x', '--force'])
   await t.worker.deactivate()
 })
 
@@ -621,17 +617,13 @@ test('card.edit with labels [] is an error, never an OK that cleared nothing', a
   await t.worker.deactivate()
 })
 
-test('card.template runs `template --json` in the repo, and an unknown board or a CLI failure comes back as an error', async () => {
+test('the contract has no way to create a card: no card.add, no card.template', async () => {
+  const text = (f: string) => fs.readFileSync(path.join(import.meta.dirname, f), 'utf8')
+  assert.doesNotMatch(text('protocol.ts'), /card.(add|template)/)
   const t = await actionWorker('prz')
-  assert.deepEqual(await t.worker.request('card.template', { board: t.key }), { ok: 'template' })
-  const [call] = t.calls()
-  assert.deepEqual(call.argv, ['template', '--json', '--'])
-  assert.equal(fs.realpathSync(call.cwd), t.repo)
-  assert.deepEqual(await t.worker.request('card.template', { board: '/nowhere/.git' }), { error: 'unknown board /nowhere/.git' })
+  for (const name of ['card.add', 'card.template']) await assert.rejects((t.worker as any).request(name, { board: t.key, title: 'x' }))
+  assert.deepEqual(t.calls(), [])
   await t.worker.deactivate()
-  const none = await actionWorker('none')
-  assert.match(String((await none.worker.request('card.template', { board: none.key })).error), /bin\/factory\.mjs/)
-  await none.worker.deactivate()
 })
 
 test('readBoard fills since, lastMerge and from, and survives a card with no history or comments', () => {
@@ -640,4 +632,14 @@ test('readBoard fills since, lastMerge and from, and survives a card with no his
   const [a, b] = readBoard(discover([repoWithBoard([held, bare])])[0]).cards
   assert.deepEqual([a.since, a.lastMerge, a.from], ['2026-01-01T00:00:00.000Z', 'retenido', 'merge'])
   assert.deepEqual([b.since, b.lastMerge, b.from], [null, null, null])
+})
+
+test('readBoard lists every worker holding a card and when it reached done', () => {
+  const lenses = { qa: { worker: 'review-qa-7' }, code: { worker: 'review-code-7' } }
+  const review = { id: 1, title: 'R', column: 'review', panel: { lenses } }
+  const built = { id: 2, title: 'B', column: 'building', assignee: 'build-2' }
+  const done = { id: 3, title: 'D', column: 'done', history: [{ at: '2026-01-01T00:00:00.000Z', to: 'ready' }, { at: '2026-01-02T00:00:00.000Z', from: 'merge', to: 'done' }] }
+  const [a, b, c] = readBoard(discover([repoWithBoard([review, built, done])])[0]).cards
+  assert.deepEqual([a.workers, b.workers, c.workers], [['review-qa-7', 'review-code-7'], ['build-2'], []])
+  assert.deepEqual([a.doneAt, c.doneAt], [null, '2026-01-02T00:00:00.000Z'])
 })

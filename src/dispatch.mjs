@@ -2,10 +2,12 @@
 // releases the Orca terminals of workers that finished, and starts a worker for every action of
 // `plan` (claim → spec → `orca orchestration worker-start` → record), so the coordinator never runs
 // those steps by hand. Orca is reached through `orcaCli()`, which tests replace with a fake.
+import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import * as store from './store.mjs';
 import * as run from './run.mjs';
+import { findLeftovers, applyCleanup } from './cleanup.mjs';
 
 // The Orca CLI as [command, ...prefix args]. FACTORY_ORCA points at a replacement (a .mjs runs on node).
 export function orcaCli(env = process.env) {
@@ -25,10 +27,27 @@ function orca(args, { input } = {}) {
   return out.result ?? {};
 }
 
-const label = (a) => (a.lens ? `${a.lane}:${a.lens}` : a.lane);
+const CLI = path.join(import.meta.dirname, '..', 'bin', 'factory.mjs');
+
+// A live `factory serve` for this board: serve.json (next to it) holds a pid that still exists.
+function serveAlive(file) {
+  try {
+    process.kill(JSON.parse(fs.readFileSync(path.join(path.dirname(file), 'serve.json'), 'utf8')).pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM'; // the process exists but is not ours
+  }
+}
 
 export function dispatch({ file, config, repoRoot, dryRun = false }) {
   const events = [];
+
+  // 0 · The web board lives in its own Orca terminal, outside this agent's session (background tasks
+  // of a session are cut after two hours or when Orca restarts).
+  if (!dryRun && !serveAlive(file)) {
+    const r = orca(['terminal', 'create', '--worktree', `path:${repoRoot}`, '--title', 'Tablero web', '--command', `node "${CLI}" serve`]);
+    events.push({ kind: 'served', ...(r.error ? { note: `terminal create: ${r.error}` } : {}) });
+  }
 
   // 1 · Workers still running on a round that is over: stop them and drop them from the list.
   for (const o of run.status(store.load(file), config, repoRoot).toStop) {
@@ -83,10 +102,11 @@ export function dispatch({ file, config, repoRoot, dryRun = false }) {
     const card = store.getCard(store.load(file), a.id);
     const spec = run.spec(card, a.lane, a.worker, repoRoot, a.lens);
     const p = a.placement;
+    const role = run.roleTitle(card, a.lane, a.lens, run.round(card, a.lane));
     const args = ['orchestration', 'worker-start', '--spec-file', '-', '--agent', a.launch.agent,
       ...(a.launch.model ? ['--model', a.launch.model] : []), ...(a.launch.effort ? ['--effort', a.launch.effort] : []),
-      '--task-title', `#${a.id} ${label(a)}: ${a.title}`.slice(0, 120), '--worktree', p.worktree,
-      ...(p.worktree === 'new-top-level' ? ['--repo', p.repo, '--name', p.name, '--base-branch', config.baseBranch] : [])];
+      '--task-title', `${role}: ${a.title}`.slice(0, 120), '--worktree', p.worktree,
+      ...(p.worktree === 'new-top-level' ? ['--repo', p.repo, '--name', p.name, '--base-branch', config.baseBranch, '--display-name', role] : [])];
     const started = orca(args, { input: spec });
     if (started.error || !started.dispatchId) {
       // Nothing started: give the claim back so the next dispatch retries it.
@@ -98,7 +118,27 @@ export function dispatch({ file, config, repoRoot, dryRun = false }) {
       run.recordDispatch(b, a.id, { worker: a.worker, dispatch: started.dispatchId });
       (b.workers ??= []).push({ id: a.id, worker: a.worker, dispatch: started.dispatchId, lane: a.lane, lens: a.lens, agent: a.launch.agent, model: a.launch.model ?? null, startedAt: new Date().toISOString() });
     });
-    events.push({ kind: 'started', id: a.id, lane: a.lane, lens: a.lens, worker: a.worker, dispatch: started.dispatchId, launch: a.launch, worktree: path.basename(started.workspace || p.name || p.worktree) });
+    // The role changes while the workspace stays: rename it, and the terminal tab. A failure only leaves a note.
+    const notes = [];
+    if (p.worktree !== 'new-top-level') {
+      const r = orca(['worktree', 'set', '--worktree', p.worktree, '--display-name', role]);
+      if (r.error) notes.push(`worktree set: ${r.error}`);
+    }
+    const handle = started.terminal ?? started.terminalHandle;
+    if (handle) {
+      const r = orca(['terminal', 'rename', '--terminal', handle, '--title', role]);
+      if (r.error) notes.push(`terminal rename: ${r.error}`);
+    }
+    events.push({ kind: 'started', id: a.id, lane: a.lane, lens: a.lens, worker: a.worker, dispatch: started.dispatchId, launch: a.launch, worktree: path.basename(started.workspace || p.name || p.worktree), ...(notes.length ? { note: notes.join('; ') } : {}) });
+  }
+
+  // 4 · Workspaces of cards already in done: nobody will use them again, so they leave Orca now.
+  if (!dryRun && fs.existsSync(repoRoot)) {
+    const found = findLeftovers({ cwd: repoRoot, board: store.load(file), config });
+    // The fake Orca of the tests is not on the shell path that cleanup uses: git removes the worktree.
+    const done = applyCleanup(found, { cwd: repoRoot, ...(process.env.FACTORY_ORCA ? { useOrca: false } : {}) });
+    for (const p of done.worktrees) events.push({ kind: 'cleaned', path: p, id: found.worktrees.find((w) => w.path === p)?.card });
+    for (const note of done.errors) events.push({ kind: 'clean-failed', note });
   }
   return { events };
 }
@@ -110,7 +150,10 @@ export function describe(e) {
   switch (e.kind) {
     case 'started': return `🚀 ${who} → ${e.worker}${model} ${e.dispatch}`;
     case 'stopped': return `⛔ #${e.id} stopped ${e.worker} (round over)${e.note ? ` · ${e.note}` : ''}`;
+    case 'served': return `🖥 web board ${e.note ? `not started · ${e.note}` : 'started in the "Tablero web" terminal'}`;
     case 'released': return `🧹 #${e.id} released ${e.worker}`;
+    case 'clean-failed': return `✖ cleanup: ${e.note}`;
+    case 'cleaned': return `🧹 #${e.id} removed workspace ${e.path}`;
     case 'failed': return `✖ ${who} ${e.worker}: ${e.note}`;
     case 'skipped': return `· ${who} ${e.worker}: ${e.note}`;
     default: return `${e.kind} ${who} ${e.worker ?? ''}${model}`;

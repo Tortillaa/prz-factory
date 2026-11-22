@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import * as store from '../src/store.mjs';
 import * as run from '../src/run.mjs';
 import { DEFAULTS, loadConfig } from '../src/config.mjs';
@@ -320,7 +321,7 @@ test('maxWorkers is validated: a number, or a positive number per agent', () => 
 // `factory dispatch` against a fake Orca: one coordinator step with no manual Orca calls.
 test('dispatch: starts what the plan says, stops orphans, releases finished workers, and recovers from a failed start', async () => {
   const { dispatch } = await import('../src/dispatch.mjs');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-dispatch-'));
+  const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-dispatch-')));
   const file = path.join(dir, 'board.json');
   const log = path.join(dir, 'orca.log');
   const calls = () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : []);
@@ -337,7 +338,7 @@ test('dispatch: starts what the plan says, stops orphans, releases finished work
     });
 
     const first = dispatch({ file, config: cfg, repoRoot: ROOT });
-    assert.deepEqual(first.events.map((e) => [e.kind, e.id, e.worker]), [['started', 2, 'review-qa-2'], ['started', 2, 'review-code-2'], ['started', 1, 'spec-1']]);
+    assert.deepEqual(first.events.filter((e) => e.kind !== 'served').map((e) => [e.kind, e.id, e.worker]), [['started', 2, 'review-qa-2'], ['started', 2, 'review-code-2'], ['started', 1, 'spec-1']]);
     const starts = calls().filter((c) => c.args[1] === 'worker-start');
     assert.deepEqual(starts[0].args.slice(starts[0].args.indexOf('--agent'), starts[0].args.indexOf('--agent') + 6), ['--agent', 'grok', '--model', 'grok-4.7', '--effort', 'high']);
     assert.match(starts[0].input, /review \(qa\) worker/, 'the spec goes in on stdin');
@@ -368,6 +369,105 @@ test('dispatch: starts what the plan says, stops orphans, releases finished work
     const third = dispatch({ file, config: cfg, repoRoot: ROOT });
     assert.deepEqual(third.events.filter((e) => e.kind === 'failed').map((e) => e.worker), ['spec-3']);
     assert.equal(store.load(file).cards[2].assignee, null);
+
+    // 4 · A card in done: its clean worktree is removed by the same step, and reported.
+    const repo = fs.mkdtempSync(path.join(dir, 'repo-'));
+    const g = (...a) => execFileSync('git', a, { cwd: repo, stdio: 'ignore' });
+    g('init', '-q', '-b', 'main'); g('config', 'user.email', 't@e.com'); g('config', 'user.name', 't');
+    fs.writeFileSync(path.join(repo, 'a'), 'a'); g('add', '.'); g('commit', '-qm', 'i');
+    const wtPath = path.join(dir, 'factory-9');
+    g('worktree', 'add', '-q', '--detach', wtPath);
+    store.update(file, (bd) => {
+      bd.nextId = 9;
+      const c = store.addCard(bd, { title: 'finished' });
+      store.moveCard(bd, c.id, 'done', null, { force: true });
+    });
+    const fourth = dispatch({ file, config: cfg, repoRoot: repo });
+    assert.deepEqual(fourth.events.filter((e) => e.kind === 'cleaned').map((e) => [e.id, path.resolve(e.path)]), [[9, path.resolve(wtPath)]]);
+    assert.ok(!fs.existsSync(wtPath));
+  } finally {
+    for (const [k, v] of [['FACTORY_ORCA', prev.orca], ['FAKE_ORCA_LOG', prev.log], ['FAKE_ORCA_FAIL', prev.fail]]) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
+test('dispatch: opens the web board in an Orca terminal unless a live serve.json exists', async () => {
+  const { dispatch } = await import('../src/dispatch.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-served-'));
+  const file = path.join(dir, 'board.json');
+  const log = path.join(dir, 'orca.log');
+  const creates = () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l).args).filter((a) => a[1] === 'create') : []);
+  const prev = { orca: process.env.FACTORY_ORCA, log: process.env.FAKE_ORCA_LOG, fail: process.env.FAKE_ORCA_FAIL };
+  process.env.FACTORY_ORCA = path.join(import.meta.dirname, 'fake-orca.mjs');
+  process.env.FAKE_ORCA_LOG = log;
+  const step = () => dispatch({ file, config, repoRoot: ROOT }).events.filter((e) => e.kind === 'served');
+  try {
+    assert.equal(step().length, 1);
+    const [args] = creates();
+    assert.equal(args[args.indexOf('--title') + 1], 'Tablero web');
+    assert.match(args[args.indexOf('--command') + 1], /serve$/);
+
+    fs.rmSync(log, { force: true });
+    fs.writeFileSync(path.join(dir, 'serve.json'), JSON.stringify({ port: 4747, pid: process.pid }));
+    assert.equal(step().length, 0);
+    assert.equal(creates().length, 0, 'a live serve gets no terminal');
+
+    fs.writeFileSync(path.join(dir, 'serve.json'), JSON.stringify({ port: 4747, pid: 2 ** 22 + 12345 }));
+    assert.equal(step().length, 1, 'a dead pid gets one');
+    assert.equal(creates().length, 1);
+
+    process.env.FAKE_ORCA_FAIL = 'create';
+    const [failed] = step();
+    assert.match(failed.note, /terminal create/);
+  } finally {
+    for (const [k, v] of [['FACTORY_ORCA', prev.orca], ['FAKE_ORCA_LOG', prev.log], ['FAKE_ORCA_FAIL', prev.fail]]) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
+test('roleTitle: every agent is named after its role', async () => {
+  const { roleTitle } = await import('../src/run.mjs');
+  const c = { id: 7 };
+  assert.deepEqual(
+    [['spec'], ['build'], ['build', null, 2], ['review', 'code'], ['merge'], ['qa']].map(([l, lens, r]) => roleTitle(c, l, lens, r)),
+    ['Spec Writer #7', 'Builder #7', 'Builder #7 · ronda 2', 'Reviewer code #7', 'Agente de merge #7', 'QA #7'],
+  );
+});
+
+test('dispatch: names the worktree and task after the role, and a failed rename only leaves a note', async () => {
+  const { dispatch } = await import('../src/dispatch.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-names-'));
+  const file = path.join(dir, 'board.json');
+  const log = path.join(dir, 'orca.log');
+  const calls = () => fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l).args);
+  const prev = { orca: process.env.FACTORY_ORCA, log: process.env.FAKE_ORCA_LOG, fail: process.env.FAKE_ORCA_FAIL };
+  process.env.FACTORY_ORCA = path.join(import.meta.dirname, 'fake-orca.mjs');
+  process.env.FAKE_ORCA_LOG = log;
+  const cfg = { ...config, maxWorkers: 5, review: { ...config.review, lenses: ['qa'] } };
+  try {
+    store.update(file, (b) => store.addCard(b, { title: 'to build', body: GOOD_BODY, column: 'ready' }));
+    dispatch({ file, config: cfg, repoRoot: ROOT });
+    const start = calls().find((a) => a[1] === 'worker-start');
+    assert.match(start[start.indexOf('--task-title') + 1], /^Builder #1/);
+    assert.equal(start[start.indexOf('--display-name') + 1], 'Builder #1');
+
+    // A reviewer reuses a worktree that already exists: it is renamed with `worktree set`.
+    store.update(file, (b) => {
+      store.releaseCard(b, 1);
+      store.moveCard(b, 1, 'review', null, { force: true });
+      b.cards[0].run.branch = 'factory/1-x';
+      b.cards[0].panel.lenses.qa = { worktree: dir };
+    });
+    fs.rmSync(log);
+    process.env.FAKE_ORCA_FAIL = 'set';
+    const { events } = dispatch({ file, config: cfg, repoRoot: ROOT });
+    assert.deepEqual(calls().find((a) => a[1] === 'set'), ['worktree', 'set', '--worktree', `path:${dir}`, '--display-name', 'Reviewer qa #1', '--json']);
+    const started = events.find((e) => e.kind === 'started');
+    assert.match(started.note, /worktree set/);
   } finally {
     for (const [k, v] of [['FACTORY_ORCA', prev.orca], ['FAKE_ORCA_LOG', prev.log], ['FAKE_ORCA_FAIL', prev.fail]]) {
       if (v === undefined) delete process.env[k];

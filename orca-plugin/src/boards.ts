@@ -53,7 +53,7 @@ type RawCard = {
   body?: string
   run?: { reviewedSha?: string | null }
   claimedAt?: string | null
-  history?: { from?: string; to: string }[]
+  history?: { at?: string; from?: string; to: string }[]
   comments?: { role?: string; text: string }[]
   panel?: { lenses?: Record<string, { worker?: string | null; verdict?: string | null; claimedAt?: string | null }> }
 }
@@ -97,6 +97,8 @@ export function readBoard(entry: { key: string; name: string; file: string }): B
     labels: c.labels ?? [],
     // A card in review is held by its panel: one reviewer per lens, in parallel.
     assignee: c.assignee ?? reviewers(c),
+    workers: [...new Set([c.assignee, ...Object.values(c.panel?.lenses ?? {}).map((s) => s.worker)].filter((w): w is string => !!w))],
+    doneAt: c.history?.findLast((h) => h.to === 'done')?.at ?? null,
     waitingOn: (c.blockedBy ?? []).filter((d) => column.get(d) !== 'done'),
     sha: c.run?.reviewedSha ?? null,
     lastComment: c.comments?.at(-1)?.text.trim() ?? null,
@@ -106,7 +108,8 @@ export function readBoard(entry: { key: string; name: string; file: string }): B
     ...(c.column === 'review' && {
       panel: {
         passed: Object.entries(c.panel?.lenses ?? {}).filter(([, s]) => s.verdict === 'pass').map(([l]) => l),
-        total: panelTotal(c, config)
+        total: panelTotal(c, config),
+        lenses: Object.entries(c.panel?.lenses ?? {}).map(([lens, s]) => ({ lens, state: s.verdict === 'pass' ? 'pass' : s.verdict === 'fail' ? 'fail' : s.worker ? 'working' : 'pending' }) as const)
       }
     })
   }))

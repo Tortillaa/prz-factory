@@ -489,7 +489,7 @@ try {
       break;
     }
     case 'agents-md': {
-      const root = mainCheckout();
+      const root = repoRoot();
       const r = writeBlock(root, loadConfig(root).config, opts.file ? path.resolve(opts.file) : undefined);
       print(r, `${r.status} ${r.file}`);
       break;

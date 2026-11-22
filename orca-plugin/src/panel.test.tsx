@@ -11,10 +11,12 @@ const board = (name: string, extra: Partial<BoardsSnapshot['boards'][number]> = 
   unknown: [],
   serve: null as number | null,
   cards: [
-    { id: 3, title: 'Mail sender', column: 'building', labels: [], assignee: 'build-3', waitingOn: [], sha: null, lastComment: null, lastMerge: null, from: null, since: new Date(Date.now() - 5 * 60000).toISOString() },
-    { id: 4, title: 'Pay', column: 'blocked', labels: ['needs-you', 'merge-approval'], assignee: null, waitingOn: [], sha: 'abc1234def', lastComment: 'listo', lastMerge: 'retenido: toca pagos', from: 'merge', since: null },
-    { id: 5, title: 'Money', column: 'blocked', labels: ['needs-you'], assignee: null, waitingOn: [], sha: null, lastComment: '¿Qué moneda usamos?', lastMerge: null, from: 'building', since: null },
-    { id: 6, title: 'Login', column: 'review', labels: [], assignee: 'review-qa-6', waitingOn: [], sha: null, lastComment: null, panel: { passed: ['qa', 'code'], total: 4 } }
+    { id: 3, title: 'Mail sender', column: 'building', labels: [], assignee: 'build-3', workers: ['build-34-r2'], doneAt: null, waitingOn: [], sha: null, lastComment: null, lastMerge: null, from: null, since: new Date(Date.now() - 5 * 60000).toISOString() },
+    { id: 4, title: 'Pay', column: 'blocked', labels: ['needs-you', 'merge-approval'], assignee: null, workers: [], doneAt: null, waitingOn: [], sha: 'abc1234def', lastComment: 'listo', lastMerge: 'Merge para una persona: riesgo high; label auth; diff grande: 477 líneas (máximo 400).\nPara aprobarlo: ejecuta `factory merge 4 --human`.', from: 'merge', since: null },
+    { id: 5, title: 'Money', column: 'blocked', labels: ['needs-you'], assignee: null, workers: [], doneAt: null, waitingOn: [], sha: null, lastComment: '¿Qué moneda usamos?', lastMerge: null, from: 'building', since: null },
+    { id: 6, title: 'Login', column: 'review', labels: [], assignee: 'review-qa-6', workers: ['review-qa-7'], doneAt: null, waitingOn: [], sha: null, lastComment: null, lastMerge: null, from: null, since: null, panel: { passed: ['qa'], total: 2, lenses: [{ lens: 'qa', state: 'pass' }, { lens: 'code', state: 'working' }] } },
+    { id: 7, title: 'Search', column: 'ready', labels: [], assignee: null, workers: [], doneAt: null, waitingOn: [3], sha: null, lastComment: null, lastMerge: null, from: null, since: null },
+    { id: 8, title: 'Landed', column: 'done', labels: [], assignee: null, workers: [], doneAt: new Date().toISOString(), waitingOn: [], sha: null, lastComment: null, lastMerge: null, from: null, since: null }
   ],
   ...extra
 })
@@ -25,11 +27,10 @@ test('shows the board, what needs a person, and switches repos', async () => {
   const summary = view.summary()
   const text = summary.join(' ')
   assert.ok(view.find({ text: 'Te esperan' }))
-  assert.ok(view.find({ text: 'retenido: toca pagos' }))
+  for (const phrase of ['riesgo high', 'label auth', 'diff grande: 477 líneas (máximo 400)']) assert.ok(view.find({ text: phrase }))
+  assert.doesNotMatch(text, /factory merge|⚠|🔴/)
   assert.ok(view.find({ text: 'abc1234' }))
   assert.ok(view.find({ text: /¿Qué moneda usamos[?]/ }))
-  assert.ok(view.find({ text: /review 2[/]4: qa ✓ code ✓/ }))
-  assert.ok(view.find({ text: /review-qa-6 · review/ }))
   assert.ok(view.find({ label: '#3 Mail sender' }))
 
   await view.post('boards.changed', { boards: [board('shop', { cards: [] })] })
@@ -75,32 +76,30 @@ test('Te esperan: approve with the full sha, answer with a comment then a move t
   await view.unmount()
 })
 
-test('En curso shows who, lane, since when and panel progress; the search narrows the columns', async () => {
+test('the cover reads Te esperan, En marcha, Cola, Hecho, with the rail and roles, and no column sections', async () => {
   const host = mockHost({ requests: { 'boards.get': () => ({ boards: [board('shop')] }) } })
   const view = await mount(panel, { host })
   const tree = JSON.stringify(view.tree())
-  assert.ok(tree.indexOf('Te esperan') < tree.indexOf('"En curso"') && tree.indexOf('"En curso"') < tree.indexOf('"building"'))
+  const at = ['Te esperan', '"En marcha"', '"Cola"', '"Hecho"'].map((t) => tree.indexOf(t))
+  assert.ok(at.every((n, i) => n >= 0 && (i === 0 || n > at[i - 1])), String(at))
+  assert.doesNotMatch(tree, /Collapsible/)
   assert.match(tree, /RelativeTime/)
-  assert.ok(view.find({ text: /build-3 · building/ }))
-  assert.ok(view.find({ text: /review-qa-6 · review · review 2[/]4/ }))
-  const lists = () => view.summary().filter((l) => /^List "(building|review|blocked)"/.test(l)).join(' ')
-  assert.match(lists(), /building.*review.*blocked/) // empty search: every column
-  await view.type({ label: 'Buscar' }, 'LOGIN')
-  assert.equal(lists(), 'List "review": 1 item(s)')
+  assert.doesNotMatch(view.find({ label: "#3 Mail sender" })!.text, /[[\]]|Abrir/)
+  assert.equal(view.find({ text: /Abrir/ }), null)
+  assert.match(tree, /"spec ·"[^]*?"build ·"[^]*?Builder · ronda 2/)
+  assert.match(tree, /"review ·"[^]*?qa ✓ · code en curso[^]*?Reviewer qa/)
+  assert.ok(view.find({ label: '1 · #7 Search' }))
+  assert.match(tree, /espera a #3/)
+  assert.ok(view.find({ label: '#8 Landed' }))
   await view.unmount()
-  // A card number matches too.
-  const byNumber = await mount(panel, { host })
-  await byNumber.type({ label: 'Buscar' }, '3')
-  assert.deepEqual(byNumber.summary().filter((l) => /^List "building"/.test(l)), ['List "building": 1 item(s)'])
-  await byNumber.unmount()
 })
 
 test('lists cards in an unknown column apart, with their column', async () => {
   const odd = { id: 9, title: 'Old card', column: 'archived', labels: [], assignee: null, waitingOn: [], sha: null, lastComment: null }
   const host = mockHost({ requests: { 'boards.get': () => ({ boards: [board('shop', { unknown: [odd] })] }) } })
   const view = await mount(panel, { host })
-  assert.match(view.summary().join(' '), /columna desconocida/)
-  assert.ok(view.find({ label: '#9 Old card · archived' }))
+  assert.match(JSON.stringify(view.tree()), /Columna desconocida/)
+  assert.ok(view.find({ text: '#9 Old card · archived' }))
   await view.unmount()
 })
 
@@ -144,9 +143,9 @@ test('a card opens its sheet instead of the list, and Volver returns to it', asy
   assert.match(text, /feature/)
   assert.match(text, /riesgo Low/)
   assert.match(text, /No manda correos/)
-  assert.equal(view.find({ label: '#4 Pay' }), null)
+  assert.equal(view.find({ label: '#8 Landed' }), null)
   await view.press({ text: 'Volver' })
-  assert.ok(view.find({ label: '#4 Pay' }))
+  assert.ok(view.find({ label: '#8 Landed' }))
   assert.deepEqual(view.errors, [])
   await view.unmount()
 })
@@ -169,7 +168,7 @@ test('the sheet shows lint, blockers, comments with their age, history and the r
   assert.match(text, /bloqueada por #2/)
   assert.match(text, /ojo con esto/)
   assert.match(text, /ready → building \(build-3\)/)
-  assert.match(text, /qa ✓ · code …/)
+  assert.match(text, /qa ✓ · code en curso/)
   assert.match(text, /"RelativeTime","props":{"at":\d+}/)
   await view.unmount()
 })
@@ -280,21 +279,21 @@ test('a card.get that arrives late for another card is dropped, and actions use 
   const sent: any[] = []
   const get = async (i: { id: number }) => {
     if (i.id === 3) await tick(), await tick() // card 3's answer lands after card 4's
-    return sheet({ id: i.id, title: i.id === 3 ? 'Mail sender' : 'Pay' })
+    return sheet({ id: i.id, title: i.id === 3 ? 'Mail sender' : 'Search' })
   }
   const view = await mount(panel, { host: actHost({ 'card.comment': (i) => (sent.push(i), {}) }, get as never) })
   await Promise.all([
     view.press({ label: '#3 Mail sender' }),
-    (async () => (await tick(), await view.press({ text: 'Volver' }), await view.press({ label: '#4 Pay' })))()
+    (async () => (await tick(), await view.press({ text: 'Volver' }), await view.press({ label: '1 · #7 Search' })))()
   ])
   await tick()
   await tick()
   const shown = view.summary().join(' ') + JSON.stringify(view.tree())
-  assert.match(shown, /#4 Pay/)
+  assert.match(shown, /#7 Search/)
   assert.doesNotMatch(shown, /#3 Mail sender"/)
   await view.type({ label: 'Comentario' }, 'hola')
   await view.press({ text: 'Comentar' })
-  assert.equal(sent[0].id, 4)
+  assert.equal(sent[0].id, 7)
   await view.unmount()
 })
 
@@ -315,88 +314,11 @@ test('a button stays off while its request runs, so a double press sends once', 
   await view.unmount()
 })
 
-const calls: { add: unknown[]; template: number } = { add: [], template: 0 }
-const addHost = (add: (i: unknown) => object) => {
-  calls.add = []
-  calls.template = 0
-  return mockHost({
-    requests: {
-      'boards.get': () => ({ boards: [board('shop')] }),
-      'card.add': (i: unknown) => (calls.add.push(i), add(i)),
-      'card.template': () => (calls.template++, { template: '## Problem\n<x>' })
-    }
-  })
-}
-
-const unfold = (view: any) => view.press({ text: '+ Nueva idea' })
-
-test('Te esperan and En curso come before a folded + Nueva idea, which opens on press', async () => {
-  const view = await mount(panel, { host: addHost(() => ({})) })
+test('the panel offers no way to create cards: it points at the agent chat', async () => {
+  const view = await mount(panel, { host: mockHost({ requests: { 'boards.get': () => ({ boards: [board('shop')] }) } }) })
+  assert.ok(view.find({ text: 'Pide cambios al agente de Orca' }))
+  for (const text of ['+ Nueva idea', 'Nueva idea', 'Tarjeta completa']) assert.equal(view.find({ text }), null)
   assert.equal(view.find({ label: '+ Nueva idea' }), null)
-  const tree = JSON.stringify(view.tree())
-  assert.ok(tree.indexOf('Te esperan') < tree.indexOf('En curso') && tree.indexOf('En curso') < tree.indexOf('+ Nueva idea'))
-  await unfold(view)
-  assert.ok(view.find({ label: '+ Nueva idea' }))
-  assert.ok(view.find({ text: 'Tarjeta completa' }))
-  await view.unmount()
-  const none = await mount(panel, { host: mockHost({ requests: { 'boards.get': () => ({ boards: [] }) } }) })
-  assert.equal(none.find({ label: '+ Nueva idea' }), null)
-  await none.unmount()
-})
-
-test('an idea goes to spec as typed, then the field is empty; blank text is not sent', async () => {
-  const blank = await mount(panel, { host: addHost(() => ({ id: 9 })) })
-  await unfold(blank)
-  await blank.type({ label: '+ Nueva idea' }, '  \n ')
-  await assert.rejects(blank.press({ text: 'Añadir idea' }), /disabled/)
-  assert.deepEqual(calls.add, [])
-  await blank.unmount()
-  const view = await mount(panel, { host: addHost(() => ({ id: 9 })) })
-  await unfold(view)
-  await view.type({ label: '+ Nueva idea' }, 'Quiero un botón\ncon dos líneas')
-  await view.press({ text: 'Añadir idea' })
-  assert.deepEqual(calls.add, [{ board: '/r/shop/.git', title: 'Quiero un botón\ncon dos líneas', column: 'spec' }])
-  assert.equal(view.find({ label: '+ Nueva idea' }), null) // folded again
-  await unfold(view)
-  await assert.rejects(view.press({ text: 'Añadir idea' }), /disabled/) // and empty
-  assert.deepEqual(view.errors, [])
-  await view.unmount()
-})
-
-test('a failed idea shows its error and keeps the text', async () => {
-  const view = await mount(panel, { host: addHost(() => ({ error: 'sin CLI' })) })
-  await unfold(view)
-  await view.type({ label: '+ Nueva idea' }, 'x')
-  await view.press({ text: 'Añadir idea' })
-  assert.ok(JSON.stringify(view.tree()).includes('sin CLI'))
-  assert.ok(view.find({ label: '+ Nueva idea' }))
-  await view.press({ text: 'Añadir idea' }) // still enabled: the text was kept
-  assert.equal(calls.add.length, 2)
-  await view.unmount()
-})
-
-test('a full card starts from the CLI template, defaults to backlog, and keeps what was typed on error', async () => {
-  const lint = 'a new card in ready must pass lint:\n- falta la sección "## Risk"'
-  const view = await mount(panel, { host: addHost(() => (calls.add.length === 2 ? { error: lint } : { id: 9 })) })
-  await unfold(view)
-  await view.press({ text: 'Tarjeta completa' })
-  assert.equal(calls.template, 1)
-  await view.type({ label: 'Título' }, 'T')
-  await view.press({ text: 'Guardar' })
-  assert.deepEqual(calls.add[0], { board: '/r/shop/.git', title: 'T', body: '## Problem\n<x>', column: 'backlog' })
-  assert.equal(view.find({ label: 'Título' }), null) // closed on success
-  await unfold(view)
-  await view.press({ text: 'Tarjeta completa' })
-  await view.type({ label: 'Título' }, 'T')
-  await view.select({ label: 'Guardar en' }, 'ready')
-  await view.press({ text: 'Guardar' })
-  assert.deepEqual(calls.add[1], { board: '/r/shop/.git', title: 'T', body: '## Problem\n<x>', column: 'ready' })
-  assert.ok(JSON.stringify(view.tree()).includes(JSON.stringify(lint).slice(1, -1))) // the whole message, not a cut title
-  assert.ok(view.find({ label: 'Título' }))
-  await view.press({ text: 'Guardar' }) // corrected: succeeds and closes
-  assert.deepEqual(calls.add[2], calls.add[1]) // the title, body and column survived the error
-  assert.equal(view.find({ label: 'Título' }), null)
-  assert.deepEqual(view.errors, [])
   await view.unmount()
 })
 
@@ -428,5 +350,28 @@ test('answering clears only its own text, and a board refresh keeps what is type
   assert.equal(view.find({ label: 'Respuesta' }).props.value, 'x')
   await view.select({ label: 'Repo' }, '/r/a/.git')
   assert.equal(view.find({ label: 'Respuesta' }).props.value, '')
+  await view.unmount()
+})
+
+test('pending and failed lenses read without a bare separator or a leading dash, and an emoji title is not cut in half', async () => {
+  const c = board('x').cards[3]
+  const lenses = [{ lens: 'qa', state: 'pending' }, { lens: 'code', state: 'fail' }] as never
+  const emoji = '😀'.repeat(70)
+  const b = board('shop', { cards: [{ ...c, title: emoji, panel: { passed: [], total: 2, lenses } }] })
+  const view = await mount(panel, { host: mockHost({ requests: { 'boards.get': () => ({ boards: [b] }) } }) })
+  const tree = JSON.stringify(view.tree())
+  assert.match(tree, /qa en espera · code ✖/)
+  assert.doesNotMatch(tree, /— qa|· ·/)
+  const shown = JSON.parse(`"${tree.match(/"title":"(#6 (?:[^"\\]|\\.)+…)"/)?.[1]}"`)
+  assert.equal(Array.from(shown).length, 60)
+  assert.doesNotMatch(shown, /[\ud800-\udbff](?![\udc00-\udfff])/)
+  await view.unmount()
+})
+
+test('a long title is clipped to 60 characters with an ellipsis, and a short one is left alone', async () => {
+  const long = board('shop', { cards: [{ ...board('x').cards[0], title: 'x'.repeat(120) }] })
+  const view = await mount(panel, { host: mockHost({ requests: { 'boards.get': () => ({ boards: [long] }) } }) })
+  const shown = JSON.stringify(view.tree()).match(/"title":"(#3 x+…)"/)?.[1]
+  assert.ok(shown && shown.length <= 60, String(shown))
   await view.unmount()
 })

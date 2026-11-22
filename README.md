@@ -89,7 +89,7 @@ El agente copia la fábrica dentro del proyecto y te guía por la configuración
 node .prz-factory/bin/factory.mjs serve     # el tablero, en http://localhost:4747
 ```
 
-Escribe una idea con "+ Nueva idea" y, en una sesión de Claude Code dentro de Orca, pide `/factory-run` ("arranca la fábrica").
+Pide un cambio al agente del IDE en el chat (skill `factory-intake`) y, en una sesión de Claude Code dentro de Orca, pide `/factory-run` ("arranca la fábrica").
 
 ## Uso diario
 
@@ -97,7 +97,7 @@ A partir de aquí, `factory` es `node .prz-factory/bin/factory.mjs`. Para teclea
 
 | Para | Haz |
 |---|---|
-| Pedir un cambio | botón "+ Nueva idea", o `factory add "<idea>" --column spec` |
+| Pedir un cambio | díselo al agente del IDE en el chat: la skill `factory-intake` redacta la tarjeta, te pregunta lo que el código no decide y la crea en Ready |
 | Poner la fábrica a trabajar | `/factory-run` en una sesión de Claude Code dentro de Orca |
 | Ver qué pasa | el tablero (`factory serve`), o `factory status` |
 | Aprobar un merge que te espera | la franja de solicitudes del tablero → "Aprobar y mergear", o `factory merge <id> --sha <sha> --human` |
@@ -171,7 +171,10 @@ Cada regla la hace cumplir el código, no la buena voluntad del agente. `factory
 | El mínimo código que resuelve la tarjeta; el que no debería existir se devuelve | skills `ponytail` y `ponytail-review` |
 | Una pantalla no sale con aspecto de "hecha por IA" (degradados morados, brillos, emojis, textos que gritan): sigue la dirección de la tarjeta | skill `unslop`, en el Spec Writer, el Builder y la lente `code` |
 | Un cambio de pantalla se entrega con una línea `Design:` y una captura de lo que se vio (o `--no-screenshot` y el motivo), y la lente `code` lo aprueba diciendo cómo lo miró | `handoff` y `verdict` en `src/lanes.mjs`, `ui.paths` en `factory.config.json` |
+| El tablero web se arranca siempre en una terminal de Orca ("Tablero web"), nunca como tarea en segundo plano de la sesión del agente, que se corta a las dos horas o al reiniciar Orca | `factory dispatch` (`src/dispatch.mjs`): al empezar cada paso abre la terminal si no hay un `serve.json` con un pid vivo |
 | Commits y comentarios en un formato único, con evidencias | `skills/factory-board/references/writing-standard.md` |
+| Un agente que ya no se usa se elimina solo: su terminal al terminar su trabajo y su workspace cuando la tarjeta llega a Done, sin depender del coordinador | `factory dispatch` (`src/dispatch.mjs`), `findLeftovers` en `src/cleanup.mjs` |
+| Cada agente se llama en Orca como el rol que asume (`Builder #N`, `Reviewer qa #N`, `Agente de merge #N`…), también cuando comparte workspace con otro rol | `roleTitle` en `src/run.mjs`, `factory dispatch` (`src/dispatch.mjs`) |
 | A la décima ronda fallida, o al segundo worker caído, la tarjeta para y espera a una persona | `sendBack` en `src/store.mjs`, `reclaim` en `src/run.mjs` |
 
 Los guards (`hooks/factory-guard.mjs`) funcionan igual con Claude Code y con Grok.
@@ -185,7 +188,8 @@ Cada rol es un worker de Orca en su propio worktree, y carga su skill solo, por 
 | Rol | Trabaja en | Termina con | Skill | Modelo en este repo |
 |---|---|---|---|---|
 | **Coordinador**: lanza a los demás con `factory dispatch`, reconcilia el tablero y te trae cada solicitud. Nunca redacta, construye, revisa ni mergea | — | — | `factory-run` | el de tu sesión |
-| **Spec Writer** | `spec` | `handoff` a `ready` o `blocked` | `factory-spec` + `ponytail` | Claude Sonnet 5.5, con advisor Fable 5.2 |
+| **Recepción**: el agente del IDE; convierte lo que pides en el chat en tarjetas. Nunca construye ni revisa | chat | `factory add` a `ready` (o `backlog`) | `factory-intake` + `factory-spec` + `ponytail` | el de tu sesión |
+| **Spec Writer**: para las ideas que dejas en `spec` sin redactar | `spec` | `handoff` a `ready` o `blocked` | `factory-spec` + `ponytail` | Claude Sonnet 5.5, con advisor Fable 5.2 |
 | **Builder** | `building` | `handoff` a `review` o `blocked` | `factory-build` + `ponytail` | Claude Sonnet 5.5, con advisor Fable 5.2 |
 | **Reviewers**, uno por lente | `review` | `verdict`: pass, fail o escalar | `factory-review` + `ponytail-review` | Claude Sonnet 5.5, esfuerzo alto (Grok 4.7 cuando tiene saldo) |
 | **Agente de merge** | `merge` | `merge`, o `handoff` a `blocked` | `factory-merge` | Claude Haiku 5.5 |
@@ -211,6 +215,7 @@ Cada rol carga la suya (ver [Roles de agentes](#roles-de-agentes)): `factory-run
 | Skill | Quién la usa | Para qué |
 |---|---|---|
 | `factory-board` | Todos | Leer y cambiar el tablero con el CLI; incluye el estándar de escritura |
+| `factory-intake` | El agente del IDE (Recepción) | Convertir lo que pides en el chat en tarjetas, con preguntas en el chat y creadas en Ready |
 | `ponytail` | Spec Writer y Builder | El mínimo cambio que resuelve el problema entero |
 | `ponytail-review` | Reviewers | Revisar como quien recibirá el aviso cuando falle |
 | `unslop` | Spec Writer, Builder y la lente `code`, cuando la tarjeta cambia una pantalla | Auditar la interfaz, fijar una dirección propia del producto y corregirla en nueve pasadas (espaciado, color, iconos, textos, tipografía, maquetación, detalles, visuales y movimiento) |
@@ -221,7 +226,7 @@ Cada rol carga la suya (ver [Roles de agentes](#roles-de-agentes)): `factory-run
 
 ## Plugin para Orca
 
-La forma principal de usar el tablero desde Orca: un panel en la barra lateral derecha con el tablero de cada repo abierto, en vivo. Arriba, **Te esperan** (aprobar un merge retenido, contestar a una tarjeta que pide algo) y **En curso** (quién tiene cada tarjeta, en qué lane, desde cuándo y cuántas lentes del panel han pasado), y debajo las columnas con un buscador. `factory serve` es la alternativa, en el navegador. El panel es un cliente más del tablero, como la web: su worker atiende `card.get`, `card.add`, `card.edit`, `card.move`, `card.comment` y `card.approve` ejecutando el CLI de cada repo, así que el lint, los bloqueos y el merge gate siguen siendo los mismos y el plugin nunca escribe `board.json`.
+La forma principal de usar el tablero desde Orca: un panel en la barra lateral derecha con el tablero de cada repo abierto, en vivo. Arriba, **Te esperan** (aprobar un merge retenido, contestar a una tarjeta que pide algo) y **En marcha** (cada tarjeta con el riel de estaciones spec · build · review · merge, las lentes de review y el rol de quien la tiene), **Cola** en el orden en que saldrá y **Hecho**, sin las nueve columnas. `factory serve` es la alternativa, en el navegador. El panel es un cliente más del tablero, como la web: su worker atiende `card.get`, `card.add`, `card.edit`, `card.move`, `card.comment` y `card.approve` ejecutando el CLI de cada repo, así que el lint, los bloqueos y el merge gate siguen siendo los mismos y el plugin nunca escribe `board.json`.
 
 Se instala una vez por máquina, desde cualquier proyecto que tenga la fábrica. Como el plugin ejecuta su propio proceso de Node, Orca pide tu aprobación: el primer comando enseña lo que podrá hacer y una huella `ap1-…`, y el segundo lo instala con esa huella.
 

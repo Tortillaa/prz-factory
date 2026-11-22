@@ -1,7 +1,7 @@
 # prz-factory board (Orca plugin)
 
 A right-sidebar panel that shows the prz-factory board of every repo open in Orca: one board per
-repo (worktrees of the same repo share it), the cards per column, who holds each card, what waits
+repo (worktrees of the same repo share it), what is waiting for a person, in flight (rail of stations, review lenses, roles), queued and done, who holds each card, what waits
 on blockers, and the cards that need a person. It updates live when a card moves, whether the CLI,
 an agent or the web board moved it. "Web board" opens the `factory serve` of that repo, on the port it listens on (it appears only while `factory serve` runs).
 
@@ -10,7 +10,7 @@ an agent or the web board moved it. "Web board" opens the `factory serve` of tha
   folder to post `boards.changed`. It also feeds the `waiting` status bar item ("1 te espera", "N te esperan": cards in
   `blocked`); that item keeps the worker alive, since Orca stops an idle worker and its watchers with it.
 - `src/boards.ts`: discovery and reading, plain Node (mirrors `src/store.mjs#resolveBoardPath`).
-- `src/panel.tsx`: the panel (components UI). `src/protocol.ts`: the panel ↔ worker contract. The card sheet reads, comments, moves (a refused move offers Forzar), edits title and body, and approves a held merge after a confirmation. At the top, the new-work form: "+ Nueva idea" sends the text as an idea to `spec` (`card.add`), and "Tarjeta completa" opens an editor filled with the template from `card.template` that saves to `backlog` or `ready`, showing the CLI's lint error in full and keeping what was typed; a second press while a request runs is ignored, and a late `card.get` for another card is dropped.
+- `src/panel.tsx`: the panel (components UI). `src/protocol.ts`: the panel ↔ worker contract. The card sheet reads, comments, moves (a refused move offers Forzar), edits title and body, and approves a held merge after a confirmation. Cards are not created here: the panel says "Pide cambios al agente de Orca", since work enters through the agent's chat. A second press while a request runs is ignored, and a late `card.get` for another card is dropped.
 
 It never writes `board.json`. Besides `boards.get`, the worker answers seven card requests, each carrying
 the board's `key` (`BoardView.key`) and running that repo's CLI with `--json` (`src/actions.ts`:
@@ -20,11 +20,9 @@ blockers and the merge gate stay in the CLI. Free text (id, column, title, text)
 | Request | CLI |
 |---|---|
 | `card.get` `{ id }` | `show <id>` |
-| `card.add` `{ title, body?, labels?, blockedBy?, column? }` | `add <title> [--body] [--label]… [--blocked-by] [--column]` |
 | `card.edit` `{ id, title?, body?, labels?, blockedBy? }` | `edit <id> …` |
 | `card.move` `{ id, column, before?, force? }` | `move <id> <column> [--before] --by user [--force]` |
 | `card.comment` `{ id, text }` | `comment <id> <text> --role user` |
-| `card.template` `{}` | `template` (read-only: the card body template, `{ template }`) |
 | `card.approve` `{ id, sha }` | `merge <id> --human --as user --sha <sha>`, only if the card has `merge-approval` and `run.branch` |
 
 Spawning the CLI needs no extra capability: the `trusted-worker` profile already runs Node code, and Orca asks for that approval at install.

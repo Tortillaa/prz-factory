@@ -16,7 +16,7 @@ Also backlog (parked), qa (\`qa\` cards) and blocked (waiting for a person). \`f
 
 | When | Use | Never |
 |---|---|---|
-| Ask for a change | an idea in the \`spec\` column (\`factory add "<idea>" --column spec\`) | Move a card to ready with lint errors |
+| Ask for a change | ask the IDE agent in the chat: \`factory-intake\` writes the card and creates it in ready (a loose idea: \`factory add "<idea>" --column spec\`) | Move a card to ready with lint errors |
 | Write a card yourself | \`factory-lint\` skill · \`factory lint\` | Invent a product decision |
 | Drain the board | \`factory-run\` skill | Write specs, build, review or merge from the coordinator |
 | Spec / build / review / merge one card | \`factory-spec\` · \`factory-build\` · \`factory-review\` (one lens) · \`factory-merge\` | Work outside your own worktree |
@@ -34,6 +34,7 @@ Also backlog (parked), qa (\`qa\` cards) and blocked (waiting for a person). \`f
 | Craft | every step loads \`ponytail\` (spec, build) or \`ponytail-review\` (reviewers): the smallest change that fully works, and no code that should not exist |
 | Writing | commits and comments: \`.claude/skills/factory-board/references/writing-standard.md\` |
 | Agents | ${Object.keys(config.agents || {}).length ? Object.entries(config.agents).map(([lane, a]) => `${lane} on ${a.agent}${a.model ? ` ${a.model}` : ''}${a.effort ? ` (${a.effort})` : ''}`).join(' · ') + ' · other lanes on claude' : 'every lane on claude'}; Claude Code and Grok read the same \`.claude/\` skills, this file and the guard hooks |
+| Web board | start it only in an Orca terminal (\`factory dispatch\` does it), never as a background task of an agent session |
 | Secrets | never read \`.env\` or key files; never write a key literal (guard hooks block both) |
 ${END}`;
 }

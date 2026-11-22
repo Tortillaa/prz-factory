@@ -12,7 +12,7 @@ import { DEFAULTS } from '../src/config.mjs';
 const sh = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 function repo() {
-  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-clean-')));
+  const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'factory-clean-')));
   const r = path.join(dir, 'repo');
   fs.mkdirSync(r);
   sh(r, 'init', '-q', '-b', 'main');
@@ -108,4 +108,37 @@ test('the copies installed in this repo match their sources', () => {
   }
   const guard = (p) => fs.readFileSync(path.join(FACTORY_ROOT, p), 'utf8');
   assert.equal(guard('.claude/hooks/factory-guard.mjs'), guard('hooks/factory-guard.mjs'), 'run `factory install .`');
+});
+
+test('a done card merged by rebase and an Orca-suffixed worktree are cleaned; dirty and active ones are not', () => {
+  const { dir, r } = repo();
+  const wt = (name, ref) => {
+    const p = path.join(dir, name);
+    sh(r, 'worktree', 'add', '-q', '--detach', p, ref);
+    return p;
+  };
+  // #1 was reviewed at `rev`; main got a rebased copy of it, so `rev` is not an ancestor of main.
+  sh(r, 'switch', '-q', '-c', 'factory/1-x');
+  fs.writeFileSync(path.join(r, 'b.txt'), 'b');
+  sh(r, 'add', '.');
+  sh(r, 'commit', '-qm', 'b');
+  const rev = sh(r, 'rev-parse', 'HEAD');
+  sh(r, 'switch', '-q', 'main');
+  fs.writeFileSync(path.join(r, 'c.txt'), 'c');
+  sh(r, 'add', '.');
+  sh(r, 'commit', '-qm', 'c');
+  sh(r, 'cherry-pick', rev);
+  const reviewer = wt('factory-1-code', rev);
+  const suffixed = wt('factory-1-code-2', rev);
+  const dirty = wt('factory-2', rev);
+  fs.writeFileSync(path.join(dirty, 'notes.txt'), 'wip');
+  const active = wt('factory-3', rev);
+  const ghost = wt('factory-99', 'main'); // clean and merged, but no card #99 on the board
+
+  const board = boardWith(['done', 'done', 'building']);
+  board.cards[0].run.reviewedSha = rev;
+  board.cards[1].run.reviewedSha = rev;
+  const found = findLeftovers({ cwd: r, board, config: DEFAULTS });
+  assert.deepEqual(found.worktrees.map((w) => path.resolve(w.path)).sort(), [reviewer, suffixed].sort());
+  assert.ok(![dirty, active, ghost].some((p) => found.worktrees.some((w) => path.resolve(w.path) === p)));
 });

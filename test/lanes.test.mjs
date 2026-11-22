@@ -395,6 +395,33 @@ test('failing verify goes back to building with the output', () => {
   assert.equal(sh(env.repo, 'worktree', 'list').split('\n').length, 4, 'no temporary worktree left behind');
 });
 
+// A verify command that records the FACTORY_BOARD it sees: the real board must not leak into verify.
+const dumpBoardVar = (out) => `node -e "require('fs').writeFileSync(process.argv[1], process.env.FACTORY_BOARD ?? '')" "${out}"`;
+
+test('verify runs without FACTORY_BOARD, in the gate and in factory verify', () => {
+  const env = setup();
+  const out = path.join(path.dirname(env.repo), 'seen.txt');
+  const config = { ...env.config, verify: [dumpBoardVar(out)] };
+  const id = addReadyCard(env);
+  const head = toReviewed(env, id);
+  const before = process.env.FACTORY_BOARD;
+  process.env.FACTORY_BOARD = env.file;
+  try {
+    const r = mergeCard({ file: env.file, id, sha: head, cwd: env.repo, config });
+    assert.equal(r.status, 'merged', r.message);
+    assert.equal(fs.readFileSync(out, 'utf8'), '', 'the gate');
+
+    fs.writeFileSync(path.join(env.repo, 'factory.config.json'), JSON.stringify({ verify: [dumpBoardVar(out)] }));
+    fs.writeFileSync(out, 'untouched');
+    const v = spawnSync(process.execPath, [CLI, 'verify', '--json'], { cwd: env.repo, encoding: 'utf8', env: { ...process.env, FACTORY_BOARD: env.file } });
+    assert.equal(v.status, 0, v.stdout + v.stderr);
+    assert.equal(fs.readFileSync(out, 'utf8'), '', 'factory verify');
+  } finally {
+    if (before === undefined) delete process.env.FACTORY_BOARD;
+    else process.env.FACTORY_BOARD = before;
+  }
+});
+
 test('high risk waits for a person, who merges from blocked', () => {
   const env = setup();
   const id = addReadyCard(env, { body: GOOD_BODY.replace('🟢 **Low**', '🔴 **High**') });

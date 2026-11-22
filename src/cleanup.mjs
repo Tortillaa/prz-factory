@@ -8,8 +8,9 @@ import { git, tryGit, worktrees, isAncestor, commonDir, samePath, revParse } fro
 
 const ACTIVE = ['backlog', 'spec', 'ready', 'building', 'qa', 'review', 'merge', 'blocked'];
 // factory-<id> for the card, factory-<id>-<lens> for each reviewer of its panel.
-const FACTORY_WT = /^factory-(\d+)(?:-[a-z]+)?$/;
-const FACTORY_BRANCH = /^factory\/(\d+)-|^[^/]+\/factory-(\d+)(?:-[a-z]+)?$/;
+// Orca adds -2, -3… when a name is already taken.
+const FACTORY_WT = /^factory-(\d+)(?:-[a-z]+)?(?:-\d+)?$/;
+const FACTORY_BRANCH = /^factory\/(\d+)-|^[^/]+\/factory-(\d+)(?:-[a-z]+)?(?:-\d+)?$/;
 
 function cardIdOf(name, re) {
   const m = name.match(re);
@@ -35,14 +36,17 @@ export function findLeftovers({ cwd, board, config }) {
   const worktreesOut = [];
   for (const w of trees.slice(1)) {
     const id = cardIdOf(path.basename(w.path), FACTORY_WT);
-    if (id == null || active.has(id) || activeTrees.some((t) => samePath(t, w.path))) continue;
+    if (id == null || active.has(id) || !board.cards.some((c) => c.id === id) || activeTrees.some((t) => samePath(t, w.path))) continue;
     if (here && samePath(here, w.path)) continue;
     if (!fs.existsSync(w.path)) {
       worktreesOut.push({ path: w.path, card: id, reason: 'missing on disk' });
       continue;
     }
-    if (!pristine(w.path) || !w.head || !isAncestor(w.head, `refs/heads/${base}`, main)) continue;
-    worktreesOut.push({ path: w.path, card: id, reason: `merged into ${base}` });
+    if (!pristine(w.path) || !w.head) continue;
+    // A rebased merge leaves the reviewed commit off the base: for a done card, it is as good as merged.
+    const reviewed = board.cards.find((c) => c.id === id)?.run?.reviewedSha;
+    if (isAncestor(w.head, `refs/heads/${base}`, main)) worktreesOut.push({ path: w.path, card: id, reason: `merged into ${base}` });
+    else if (reviewed && isAncestor(w.head, reviewed, main)) worktreesOut.push({ path: w.path, card: id, reason: 'reviewed commit of a done card' });
   }
 
   const checkedOut = new Set(trees.filter((w) => w.branch).map((w) => w.branch));

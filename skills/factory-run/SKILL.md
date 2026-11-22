@@ -32,6 +32,11 @@ Commands: `factory` (CLI, see the `factory-board` skill) and Orca's CLI. Load Or
 guide once per session with `orca skills get orchestration` (on Linux outside Orca: `orca-ide`).
 Pass `--json` everywhere and branch on the result, not on wording.
 
+The web board (`factory serve`) never runs as a background task of your session: those are cut after two
+hours or when Orca restarts. `factory dispatch` opens it in an Orca terminal titled "Tablero web" when no
+serve is alive (event `served`); by hand: `orca terminal create --worktree path:<main checkout>
+--title "Tablero web" --command "<cli> serve"`.
+
 ## 1 · Preconditions (once, before the first dispatch)
 
 ```text
@@ -69,7 +74,7 @@ One command does the whole step, so you never claim, start or record a worker by
    worker-start` with the lane's agent, model and effort (`agents` in `factory.config.json`), and
    records the dispatch. A start Orca refuses gives the claim back.
 
-Each event is `{ kind, id, lane, lens, worker, dispatch, launch }`, `kind` one of `started`,
+Each event is `{ kind, id, lane, lens, worker, dispatch, launch }` (a `started` may carry a `note` when naming the agent in Orca failed: harmless), `kind` one of `started`,
 `stopped`, `released`, `failed`, `skipped`. Report one line each (`🚀 #12 review:security →
 review-security-12 (grok grok-4.7)`, `⛔ #12 stopped review-qa-12 (round over)`, `🧹 #12 released
 spec-12`). For a `failed` start, load Orca's `references/recovery-and-cleanup.md` before any retry.
@@ -93,7 +98,7 @@ For each `worker_done` or `escalation`:
    - **Yes** → it ended without finishing:
      `factory reclaim <id> --worker <worker> --reason "<the worker's report or stopReason>" --json`.
      The second time, the card goes to blocked with `needs-you` by itself.
-3. After a merge (`🎉`): `factory cleanup --apply`, so the card's worktrees and branches leave Orca.
+3. After a merge (`🎉`): `factory dispatch` already removes the clean workspaces of cards in done (it reports `🧹 removed workspace`) and the merged branches; run `factory cleanup` only to see what is left.
 4. `factory status --json`: an `inFlight` claim with `stale: true` (older than 3 hours) gets checked
    with `orca orchestration worker-show`; a settled or unknown worker never finished: `factory reclaim`.
 

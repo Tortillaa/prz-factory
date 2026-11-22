@@ -10,8 +10,8 @@ import {
   host,
   Input,
   List,
-  Markdown,
   ListItem,
+  Markdown,
   plugin,
   read,
   RelativeTime,
@@ -27,8 +27,6 @@ import {
 import type { BoardsSnapshot, CardReply, CardView } from './protocol'
 
 const COLUMNS = ['backlog', 'spec', 'ready', 'building', 'qa', 'review', 'merge', 'blocked', 'done']
-/** Columns opened by default: where work is happening or waiting for a person. */
-const OPEN = new Set(['spec', 'building', 'qa', 'review', 'merge', 'blocked'])
 
 const snapshot = atom<BoardsSnapshot | null>(null)
 const chosen = atom('board', '', { persist: 'plugin' })
@@ -44,18 +42,11 @@ const confirming = atom(false)
 const outcome = atom<{ merged: boolean; text: string } | null>(null)
 /** Actions in flight on this sheet: each button is disabled while its own request runs. */
 const busy = atom<string[]>([])
-/** The new-work form above the columns: the idea text, and the full-card editor when open. */
-const idea = atom('')
-const fresh = atom<{ title: string; body: string; column: string } | null>(null)
-const freshError = atom('')
-let adding = false
-/** The cover: search text, the card whose approval awaits confirmation, answers being typed, and the last worker error. */
-const query = atom('')
+/** The cover: the card whose approval awaits confirmation, answers being typed, and the last worker error. */
 const approving = atom<string | null>(null)
 const replies = atom<Record<string, string>>({})
 /** Cover state is per repo and card: two repos can both have a #5. */
 const slot = (board: string, id: number) => `${board}#${id}`
-const adder = atom(false)
 const coverError = atom('')
 
 /** Cover actions show the worker's error as it came. */
@@ -172,28 +163,7 @@ const approve = (at: At, sha: string) =>
     await load(at)
   })
 
-const add = async (board: string, input: { title: string; body?: string; column: string }, done: () => void) => {
-  if (adding) return
-  adding = true
-  try {
-    const reply = await plugin.request('card.add', { board, ...input })
-    if (reply.error) return set(freshError, reply.error)
-    set(freshError, '')
-    done()
-  } finally {
-    adding = false
-  }
-}
-
-async function openFresh(board: string): Promise<void> {
-  set(freshError, '')
-  const reply = await plugin.request('card.template', { board })
-  set(fresh, { title: '', body: reply.error ? '' : String(reply.template), column: 'backlog' })
-  if (reply.error) set(freshError, reply.error)
-}
-
 const risk = (body: string) => body.match(/^## Risk\s*\n\s*(\w+)/m)?.[1] ?? 'sin riesgo'
-const lensMark = (v?: { verdict?: string; worker?: string }) => (v?.verdict === 'pass' ? '✓' : v?.verdict === 'fail' ? '✖' : v?.worker ? '…' : '·')
 
 function CardSheet({ at }: { at: { board: string; id: number } }) {
   const card = read(detail)
@@ -226,7 +196,7 @@ function CardSheet({ at }: { at: { board: string; id: number } }) {
         {c.unmet.map((d) => <Badge key={String(d)} tone="warning">{`bloqueada por #${d}`}</Badge>)}
       </Row>
       {c.column !== 'spec' && c.lint.map((i, n) => <Callout key={String(n)} tone={i.severity === 'error' ? 'danger' : 'warning'} title={i.message} />)}
-      {lenses.length > 0 && <Text>{`Panel de revisión: ${lenses.map(([l, v]) => `${l} ${lensMark(v)}`).join(' · ')}`}</Text>}
+      <Rail column={c.column} from={c.history.findLast((h) => h.to === 'blocked')?.from ?? null} lenses={lenses.map(([lens, v]) => ({ lens, state: v.verdict === 'pass' ? 'pass' : v.verdict === 'fail' ? 'fail' : v.worker ? 'working' : 'pending' }))} />
       {edit ? (
         <Stack gap="sm">
           <Input label="Título" value={edit.title} onChange={(v) => set(editing, { ...edit, title: v })} />
@@ -283,13 +253,44 @@ export function setup(ctx: PanelContext): void {
   void plugin.request('boards.get').then((next) => set(snapshot, next))
 }
 
-function describe(card: CardView): string {
-  const parts = [...card.labels]
-  if (card.panel) parts.push(`review ${card.panel.passed.length}/${card.panel.total}${card.panel.passed.map((l) => ` ${l} ✓`).join('').replace(/^ /, ': ')}`)
-  else if (card.assignee) parts.push(`@${card.assignee}`)
-  if (card.waitingOn.length) parts.push(`esperando a ${card.waitingOn.map((d) => `#${d}`).join(' ')}`)
-  return parts.join(' · ')
+
+const STATIONS = ['spec', 'build', 'review', 'merge']
+const STATION_OF: Record<string, string> = { spec: 'spec', ready: 'build', building: 'build', qa: 'review', review: 'review', merge: 'merge' }
+const MARK = { pass: '✓', fail: '✖', working: 'en curso', pending: 'en espera' }
+
+/** The rail of stations on one line: the card's station in strong text (a blocked card sits where it was blocked from) and, in review, each lens with its state. */
+function Rail({ column, from, lenses = [] }: { column: string; from: string | null; lenses?: NonNullable<CardView['panel']>['lenses'] }) {
+  const at = STATION_OF[column === 'blocked' ? from ?? '' : column]
+  return (
+    <Row gap="xs" wrap>
+      {STATIONS.map((s, i) => <Text key={s} size="xs" muted={s !== at} weight={s === at ? 'semibold' : 'regular'}>{i < STATIONS.length - 1 ? `${s} ·` : s}</Text>)}
+      {at === 'review' && lenses.length > 0 && <Text size="xs" muted>{`${lenses.map((l) => `${l.lens} ${MARK[l.state]}`).join(' · ')}`}</Text>}
+    </Row>
+  )
 }
+
+// Array.from counts code points, so an emoji is never cut in half.
+const clip = (s: string, max = 60) => {
+  const cs = Array.from(s)
+  return cs.length > max ? `${cs.slice(0, max - 1).join('')}…` : s
+}
+
+/** A worker name (build-34-r2, review-qa-7) in words; mirrors roleOf in public/board-view.mjs. */
+function role(worker: string): string {
+  const m = /^(spec|build|merge|review)-(?:([^-\d][^-]*)-)?\d+(?:-r(\d+))?$/.exec(worker)
+  if (!m) return worker
+  const name = { spec: 'Spec Writer', build: 'Builder', merge: 'Agente de merge', review: `Reviewer${m[2] ? ` ${m[2]}` : ''}` }[m[1]]
+  return m[3] ? `${name} · ronda ${m[3]}` : name!
+}
+
+/** Why the gate held a merge, as short phrases; without the gate's line, the comment as it came. */
+function reasons(c: CardView): string[] {
+  const prefix = 'Merge para una persona:'
+  const line = c.lastMerge?.split('\n').find((l) => l.startsWith(prefix))
+  return line ? line.slice(prefix.length).trim().replace(/\.$/, '').split('; ') : [c.lastMerge ?? c.lastComment ?? ''].filter(Boolean)
+}
+
+const dependsOn = (c: CardView) => (c.waitingOn.length ? `espera a ${c.waitingOn.map((d) => `#${d}`).join(' ')}` : c.column)
 
 export default function Panel() {
   const snap = read(snapshot)
@@ -304,15 +305,22 @@ export default function Panel() {
   const board = snap.boards.find((b) => b.key === pick) ?? snap.boards[0]
   const at = read(opened)
   if (at) return <CardSheet at={at} />
-  const text = read(idea)
-  const form = read(fresh)
-  const formError = read(freshError)
   const approve = board.cards.filter((c) => c.labels.includes('merge-approval') && c.sha)
   const answer = board.cards.filter((c) => c.labels.includes('needs-you') && !c.labels.includes('merge-approval'))
-  const running = board.cards.filter((c) => c.assignee || c.panel)
-  const [q, confirmId, typed, coverErr, adderOpen] = [read(query), read(approving), read(replies), read(coverError), read(adder)]
-  const needle = q.trim().toLowerCase()
-  const shown = needle ? board.cards.filter((c) => String(c.id) === needle.replace(/^#/, '') || c.title.toLowerCase().includes(needle)) : board.cards
+  const asking = new Set([...approve, ...answer])
+  const running = board.cards.filter((c) => !asking.has(c) && c.column !== 'done' && c.workers.length)
+  const rank = (c: CardView) => ({ ready: 0, spec: 1 })[c.column] ?? 2
+  const queue = board.cards
+    .filter((c) => !asking.has(c) && !running.includes(c) && c.column !== 'done' && c.column !== 'backlog' && !board.unknown.includes(c))
+    .map((c, i) => [c, i] as const)
+    .sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])
+    .map(([c]) => c)
+  const done = board.cards.filter((c) => c.column === 'done').sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? '')).slice(0, 5)
+  const [confirmId, typed, coverErr] = [read(approving), read(replies), read(coverError)]
+  // The whole row opens the sheet; its title is one clipped line.
+  const item = (c: CardView, title: string, children: unknown) => (
+    <ListItem key={String(c.id)} title={clip(title)} onPress={() => open({ board: board.key, id: c.id })}>{children as never}</ListItem>
+  )
   return (
     <Stack gap="md">
       {snap.boards.length > 1 && (
@@ -337,13 +345,13 @@ export default function Panel() {
         <Callout key={b.key} tone="danger" title={`no se pudo leer el tablero de ${b.name}: ${b.error}`} />
       ))}
       {coverErr && <Callout tone="danger" title={coverErr} />}
-      {(approve.length > 0 || answer.length > 0) && (
+      {asking.size > 0 && (
         <Stack gap="sm">
           <Text weight="semibold">Te esperan</Text>
           {approve.map((c) => (
-            <Callout key={String(c.id)} tone="warning" title={`Aprobar #${c.id} ${c.title}`} icon="warning">
-              <Text>{c.lastMerge ?? c.lastComment ?? ''}</Text>
-              <Text size="xs">{c.sha!.slice(0, 7)}</Text>
+            <Callout key={String(c.id)} tone="warning" title={`Aprobar #${c.id} ${c.title}`}>
+              {reasons(c).map((r) => <Text key={r}>{r}</Text>)}
+              <Text muted size="xs">{c.sha!.slice(0, 7)}</Text>
               {confirmId === slot(board.key, c.id) ? (
                 <Row gap="xs">
                   <Button onPress={() => approveCard(board.key, c)}>Confirmar merge</Button>
@@ -355,7 +363,7 @@ export default function Panel() {
             </Callout>
           ))}
           {answer.map((c) => (
-            <Callout key={String(c.id)} tone="warning" title={`Contestar #${c.id} ${c.title}`} icon="warning">
+            <Callout key={String(c.id)} tone="warning" title={`Contestar #${c.id} ${c.title}`}>
               <Text>{c.lastComment ?? ''}</Text>
               <Textarea label="Respuesta" value={typed[slot(board.key, c.id)] ?? ''} onChange={(v) => update(replies, (all) => ({ ...all, [slot(board.key, c.id)]: v }))} />
               <Button disabled={!(typed[slot(board.key, c.id)] ?? '').trim()} onPress={() => answerCard(board.key, c, typed[slot(board.key, c.id)])}>Contestar</Button>
@@ -365,69 +373,29 @@ export default function Panel() {
       )}
       {running.length > 0 && (
         <Stack gap="sm">
-          <Text weight="semibold">En curso</Text>
-          <List label="En curso">
-            {running.map((c) => (
-              <ListItem key={String(c.id)} title={`#${c.id} ${c.title}`} description={[c.assignee, c.column, c.panel && `review ${c.panel.passed.length}/${c.panel.total}`].filter(Boolean).join(' · ')} icon="agent" onPress={() => open({ board: board.key, id: c.id })}>
-                {ago(c.since)}
-              </ListItem>
-            ))}
-          </List>
+          <Text weight="semibold">En marcha</Text>
+          <List label="En marcha">{running.map((c) => item(c, `#${c.id} ${c.title}`, <><Rail column={c.column} from={c.from} lenses={c.panel?.lenses} /><Row gap="xs"><Text size="xs" muted>{c.workers.map(role).join(' · ')}</Text>{ago(c.since)}</Row></>))}</List>
         </Stack>
       )}
-      {adderOpen || text || form || formError ? (
+      {queue.length > 0 && (
         <Stack gap="sm">
-          <Textarea label="+ Nueva idea" value={text} onChange={(v) => set(idea, v)} />
-          <Row gap="xs">
-            <Button disabled={!text.trim()} onPress={() => add(board.key, { title: text, column: 'spec' }, () => (set(idea, ''), set(adder, false)))}>Añadir idea</Button>
-            {!form && <Button variant="ghost" onPress={() => openFresh(board.key)}>Tarjeta completa</Button>}
-          </Row>
-          {formError && <Callout tone="danger" title={formError} />}
-          {form && (
-            <Stack gap="sm">
-              <Input label="Título" value={form.title} onChange={(v) => set(fresh, { ...form, title: v })} />
-              <Textarea label="Cuerpo" value={form.body} rows={12} onChange={(v) => set(fresh, { ...form, body: v })} />
-              <Select label="Guardar en" value={form.column} options={['backlog', 'ready'].map((value) => ({ value, label: value }))} onChange={(column) => set(fresh, { ...form, column })} />
-              <Row gap="xs">
-                <Button onPress={() => add(board.key, form, () => (set(fresh, null), set(adder, false)))}>Guardar</Button>
-                <Button variant="ghost" onPress={() => (set(fresh, null), set(freshError, ''))}>Cancelar</Button>
-              </Row>
-            </Stack>
-          )}
+          <Text weight="semibold">Cola</Text>
+          <List label="Cola">{queue.map((c, n) => item(c, `${n + 1} · #${c.id} ${c.title}`, <Text size="xs" muted>{dependsOn(c)}</Text>))}</List>
         </Stack>
-      ) : (
-        <Button variant="ghost" onPress={() => set(adder, true)}>+ Nueva idea</Button>
       )}
-      <Input label="Buscar" value={q} onChange={(v) => set(query, v)} />
-      {COLUMNS.map((column) => {
-        const cards = shown.filter((c) => c.column === column)
-        return (
-          <Collapsible key={column} title={`${column} (${cards.length})`} defaultOpen={OPEN.has(column) && cards.length > 0}>
-            {cards.length ? (
-              <List label={column}>
-                {cards.map((c) => (
-                  <ListItem key={String(c.id)} title={`#${c.id} ${c.title}`} description={describe(c)} icon={c.assignee ? 'agent' : undefined} onPress={() => open({ board: board.key, id: c.id })} />
-                ))}
-              </List>
-            ) : (
-              <Text muted size="xs">Vacía</Text>
-            )}
-          </Collapsible>
-        )
-      })}
+      {done.length > 0 && (
+        <Stack gap="sm">
+          <Text weight="semibold">Hecho</Text>
+          <List label="Hecho">{done.map((c) => item(c, `#${c.id} ${c.title}`, ago(c.doneAt)))}</List>
+        </Stack>
+      )}
       {board.unknown.length > 0 && (
-        <Collapsible title={`columna desconocida (${board.unknown.length})`} defaultOpen>
-          <List label="columna desconocida">
-            {board.unknown.map((c) => (
-              <ListItem key={String(c.id)} title={`#${c.id} ${c.title} · ${c.column}`} description={describe(c)} />
-            ))}
-          </List>
-        </Collapsible>
+        <Stack gap="sm">
+          <Text weight="semibold">Columna desconocida</Text>
+          {board.unknown.map((c) => <Text key={String(c.id)}>{`#${c.id} ${c.title} · ${c.column}`}</Text>)}
+        </Stack>
       )}
-      <Row gap="xs">
-        <Badge tone="accent">{`${board.cards.filter((c) => c.assignee).length} en curso`}</Badge>
-        <Badge tone="success">{`${board.counts.done ?? 0} hechas`}</Badge>
-      </Row>
+      <Text muted>Pide cambios al agente de Orca</Text>
     </Stack>
   )
 }

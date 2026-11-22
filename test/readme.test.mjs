@@ -24,12 +24,16 @@ test('README: the roles section covers every lane, its skill and every review le
   const text = section('Roles de agentes');
   for (const lane of LANE_NAMES) assert.ok(text.includes(`\`factory-${lane}\``), `role ${lane} is missing from the README`);
   assert.ok(text.includes('`factory-run`'), 'the coordinator is missing from the README');
+  assert.ok(text.includes('| **Recepción**') && text.includes('`factory-intake`'), 'the intake role is missing from the README');
   for (const lens of LENSES) assert.ok(text.includes(`| \`${lens}\` |`), `lens ${lens} is missing from the README`);
 });
 
 test('README: the rules section names every guard, and deploy and plugin instructions exist', () => {
   const text = section('Reglas para los agentes');
   for (const guard of Object.keys(GUARDS)) assert.ok(text.includes(`\`${guard}\``), `guard ${guard} is missing from the README`);
+  assert.match(text, /\| Un agente que ya no se usa se elimina solo.*factory dispatch/, 'the automatic cleanup of agents is missing from the README');
+  assert.match(text, /\| El tablero web se arranca siempre en una terminal de Orca.*factory dispatch/, 'the web board rule is missing from the README');
+  assert.match(text, /\| Cada agente se llama en Orca como el rol que asume.*roleTitle/, 'the agent role names are missing from the README');
   assert.match(section('Despliegue'), /git clone --depth 1 https:\/\/github\.com\/Tortillaa\/prz-factory\.git \.prz-factory-src/);
   assert.match(section('Despliegue'), /node \.prz-factory-src\/bin\/factory\.mjs install \./);
   assert.doesNotMatch(section('Despliegue'), /npx/);
